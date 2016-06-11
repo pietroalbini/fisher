@@ -5,3 +5,4 @@ authors = ["Pietro Albini <pietro@pietroalbini.io>"]
 
 [dependencies]
 clap="*"
+rustc-serialize="*"

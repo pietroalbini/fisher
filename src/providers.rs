@@ -13,14 +13,34 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-extern crate rustc_serialize;
-#[macro_use] extern crate clap;
 
-mod cli;
-mod providers;
+pub trait HooksProvider {}
 
-fn main() {
-    let options = cli::parse();
 
-    // TODO
+// The "Standalone" provider is not tied to any external service, and requires
+// a valid secret key when receiving an hook
+
+#[derive(RustcDecodable, RustcEncodable)]
+pub struct StandaloneProvider {
+    secret: String,
+}
+
+impl HooksProvider for StandaloneProvider {}
+
+
+// This is a list of all the providers currently supported by Fisher
+
+pub enum Provider {
+    StandaloneProvider,
+}
+
+impl Provider {
+
+    fn by_name(name: &str) -> Option<Provider> {
+        match name {
+            "Standalone" => Some(Provider::StandaloneProvider),
+            _ => None,
+        }
+    }
+
 }
