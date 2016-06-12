@@ -21,6 +21,7 @@ extern crate regex;
 mod cli;
 mod providers;
 mod hooks;
+mod errors;
 
 use std::process;
 

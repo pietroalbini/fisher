@@ -20,6 +20,7 @@ use std::io::{BufReader, BufRead};
 use regex::Regex;
 
 use providers;
+use errors::FisherError;
 
 
 lazy_static! {
@@ -77,15 +78,15 @@ impl Hook {
 }
 
 
-pub fn collect<'a>(base: &String) -> Result<Vec<Hook>, &'a str> {
+pub fn collect<'a>(base: &String) -> Result<Vec<Hook>, FisherError> {
     let metadata = fs::metadata(&base);
     if metadata.is_err() {
-        return Err("Please provide a valid path!");
+        return Err(FisherError::PathNotFound(base.clone()));
     }
     let metadata = metadata.unwrap();
 
     if ! metadata.is_dir() {
-        return Err("The hooks path is not a directory!");
+        return Err(FisherError::PathNotADirectory(base.clone()));
     }
 
     let mut result = Vec::new();
