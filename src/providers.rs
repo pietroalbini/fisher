@@ -13,6 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use rustc_serialize::json;
+
 
 pub trait HooksProvider {}
 
@@ -30,17 +32,11 @@ impl HooksProvider for StandaloneProvider {}
 
 // This is a list of all the providers currently supported by Fisher
 
-pub enum Provider {
-    StandaloneProvider,
-}
-
-impl Provider {
-
-    fn by_name(name: &str) -> Option<Provider> {
-        match name {
-            "Standalone" => Some(Provider::StandaloneProvider),
-            _ => None,
-        }
+pub fn by_name(name: &str, data: &str) -> Option<Box<HooksProvider>> {
+    match name {
+        "Standalone" => {
+            Some(Box::new(json::decode::<StandaloneProvider>(data).unwrap()))
+        },
+        _ => None,
     }
-
 }

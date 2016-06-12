@@ -14,13 +14,23 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 extern crate rustc_serialize;
+extern crate regex;
+#[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
 
 mod cli;
 mod providers;
+mod hooks;
+
+use std::process;
 
 fn main() {
     let options = cli::parse();
 
-    // TODO
+    let collected_hooks = hooks::collect(&options.hooks_dir);
+    if collected_hooks.is_err() {
+        println!("Error: {}", collected_hooks.err().unwrap());
+        process::exit(1);
+    }
+    let hooks = collected_hooks.unwrap();
 }
