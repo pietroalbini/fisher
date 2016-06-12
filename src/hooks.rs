@@ -23,6 +23,9 @@ use providers;
 use errors::FisherError;
 
 
+pub type VecProviders = Vec<Box<providers::HooksProvider>>;
+
+
 lazy_static! {
     static ref HEADER_RE: Regex = Regex::new(
         r"## Fisher-([a-zA-Z]+): (\{.*\})"
@@ -33,26 +36,26 @@ lazy_static! {
 pub struct Hook {
     pub name: String,
     pub exec: String,
-    pub providers: Vec<Box<providers::HooksProvider>>,
+    pub providers: VecProviders,
 }
 
 impl Hook {
 
-    fn load(name: String, exec: String) -> Hook {
-        let mut hook = Hook {
+    fn load(name: String, exec: String) -> Result<Hook, FisherError> {
+        let providers = try!(Hook::load_providers(&exec));
+        Ok(Hook {
             name: name,
             exec: exec,
-            providers: vec![],
-        };
-        hook.load_providers();
-        hook
+            providers: providers,
+        })
     }
 
-    fn load_providers(&mut self) {
-        let mut f = fs::File::open(&self.exec).unwrap();
+    fn load_providers(file: &String) -> Result<VecProviders, FisherError> {
+        let mut f = fs::File::open(file).unwrap();
         let mut reader = BufReader::new(f);
 
         let mut content;
+        let mut result: VecProviders = vec![];
         for line in reader.lines() {
             content = line.unwrap();
 
@@ -67,12 +70,16 @@ impl Hook {
                 let data = cap.at(2).unwrap();
 
                 if let Some(provider) = providers::by_name(&name, &data) {
-                    self.providers.push(provider);
+                    result.push(provider);
                 } else {
-                    println!("Nope!");
+                    return Err(FisherError::ProviderNotFound(
+                        name.to_string(), file.clone()
+                    ));
                 }
             }
         }
+
+        Ok(result)
     }
 
 }
@@ -110,7 +117,7 @@ pub fn collect<'a>(base: &String) -> Result<Vec<Hook>, FisherError> {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
         let exec = path.to_str().unwrap().to_string();
 
-        let hook = Hook::load(name, exec);
+        let hook = try!(Hook::load(name, exec));
         result.push(hook);
     }
 

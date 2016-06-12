@@ -27,8 +27,8 @@ impl FisherError {
 
     fn pretty_description(&self) -> String {
         match *self {
-            FisherError::ProviderNotFound(ref hook, ref prov) =>
-                format!("Provider {} not found (in hook {})", prov, hook),
+            FisherError::ProviderNotFound(ref prov, ref file) =>
+                format!("Provider {} not found (in file {})", prov, file),
             FisherError::PathNotFound(ref path) =>
                 format!("Path {} doesn't exist", path),
             FisherError::PathNotADirectory(ref path) =>
