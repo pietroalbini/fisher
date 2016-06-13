@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::fs;
+use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
 use std::io::{BufReader, BufRead};
 
@@ -24,6 +25,7 @@ use errors::FisherError;
 
 
 pub type VecProviders = Vec<Box<providers::HooksProvider>>;
+pub type Hooks = HashMap<String, Hook>;
 
 
 lazy_static! {
@@ -85,7 +87,7 @@ impl Hook {
 }
 
 
-pub fn collect<'a>(base: &String) -> Result<Vec<Hook>, FisherError> {
+pub fn collect<'a>(base: &String) -> Result<Hooks, FisherError> {
     let metadata = fs::metadata(&base);
     if metadata.is_err() {
         return Err(FisherError::PathNotFound(base.clone()));
@@ -96,7 +98,7 @@ pub fn collect<'a>(base: &String) -> Result<Vec<Hook>, FisherError> {
         return Err(FisherError::PathNotADirectory(base.clone()));
     }
 
-    let mut result = Vec::new();
+    let mut result = HashMap::new();
 
     for entry in fs::read_dir(&base).unwrap() {
         let pathbuf = entry.unwrap().path();
@@ -117,8 +119,8 @@ pub fn collect<'a>(base: &String) -> Result<Vec<Hook>, FisherError> {
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
         let exec = path.to_str().unwrap().to_string();
 
-        let hook = try!(Hook::load(name, exec));
-        result.push(hook);
+        let hook = try!(Hook::load(name.clone(), exec));
+        result.insert(name.clone(), hook);
     }
 
     Ok(result)
