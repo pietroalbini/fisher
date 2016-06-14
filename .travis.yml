@@ -1,0 +1,26 @@
+language: rust
+rust:
+  - stable
+  - beta
+  - nightly
+
+matrix:
+  fast_finish: true
+  allow_failures:
+    - rust: nightly
+
+cache: cargo
+
+script:
+  - cargo build --verbose
+
+notifications:
+  email: false
+  irc:
+    channels:
+      - "chat.freenode.net#pietroalbini"
+    template:
+      - "Build %{result} for %{repository_slug} on branch %{branch} (%{commit})."
+      - "More details: %{build_url}"
+    use_notice: true
+    skip_join: true
