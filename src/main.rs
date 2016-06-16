@@ -22,6 +22,7 @@ mod cli;
 mod providers;
 mod hooks;
 mod errors;
+mod processor;
 
 use std::process;
 
@@ -34,4 +35,6 @@ fn main() {
         process::exit(1);
     }
     let hooks = collected_hooks.unwrap();
+
+    let mut processor = processor::ProcessorInstance::new(&hooks);
 }
