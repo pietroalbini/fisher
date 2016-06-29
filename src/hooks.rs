@@ -53,8 +53,8 @@ impl Hook {
     }
 
     fn load_providers(file: &String) -> Result<VecProviders, FisherError> {
-        let mut f = fs::File::open(file).unwrap();
-        let mut reader = BufReader::new(f);
+        let f = fs::File::open(file).unwrap();
+        let reader = BufReader::new(f);
 
         let mut content;
         let mut result: VecProviders = vec![];
