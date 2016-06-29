@@ -16,52 +16,55 @@
 use std::collections::{HashMap, VecDeque};
 
 use hooks::Hook;
+use errors::FisherError;
 
 
-pub struct Job<'h> {
-    hook: &'h Hook,
+pub struct Job {
+    hook_name: String,
 }
 
-impl<'h> Job<'h> {
+impl Job {
 
-    pub fn new(hook: &'h Hook) -> Job<'h> {
+    pub fn new(hook_name: String) -> Job {
         Job {
-            hook: hook,
+            hook_name: hook_name,
         }
     }
 
-    pub fn process(&self) {
-        println!("Processing hook {}!", self.hook.name);
+    pub fn process(&self, hooks: &HashMap<String, Hook>) {
+        let hook = hooks.get(&self.hook_name).unwrap();
+
+        println!("Processing hook {}!", hook.name);
     }
 
 }
 
 
-pub struct ProcessorInstance<'h> {
-    hooks: &'h HashMap<String, Hook>,
-    jobs: VecDeque<Job<'h>>,
+pub struct ProcessorInstance<'a> {
+    hooks: &'a HashMap<String, Hook>,
+    jobs: VecDeque<Job>,
 }
 
-impl<'h> ProcessorInstance<'h> {
+impl<'a> ProcessorInstance<'a> {
 
-    pub fn new(hooks: &'h HashMap<String, Hook>) -> ProcessorInstance<'h> {
+    pub fn new(hooks: &'a HashMap<String, Hook>) -> ProcessorInstance<'a> {
         ProcessorInstance {
             hooks: hooks,
             jobs: VecDeque::new(),
         }
     }
 
-    pub fn schedule(&mut self, name: String) {
-        let hook = self.hooks.get(&name).unwrap();
-        self.jobs.push_back(Job::new(hook));
+    pub fn schedule(&mut self, name: String) -> Result<(), FisherError> {
+        if ! self.hooks.contains_key(&name) {
+            return Err(FisherError::HookNotFound(name.clone()));
+        }
+
+        self.jobs.push_back(Job::new(name.clone()));
+        Ok(())
     }
 
-    pub fn pop_job(&mut self) -> Option<Job<'h>> {
+    pub fn pop_job(&mut self) -> Option<Job> {
         self.jobs.pop_front()
-    }
-
-    pub fn jobs_present(&self) -> bool {
-        ! self.jobs.is_empty()
     }
 
 }

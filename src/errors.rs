@@ -21,6 +21,7 @@ pub enum FisherError {
     ProviderNotFound(String, String),
     PathNotFound(String),
     PathNotADirectory(String),
+    HookNotFound(String),
 }
 
 impl FisherError {
@@ -33,6 +34,8 @@ impl FisherError {
                 format!("Path {} doesn't exist", path),
             FisherError::PathNotADirectory(ref path) =>
                 format!("Path {} isn't a directory", path),
+            FisherError::HookNotFound(ref hook) =>
+                format!("Hook {} not found", hook),
         }
     }
 
@@ -48,6 +51,8 @@ impl Error for FisherError {
                 "Path doesn't exist",
             FisherError::PathNotADirectory(..) =>
                 "Path isn't a directory",
+            FisherError::HookNotFound(..) =>
+                "Hook not found",
         }
     }
 
