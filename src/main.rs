@@ -32,6 +32,18 @@ use std::thread;
 use ansi_term::Colour;
 
 
+fn web_thread(app: nickel::Nickel, options: cli::FisherSettings) {
+    let bind: &str = &options.bind;
+
+    // Show a nice message
+    println!("{} on {}",
+             Colour::Green.bold().paint("Web API listening"),
+             options.bind);
+
+    app.listen(bind);
+}
+
+
 fn main() {
     let options = cli::parse();
 
@@ -43,20 +55,18 @@ fn main() {
         process::exit(1);
     }
     let hooks = collected_hooks.unwrap();
+    println!("Total hooks collected: {}", hooks.len());
 
     let mut processor = processor::ProcessorInstance::new(&hooks);
 
     // Start the web application
     let webapp = web::create_app();
-    let options_clone = options.clone();
-    thread::spawn(move || {
-        let bind: &str = &options_clone.bind;
-        webapp.listen(bind);
+    let thread_web = thread::spawn(move || {
+        web_thread(webapp, options.clone())
     });
-    println!("Total hooks collected: {}", hooks.len());
-    println!("{} on {}",
-             Colour::Green.bold().paint("Web API listening"),
-             options.bind);
 
     loop {}
+
+    // Join all the threads
+    thread_web.join().unwrap();
 }
