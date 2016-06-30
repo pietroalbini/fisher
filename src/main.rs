@@ -15,6 +15,7 @@
 
 extern crate rustc_serialize;
 extern crate regex;
+extern crate ansi_term;
 #[macro_use] extern crate nickel;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
@@ -28,6 +29,7 @@ mod web;
 
 use std::process;
 use std::thread;
+use ansi_term::Colour;
 
 
 fn main() {
@@ -35,7 +37,9 @@ fn main() {
 
     let collected_hooks = hooks::collect(&options.hooks_dir);
     if collected_hooks.is_err() {
-        println!("Error: {}", collected_hooks.err().unwrap());
+        println!("{} {}",
+                 Colour::Red.bold().paint("Error:"),
+                 collected_hooks.err().unwrap());
         process::exit(1);
     }
     let hooks = collected_hooks.unwrap();
@@ -49,7 +53,10 @@ fn main() {
         let bind: &str = &options_clone.bind;
         webapp.listen(bind);
     });
-    println!("Listening on {}", options.bind);
+    println!("Total hooks collected: {}", hooks.len());
+    println!("{} on {}",
+             Colour::Green.bold().paint("Web API listening"),
+             options.bind);
 
     loop {}
 }
