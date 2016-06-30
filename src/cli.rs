@@ -16,6 +16,7 @@
 use clap::{App, Arg};
 
 
+#[derive(Clone)]
 pub struct FisherSettings {
     pub bind: String,
     pub hooks_dir: String,

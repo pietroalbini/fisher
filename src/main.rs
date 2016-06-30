@@ -15,6 +15,7 @@
 
 extern crate rustc_serialize;
 extern crate regex;
+#[macro_use] extern crate nickel;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
 
@@ -23,8 +24,11 @@ mod providers;
 mod hooks;
 mod errors;
 mod processor;
+mod web;
 
 use std::process;
+use std::thread;
+
 
 fn main() {
     let options = cli::parse();
@@ -37,4 +41,15 @@ fn main() {
     let hooks = collected_hooks.unwrap();
 
     let mut processor = processor::ProcessorInstance::new(&hooks);
+
+    // Start the web application
+    let webapp = web::create_app();
+    let options_clone = options.clone();
+    thread::spawn(move || {
+        let bind: &str = &options_clone.bind;
+        webapp.listen(bind);
+    });
+    println!("Listening on {}", options.bind);
+
+    loop {}
 }

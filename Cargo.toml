@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Pietro Albini <pietro@pietroalbini.io>"]
 
 [dependencies]
+nickel="*"
 regex="*"
 clap="*"
 rustc-serialize="*"
