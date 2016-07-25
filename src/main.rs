@@ -16,6 +16,7 @@
 extern crate rustc_serialize;
 extern crate regex;
 extern crate ansi_term;
+extern crate chan_signal;
 #[macro_use] extern crate nickel;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
@@ -30,21 +31,12 @@ mod web;
 use std::process;
 use std::thread;
 use ansi_term::Colour;
-
-
-fn web_thread(app: nickel::Nickel, options: cli::FisherSettings) {
-    let bind: &str = &options.bind;
-
-    // Show a nice message
-    println!("{} on {}",
-             Colour::Green.bold().paint("Web API listening"),
-             options.bind);
-
-    app.listen(bind);
-}
+use chan_signal::Signal;
 
 
 fn main() {
+    let exit_signal = chan_signal::notify(&[Signal::INT, Signal::TERM]);
+
     let options = cli::parse();
 
     let collected_hooks = hooks::collect(&options.hooks_dir);
@@ -61,12 +53,26 @@ fn main() {
 
     // Start the web application
     let webapp = web::create_app();
-    let thread_web = thread::spawn(move || {
-        web_thread(webapp, options.clone())
-    });
+    let listener: nickel::ListeningServer;
+    match webapp.listen(&options.bind as &str) {
+        Ok(l) => {
+            listener = l;
 
-    loop {}
+            println!("{} on {}",
+                     Colour::Green.bold().paint("Web API listening"),
+                     options.bind);
+        },
+        Err(error) => {
+            println!("{}: {}",
+                     Colour::Red.bold().paint("Failed to start the Web API"),
+                     error);
+            process::exit(1);
+        },
+    };
 
-    // Join all the threads
-    thread_web.join().unwrap();
+    // Wait until SIGINT or SIGTERM is received
+    exit_signal.recv().unwrap();
+
+    // Let the web application close itself
+    listener.detach();
 }

@@ -5,8 +5,12 @@ authors = ["Pietro Albini <pietro@pietroalbini.io>"]
 
 [dependencies]
 ansi_term="*"
-nickel="*"
 regex="*"
 clap="*"
+chan="*"
+chan-signal="*"
 rustc-serialize="*"
 lazy_static="*"
+
+# TODO: use the release when >0.8.1 comes out
+nickel = { git="https://github.com/nickel-org/nickel.rs.git", rev="b77e4ca" }
