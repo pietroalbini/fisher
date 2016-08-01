@@ -15,9 +15,9 @@
 
 use ansi_term::Colour;
 use chan;
-use nickel::{Nickel, Request, Response, MiddlewareResult, MediaType};
-use nickel::{HttpRouter, Options};
+use nickel::{Nickel, MediaType, HttpRouter, Options};
 use nickel::status::StatusCode;
+use hyper::method::Method;
 
 
 pub struct WebAPI {
@@ -98,36 +98,35 @@ impl WebAPI {
         // Disable the default message nickel prints on stdout
         app.options = Options::default().output_on_listen(false);
 
-        app.get("/hook/:hook", handle_queue);
-        app.post("/hook/:hook", handle_queue);
+        for method in &[Method::Get, Method::Post] {
+            // Make the method owned
+            let method = method.clone();
 
-        app.utilize(not_found);
+            // This middleware processes incoming hooks
+            app.add_route(method, "/hook/:hook", middleware! { |req, mut res|
+                let hook = req.param("hook").unwrap();
+
+                // Ignore requests without a valid hook
+                if hook == "" {
+                    return res.next_middleware();
+                }
+
+                println!("Fake processing hook {}...", hook);
+
+                res.set(MediaType::Json);
+                r#"{"status":"queued"}"#
+            });
+        }
+
+        // This middleware provides a basic Not found page
+        app.utilize(middleware! { |_req, mut res|
+            res.set(MediaType::Json);
+            res.set(StatusCode::NotFound);
+
+            r#"{"status":"not_found"}"#
+        });
 
         app
     }
 
-}
-
-
-fn handle_queue<'mw>(req: &mut Request, mut res: Response<'mw>)
-                     -> MiddlewareResult<'mw> {
-    let hook = req.param("hook").unwrap();
-
-    // Ignore requests without a valid hook
-    if hook == "" {
-        return res.next_middleware();
-    }
-
-    println!("Fake processing hook {}...", hook);
-
-    res.set(MediaType::Json);
-    res.send(r#"{"status":"queued"}"#)
-}
-
-
-fn not_found<'mw>(_req: &mut Request, mut res: Response<'mw>)
-                  -> MiddlewareResult<'mw> {
-    res.set(MediaType::Json);
-    res.set(StatusCode::NotFound);
-    res.send(r#"{"status":"not_found"}"#)
 }
