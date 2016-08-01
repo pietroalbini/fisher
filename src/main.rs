@@ -17,6 +17,8 @@ extern crate rustc_serialize;
 extern crate regex;
 extern crate ansi_term;
 extern crate chan_signal;
+extern crate hyper;
+#[macro_use] extern crate chan;
 #[macro_use] extern crate nickel;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
@@ -28,51 +30,44 @@ mod errors;
 mod processor;
 mod web;
 
-use std::process;
-use std::thread;
 use ansi_term::Colour;
 use chan_signal::Signal;
+
+
+fn get_hooks(base: &String) -> hooks::Hooks {
+    // Actually collect hooks
+    let collected_hooks = hooks::collect(base);
+
+    // Show an error and exit if something went wrong
+    if collected_hooks.is_err() {
+        println!("{} {}",
+                 Colour::Red.bold().paint("Error:"),
+                 collected_hooks.err().unwrap());
+        ::std::process::exit(1);
+    }
+
+    let hooks = collected_hooks.unwrap();
+    println!("Total hooks collected: {}", hooks.len());
+
+    hooks
+}
 
 
 fn main() {
     let exit_signal = chan_signal::notify(&[Signal::INT, Signal::TERM]);
 
     let options = cli::parse();
-
-    let collected_hooks = hooks::collect(&options.hooks_dir);
-    if collected_hooks.is_err() {
-        println!("{} {}",
-                 Colour::Red.bold().paint("Error:"),
-                 collected_hooks.err().unwrap());
-        process::exit(1);
-    }
-    let hooks = collected_hooks.unwrap();
-    println!("Total hooks collected: {}", hooks.len());
+    let hooks = get_hooks(&options.hooks_dir);
 
     let mut processor = processor::ProcessorInstance::new(&hooks);
+    let mut webapi = web::WebAPI::new();
 
     // Start the web application
-    let webapp = web::create_app();
-    let listener: nickel::ListeningServer;
-    match webapp.listen(&options.bind as &str) {
-        Ok(l) => {
-            listener = l;
-
-            println!("{} on {}",
-                     Colour::Green.bold().paint("Web API listening"),
-                     options.bind);
-        },
-        Err(error) => {
-            println!("{}: {}",
-                     Colour::Red.bold().paint("Failed to start the Web API"),
-                     error);
-            process::exit(1);
-        },
-    };
+    webapi.listen(&options.bind);
 
     // Wait until SIGINT or SIGTERM is received
     exit_signal.recv().unwrap();
 
     // Let the web application close itself
-    listener.detach();
+    webapi.stop();
 }

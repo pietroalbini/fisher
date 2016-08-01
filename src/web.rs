@@ -13,9 +13,100 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use nickel::{Nickel, Request, Response, MiddlewareResult, MediaType,
-             HttpRouter, Options};
+use ansi_term::Colour;
+use chan;
+use nickel::{Nickel, Request, Response, MiddlewareResult, MediaType};
+use nickel::{HttpRouter, Options};
 use nickel::status::StatusCode;
+
+
+pub struct WebAPI {
+    stop_chan: Option<chan::Sender<()>>,
+    stop: bool,
+}
+
+impl WebAPI {
+
+    pub fn new() -> WebAPI {
+        WebAPI {
+            stop_chan: None,
+            stop: false,
+        }
+    }
+
+    pub fn listen(&mut self, bind: &str) {
+        // This is to fix lifetime issues with the thread below
+        let bind = bind.to_string();
+
+        let app = self.configure_nickel();
+
+        // This channel is used so it's possible to stop the listener
+        let (send_stop, recv_stop) = chan::sync(0);
+        self.stop_chan = Some(send_stop);
+
+        ::std::thread::spawn(move || {
+            let bind: &str = &bind;
+            match app.listen(bind) {
+                Ok(listener) => {
+                    println!("{} on {}",
+                        Colour::Green.bold().paint("Web API listening"), bind
+                    );
+
+                    // This blocks until someone sends something to
+                    // self.stop_chan
+                    recv_stop.recv();
+
+                    println!("Stopping web server...");
+
+                    // Detach the webserver from the current thread, allowing
+                    // the process to exit
+                    listener.detach();
+                },
+                Err(error) => {
+                    println!("{} on {}: {}",
+                        Colour::Red.bold().paint(
+                            "Failed to start the Web API"
+                        ), bind, error
+                    );
+                    ::std::process::exit(1);
+                }
+            }
+        });
+    }
+
+    pub fn stop(&mut self) -> bool {
+        // Don't try to stop twice
+        if self.stop {
+            return true;
+        }
+
+        match self.stop_chan {
+            Some(ref stop_chan) => {
+                // Tell the thread to stop
+                stop_chan.send(());
+
+                self.stop = true;
+                true
+            },
+            None => false,
+        }
+    }
+
+    fn configure_nickel(&self) -> Nickel {
+        let mut app = Nickel::new();
+
+        // Disable the default message nickel prints on stdout
+        app.options = Options::default().output_on_listen(false);
+
+        app.get("/hook/:hook", handle_queue);
+        app.post("/hook/:hook", handle_queue);
+
+        app.utilize(not_found);
+
+        app
+    }
+
+}
 
 
 fn handle_queue<'mw>(req: &mut Request, mut res: Response<'mw>)
@@ -34,24 +125,9 @@ fn handle_queue<'mw>(req: &mut Request, mut res: Response<'mw>)
 }
 
 
-fn not_found<'mw>(req: &mut Request, mut res: Response<'mw>)
+fn not_found<'mw>(_req: &mut Request, mut res: Response<'mw>)
                   -> MiddlewareResult<'mw> {
     res.set(MediaType::Json);
     res.set(StatusCode::NotFound);
     res.send(r#"{"status":"not_found"}"#)
-}
-
-
-pub fn create_app() -> Nickel {
-    let mut app = Nickel::new();
-
-    // Disable the default message nickel prints on stdout
-    app.options = Options::default().output_on_listen(false);
-
-    app.get("/hook/:hook", handle_queue);
-    app.post("/hook/:hook", handle_queue);
-
-    app.utilize(not_found);
-
-    app
 }
