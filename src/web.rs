@@ -26,15 +26,17 @@ pub struct WebAPI {
     stop_chan: Option<chan::Sender<()>>,
     sender_chan: Option<SenderChan>,
     stop: bool,
+    hooks_names: Vec<String>,
 }
 
 impl WebAPI {
 
-    pub fn new() -> WebAPI {
+    pub fn new(hooks_names: Vec<String>) -> WebAPI {
         WebAPI {
             stop_chan: None,
             sender_chan: None,
             stop: false,
+            hooks_names: hooks_names,
         }
     }
 
@@ -109,23 +111,29 @@ impl WebAPI {
             // Make the used things owned
             let method = method.clone();
             let sender = self.sender_chan.clone().unwrap();
+            let hooks_names = self.hooks_names.clone();
 
             // This middleware processes incoming hooks
             app.add_route(method, "/hook/:hook", middleware! { |req, mut res|
-                let hook = req.param("hook").unwrap();
+                res.set(MediaType::Json);
+
+                let hook = req.param("hook").unwrap().to_string();
 
                 // Ignore requests without a valid hook
-                if hook == "" {
+                if hook == "".to_string() {
                     return res.next_middleware();
                 }
 
-                let job = Job::new(hook.to_string());
+                if hooks_names.contains(&hook) {
+                    let job = Job::new(hook);
 
-                // Send the job to be processed
-                sender.send(Some(job));
+                    // Send the job to be processed
+                    sender.send(Some(job));
 
-                res.set(MediaType::Json);
-                r#"{"status":"queued"}"#
+                    r#"{"status":"queued"}"#
+                } else {
+                    r#"{"status":"not_found"}"#
+                }
             });
         }
 
