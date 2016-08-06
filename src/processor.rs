@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::net::SocketAddr;
 use std::collections::{HashMap, VecDeque};
 
 use hooks::Hook;
@@ -24,15 +25,25 @@ pub type SenderChan = chan::Sender<Option<Job>>;
 
 
 #[derive(Clone)]
+pub struct Request {
+    pub source: SocketAddr,
+    pub headers: HashMap<String, String>,
+    pub params: HashMap<String, String>,
+}
+
+
+#[derive(Clone)]
 pub struct Job {
     hook_name: String,
+    request: Request,
 }
 
 impl Job {
 
-    pub fn new(hook_name: String) -> Job {
+    pub fn new(hook_name: String, request: Request) -> Job {
         Job {
             hook_name: hook_name,
+            request: request,
         }
     }
 

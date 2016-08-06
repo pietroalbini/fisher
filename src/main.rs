@@ -18,6 +18,7 @@ extern crate regex;
 extern crate ansi_term;
 extern crate chan_signal;
 extern crate hyper;
+extern crate url;
 #[macro_use] extern crate chan;
 #[macro_use] extern crate nickel;
 #[macro_use] extern crate lazy_static;
