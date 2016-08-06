@@ -124,16 +124,17 @@ impl WebAPI {
                     return res.next_middleware();
                 }
 
-                if hooks_names.contains(&hook) {
-                    let job = Job::new(hook);
-
-                    // Send the job to be processed
-                    sender.send(Some(job));
-
-                    r#"{"status":"queued"}"#
-                } else {
-                    r#"{"status":"not_found"}"#
+                // Ignore requests with non-existent hooks
+                if ! hooks_names.contains(&hook) {
+                    return res.next_middleware();
                 }
+
+                let job = Job::new(hook);
+
+                // Send the job to be processed
+                sender.send(Some(job));
+
+                r#"{"status":"queued"}"#
             });
         }
 
