@@ -35,10 +35,10 @@ lazy_static! {
 }
 
 
+#[derive(Clone)]
 pub struct Hook {
     pub name: String,
     pub exec: String,
-    pub providers: VecProviders,
 }
 
 impl Hook {
@@ -48,7 +48,6 @@ impl Hook {
         Ok(Hook {
             name: name,
             exec: exec,
-            providers: providers,
         })
     }
 

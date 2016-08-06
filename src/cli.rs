@@ -14,12 +14,14 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use clap::{App, Arg};
+use ansi_term::Colour;
 
 
 #[derive(Clone)]
 pub struct FisherSettings {
     pub bind: String,
     pub hooks_dir: String,
+    pub max_threads: u16,
 }
 
 
@@ -36,6 +38,11 @@ fn create_cli<'a, 'b>() -> App<'a, 'b> {
              .long("bind").short("b")
              .value_name("PORT")
              .help("The port to bind fish to"))
+
+        .arg(Arg::with_name("max_threads").takes_value(true)
+             .long("jobs").short("j")
+             .value_name("JOBS_COUNT")
+             .help("How much concurrent jobs to run"))
     ;
 
     app
@@ -45,8 +52,21 @@ fn create_cli<'a, 'b>() -> App<'a, 'b> {
 pub fn parse() -> FisherSettings {
     let matches = create_cli().get_matches();
 
+    let max_threads;
+    match matches.value_of("max_threads").unwrap_or("1").parse::<u16>() {
+        Ok(value) => {
+            max_threads = value;
+        },
+        Err(_) => {
+            println!("{} The jobs count you provided is not a number",
+                     Colour::Red.bold().paint("Error:"));
+            ::std::process::exit(1);
+        }
+    }
+
     FisherSettings {
         bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").to_string(),
         hooks_dir: matches.value_of("hooks").unwrap().to_string(),
+        max_threads: max_threads,
     }
 }

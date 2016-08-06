@@ -19,9 +19,12 @@ use nickel::{Nickel, MediaType, HttpRouter, Options};
 use nickel::status::StatusCode;
 use hyper::method::Method;
 
+use processor::{Job, SenderChan};
+
 
 pub struct WebAPI {
     stop_chan: Option<chan::Sender<()>>,
+    sender_chan: Option<SenderChan>,
     stop: bool,
 }
 
@@ -30,11 +33,15 @@ impl WebAPI {
     pub fn new() -> WebAPI {
         WebAPI {
             stop_chan: None,
+            sender_chan: None,
             stop: false,
         }
     }
 
-    pub fn listen(&mut self, bind: &str) {
+    pub fn listen(&mut self, bind: &str, sender: SenderChan) {
+        // Store the sender channel
+        self.sender_chan = Some(sender);
+
         // This is to fix lifetime issues with the thread below
         let bind = bind.to_string();
 
@@ -99,8 +106,9 @@ impl WebAPI {
         app.options = Options::default().output_on_listen(false);
 
         for method in &[Method::Get, Method::Post] {
-            // Make the method owned
+            // Make the used things owned
             let method = method.clone();
+            let sender = self.sender_chan.clone().unwrap();
 
             // This middleware processes incoming hooks
             app.add_route(method, "/hook/:hook", middleware! { |req, mut res|
@@ -111,7 +119,10 @@ impl WebAPI {
                     return res.next_middleware();
                 }
 
-                println!("Fake processing hook {}...", hook);
+                let job = Job::new(hook.to_string());
+
+                // Send the job to be processed
+                sender.send(Some(job));
 
                 res.set(MediaType::Json);
                 r#"{"status":"queued"}"#

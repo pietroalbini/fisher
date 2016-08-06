@@ -59,15 +59,17 @@ fn main() {
     let options = cli::parse();
     let hooks = get_hooks(&options.hooks_dir);
 
-    let mut processor = processor::ProcessorInstance::new(&hooks);
+    let mut processor = processor::ProcessorManager::new();
     let mut webapi = web::WebAPI::new();
 
-    // Start the web application
-    webapi.listen(&options.bind);
+    // Start everything
+    processor.start(hooks, options.max_threads);
+    webapi.listen(&options.bind, processor.sender().unwrap());
 
     // Wait until SIGINT or SIGTERM is received
     exit_signal.recv().unwrap();
 
-    // Let the web application close itself
+    // Stop everything
     webapi.stop();
+    processor.stop();
 }
