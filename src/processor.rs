@@ -49,6 +49,7 @@ impl Job {
 
 pub struct ProcessorManager {
     sender: Option<SenderChan>,
+    stop_wait: Option<chan::Receiver<()>>,
 }
 
 impl ProcessorManager {
@@ -56,12 +57,17 @@ impl ProcessorManager {
     pub fn new() -> ProcessorManager {
         ProcessorManager {
             sender: None,
+            stop_wait: None,
         }
     }
 
     pub fn start(&mut self, hooks: HashMap<String, Hook>, max_threads: u16) {
         // This is used to retrieve the sender we want from the child thread
         let (sender_send, sender_recv) = chan::sync(0);
+
+        // This is used by the thread to notify the processor it completed its
+        // work, in order to block execution when stopping fisher
+        let (stop_wait_send, stop_wait_recv) = chan::sync(0);
 
         ::std::thread::spawn(move || {
             let (mut processor, input) = Processor::new(hooks, max_threads);
@@ -70,15 +76,28 @@ impl ProcessorManager {
             sender_send.send(input);
 
             processor.run();
+
+            // Notify ProcessorManager the thread did its work
+            stop_wait_send.send(());
         });
 
         self.sender = Some(sender_recv.recv().unwrap());
+        self.stop_wait = Some(stop_wait_recv);
     }
 
     pub fn stop(&self) {
         match self.sender {
             Some(ref sender) => {
+                // Tell the processor to exit as soon as possible
                 sender.send(None);
+
+                // Wait until the processor did its work
+                match self.stop_wait {
+                    Some(ref stop_wait) => {
+                        stop_wait.recv();
+                    },
+                    None => {},
+                }
             },
             None => {},
         }
