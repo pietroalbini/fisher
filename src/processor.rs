@@ -16,8 +16,6 @@
 use std::collections::{HashMap, VecDeque};
 
 use hooks::Hook;
-use cli::FisherSettings;
-use errors::FisherError;
 
 use chan;
 
