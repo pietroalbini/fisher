@@ -13,30 +13,16 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::collections::HashMap;
+
 use rustc_serialize::json;
 
 
-pub trait HooksProvider {}
-
-
-// The "Standalone" provider is not tied to any external service, and requires
-// a valid secret key when receiving an hook
-
-#[derive(RustcDecodable, RustcEncodable)]
-pub struct StandaloneProvider {
-    secret: String,
+pub fn validate(_config: json::Json) -> bool {
+    true
 }
 
-impl HooksProvider for StandaloneProvider {}
 
-
-// This is a list of all the providers currently supported by Fisher
-
-pub fn by_name(name: &str, data: &str) -> Option<Box<HooksProvider>> {
-    match name {
-        "Standalone" => {
-            Some(Box::new(json::decode::<StandaloneProvider>(data).unwrap()))
-        },
-        _ => None,
-    }
+pub fn env(_config: json::Json) -> HashMap<String, String> {
+    HashMap::new()
 }

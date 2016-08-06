@@ -24,7 +24,7 @@ use providers;
 use errors::FisherError;
 
 
-pub type VecProviders = Vec<Box<providers::HooksProvider>>;
+pub type VecProviders = Vec<providers::HookProvider>;
 pub type Hooks = HashMap<String, Hook>;
 
 
@@ -39,15 +39,18 @@ lazy_static! {
 pub struct Hook {
     pub name: String,
     pub exec: String,
+    pub providers: VecProviders,
 }
 
 impl Hook {
 
     fn load(name: String, exec: String) -> Result<Hook, FisherError> {
         let providers = try!(Hook::load_providers(&exec));
+
         Ok(Hook {
             name: name,
             exec: exec,
+            providers: providers,
         })
     }
 
@@ -70,7 +73,7 @@ impl Hook {
                 let name = cap.at(1).unwrap();
                 let data = cap.at(2).unwrap();
 
-                if let Some(provider) = providers::by_name(&name, &data) {
+                if let Some(provider) = providers::get(&name, &data) {
                     result.push(provider);
                 } else {
                     return Err(FisherError::ProviderNotFound(
