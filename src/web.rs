@@ -24,6 +24,7 @@ use hyper::method::Method;
 use hyper::uri::RequestUri;
 use url::form_urlencoded;
 
+use hooks::Hook;
 use processor::{Request, Job, SenderChan};
 
 
@@ -31,17 +32,17 @@ pub struct WebAPI {
     stop_chan: Option<chan::Sender<()>>,
     sender_chan: Option<SenderChan>,
     stop: bool,
-    hooks_names: Vec<String>,
+    hooks: HashMap<String, Hook>,
 }
 
 impl WebAPI {
 
-    pub fn new(hooks_names: Vec<String>) -> WebAPI {
+    pub fn new(hooks: HashMap<String, Hook>) -> WebAPI {
         WebAPI {
             stop_chan: None,
             sender_chan: None,
             stop: false,
-            hooks_names: hooks_names,
+            hooks: hooks,
         }
     }
 
@@ -116,30 +117,40 @@ impl WebAPI {
             // Make the used things owned
             let method = method.clone();
             let sender = self.sender_chan.clone().unwrap();
-            let hooks_names = self.hooks_names.clone();
+            let hooks = self.hooks.clone();
 
             // This middleware processes incoming hooks
             app.add_route(method, "/hook/:hook", middleware! { |req, mut res|
                 res.set(MediaType::Json);
 
-                let hook = req.param("hook").unwrap().to_string();
+                let hook_name = req.param("hook").unwrap().to_string();
 
                 // Ignore requests without a valid hook
-                if hook == "".to_string() {
+                if hook_name == "".to_string() {
                     return res.next_middleware();
                 }
 
                 // Ignore requests with non-existent hooks
-                if ! hooks_names.contains(&hook) {
+                let hook: Hook;
+                if let Some(found) = hooks.get(&hook_name) {
+                    hook = found.clone();
+                } else {
                     return res.next_middleware();
                 }
 
-                let job = Job::new(hook, convert_request(&req));
+                let request = convert_request(&req);
 
-                // Send the job to be processed
-                sender.send(Some(job));
+                if hook.validate(&request.clone()) {
+                    // If the hook is valid, create a new job and queue it
+                    let job = Job::new(hook.name, request);
+                    sender.send(Some(job));
 
-                r#"{"status":"queued"}"#
+                    r#"{"status":"queued"}"#
+                } else {
+                    // Else send a great 403 Forbidden
+                    res.set(StatusCode::Forbidden);
+                    r#"{"status":"rejected"}"#
+                }
             });
         }
 

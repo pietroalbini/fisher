@@ -50,11 +50,6 @@ impl Job {
     pub fn process(&self, hooks: &HashMap<String, Hook>) {
         let hook = hooks.get(&self.hook_name).unwrap();
 
-        if ! hook.validate(&self.request) {
-            // Silently skip invalid requests
-            return;
-        }
-
         println!("Processing hook {}!", hook.name);
     }
 

@@ -50,13 +50,8 @@ fn main() {
     let options = cli::parse();
     let hooks = get_hooks(&options.hooks_dir);
 
-    // Collect the names of all the hooks
-    let hooks_names: Vec<String> = hooks.keys().map(|key| {
-        key.clone()
-    }).collect();
-
     let mut processor = processor::ProcessorManager::new();
-    let mut webapi = web::WebAPI::new(hooks_names);
+    let mut webapi = web::WebAPI::new(hooks.clone());
 
     // Start everything
     processor.start(hooks, options.max_threads);
