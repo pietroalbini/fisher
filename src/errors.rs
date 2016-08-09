@@ -120,6 +120,9 @@ impl fmt::Display for FisherError {
                     DecoderError::MissingFieldError(ref field) =>
                         format!("missing required field: {}", field),
 
+                    DecoderError::ExpectedError(ref expected, ref found) =>
+                        format!("expected {}, found {}", expected, found),
+
                     DecoderError::ParseError(ref pe) => match *pe {
 
                         ParserError::IoError(ref io_error) =>
