@@ -59,8 +59,10 @@ impl Hook {
         let reader = BufReader::new(f);
 
         let mut content;
+        let mut line_number: u32 = 0;
         let mut result: VecProviders = vec![];
         for line in reader.lines() {
+            line_number += 1;
             content = line.unwrap();
 
             // Just ignore everything after an empty line
@@ -73,7 +75,16 @@ impl Hook {
                 let name = cap.at(1).unwrap();
                 let data = cap.at(2).unwrap();
 
-                result.push(try!(providers::get(&name, &data)));
+                match providers::get(&name, &data) {
+                    Ok(provider) => {
+                        result.push(provider);
+                    },
+                    Err(mut error) => {
+                        error.set_file(file.clone());
+                        error.set_line(line_number);
+                        return Err(error);
+                    }
+                }
             }
         }
 

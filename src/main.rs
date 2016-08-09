@@ -36,7 +36,7 @@ use chan_signal::Signal;
 
 fn get_hooks(base: &String) -> hooks::Hooks {
     // Actually collect hooks
-    let hooks = errors::abort(hooks::collect(base));
+    let hooks = errors::unwrap(hooks::collect(base));
 
     println!("Total hooks collected: {}", hooks.len());
 

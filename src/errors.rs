@@ -24,7 +24,7 @@ use rustc_serialize::json;
 pub type FisherResult<T> = Result<T, FisherError>;
 
 
-pub enum FisherError {
+pub enum ErrorKind {
     ProviderNotFound(String),
 
     // Derived errors
@@ -32,23 +32,67 @@ pub enum FisherError {
     JsonError(json::DecoderError),
 }
 
+
+pub struct FisherError {
+    kind: ErrorKind,
+
+    // Additional information
+    file: Option<String>,
+    line: Option<u32>,
+}
+
+impl FisherError {
+
+    pub fn new(kind: ErrorKind) -> Self {
+        FisherError {
+            kind: kind,
+
+            // Those can be filled after
+            file: None,
+            line: None,
+        }
+    }
+
+    pub fn set_file(&mut self, file: String) {
+        self.file = Some(file);
+    }
+
+    pub fn set_line(&mut self, line: u32) {
+        self.line = Some(line);
+    }
+
+    pub fn location(&self) -> Option<String> {
+        if let Some(file) = self.file.clone() {
+            if let Some(line) = self.line {
+                Some(format!("file {}, line {}", file, line))
+            } else {
+                Some(format!("file {}", file))
+            }
+        } else {
+            None
+        }
+    }
+
+}
+
+
 impl Error for FisherError {
 
     fn description(&self) -> &str {
-        match *self {
-            FisherError::ProviderNotFound(..) =>
+        match self.kind {
+            ErrorKind::ProviderNotFound(..) =>
                 "provider not found",
-            FisherError::IoError(ref error) =>
+            ErrorKind::IoError(ref error) =>
                 error.description(),
-            FisherError::JsonError(ref error) =>
+            ErrorKind::JsonError(ref error) =>
                 error.description(),
         }
     }
 
     fn cause(&self) -> Option<&Error> {
-        match *self {
-            FisherError::IoError(ref error) => Some(error as &Error),
-            FisherError::JsonError(ref error) => Some(error as &Error),
+        match self.kind {
+            ErrorKind::IoError(ref error) => Some(error as &Error),
+            ErrorKind::JsonError(ref error) => Some(error as &Error),
             _ => None,
         }
     }
@@ -58,16 +102,16 @@ impl fmt::Display for FisherError {
 
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // Get the correct description for the error
-        let description = match *self {
+        let description = match self.kind {
 
-            FisherError::ProviderNotFound(ref provider) =>
+            ErrorKind::ProviderNotFound(ref provider) =>
                 format!("Provider {} not found", provider),
 
-            FisherError::IoError(ref error) =>
+            ErrorKind::IoError(ref error) =>
                 format!("{}", error),
 
             // The default errors of rustc_serialize are really ugly btw
-            FisherError::JsonError(ref error) => {
+            ErrorKind::JsonError(ref error) => {
                 use rustc_serialize::json::DecoderError;
                 use rustc_serialize::json::ParserError;
 
@@ -110,7 +154,7 @@ impl fmt::Debug for FisherError {
 impl From<io::Error> for FisherError {
 
     fn from(error: io::Error) -> Self {
-        FisherError::IoError(error)
+        FisherError::new(ErrorKind::IoError(error))
     }
 }
 
@@ -118,19 +162,25 @@ impl From<io::Error> for FisherError {
 impl From<json::DecoderError> for FisherError {
 
     fn from(error: json::DecoderError) -> Self {
-        FisherError::JsonError(error)
+        FisherError::new(ErrorKind::JsonError(error))
     }
 }
 
 
-pub fn abort<R, E: Error>(result: Result<R, E>) -> R {
+pub fn unwrap<T>(result: Result<T, FisherError>) -> T {
     // Exit if the result is an error
-    if result.is_err() {
+    if let Err(error) = result {
         // Show a nice error message
         println!("{} {}",
             ::ansi_term::Colour::Red.bold().paint("Error:"),
-            result.err().unwrap()
+            error,
         );
+        if let Some(location) = error.location() {
+            println!("{} {}",
+                ::ansi_term::Colour::Yellow.bold().paint("Location:"),
+                location,
+            );
+        }
 
         // And then exit
         ::std::process::exit(1);

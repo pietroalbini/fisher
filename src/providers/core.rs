@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use errors::{FisherResult, FisherError};
+use errors::{FisherResult, FisherError, ErrorKind};
 
 
 pub type CheckConfigFunc = fn(String) -> FisherResult<()>;
@@ -45,7 +45,8 @@ impl Providers {
                 Ok(provider.clone())
             },
             None => {
-                Err(FisherError::ProviderNotFound(name.clone()))
+                let kind = ErrorKind::ProviderNotFound(name.clone());
+                Err(FisherError::new(kind))
             },
         }
     }
