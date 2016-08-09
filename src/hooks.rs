@@ -21,7 +21,7 @@ use std::io::{BufReader, BufRead};
 use regex::Regex;
 
 use providers;
-use errors::FisherError;
+use errors::{FisherResult, FisherError};
 
 
 pub type VecProviders = Vec<providers::HookProvider>;
@@ -44,7 +44,7 @@ pub struct Hook {
 
 impl Hook {
 
-    fn load(name: String, exec: String) -> Result<Hook, FisherError> {
+    fn load(name: String, exec: String) -> FisherResult<Hook> {
         let providers = try!(Hook::load_providers(&exec));
 
         Ok(Hook {
@@ -54,7 +54,7 @@ impl Hook {
         })
     }
 
-    fn load_providers(file: &String) -> Result<VecProviders, FisherError> {
+    fn load_providers(file: &String) -> FisherResult<VecProviders> {
         let f = fs::File::open(file).unwrap();
         let reader = BufReader::new(f);
 
@@ -89,21 +89,11 @@ impl Hook {
 }
 
 
-pub fn collect<'a>(base: &String) -> Result<Hooks, FisherError> {
-    let metadata = fs::metadata(&base);
-    if metadata.is_err() {
-        return Err(FisherError::PathNotFound(base.clone()));
-    }
-    let metadata = metadata.unwrap();
-
-    if ! metadata.is_dir() {
-        return Err(FisherError::PathNotADirectory(base.clone()));
-    }
-
+pub fn collect<'a>(base: &String) -> FisherResult<Hooks> {
     let mut result = HashMap::new();
 
-    for entry in fs::read_dir(&base).unwrap() {
-        let pathbuf = entry.unwrap().path();
+    for entry in try!(fs::read_dir(&base)) {
+        let pathbuf = try!(entry).path();
         let path = pathbuf.as_path();
 
         // Check if the file is actually a file
@@ -112,7 +102,7 @@ pub fn collect<'a>(base: &String) -> Result<Hooks, FisherError> {
         }
 
         // Check if the file is executable and readable
-        let mode = path.metadata().unwrap().permissions().mode();
+        let mode = try!(path.metadata()).permissions().mode();
         if ! ((mode & 0o111) != 0 && (mode & 0o444) != 0) {
             // Skip files with wrong permissions
             continue

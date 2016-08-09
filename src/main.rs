@@ -31,23 +31,13 @@ mod errors;
 mod processor;
 mod web;
 
-use ansi_term::Colour;
 use chan_signal::Signal;
 
 
 fn get_hooks(base: &String) -> hooks::Hooks {
     // Actually collect hooks
-    let collected_hooks = hooks::collect(base);
+    let hooks = errors::abort(hooks::collect(base));
 
-    // Show an error and exit if something went wrong
-    if collected_hooks.is_err() {
-        println!("{} {}",
-                 Colour::Red.bold().paint("Error:"),
-                 collected_hooks.err().unwrap());
-        ::std::process::exit(1);
-    }
-
-    let hooks = collected_hooks.unwrap();
     println!("Total hooks collected: {}", hooks.len());
 
     hooks

@@ -13,29 +13,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::error::Error;
+use std::io;
 use std::fmt;
+use std::error::Error;
+use std::convert::From;
+
+
+pub type FisherResult<T> = Result<T, FisherError>;
 
 
 pub enum FisherError {
     ProviderNotFound(String, String),
-    PathNotFound(String),
-    PathNotADirectory(String),
-}
 
-impl FisherError {
-
-    fn pretty_description(&self) -> String {
-        match *self {
-            FisherError::ProviderNotFound(ref prov, ref file) =>
-                format!("Provider {} not found (in file {})", prov, file),
-            FisherError::PathNotFound(ref path) =>
-                format!("Path {} doesn't exist", path),
-            FisherError::PathNotADirectory(ref path) =>
-                format!("Path {} isn't a directory", path),
-        }
-    }
-
+    // Generic IO Error
+    IoError(io::Error),
 }
 
 impl Error for FisherError {
@@ -43,32 +34,65 @@ impl Error for FisherError {
     fn description(&self) -> &str {
         match *self {
             FisherError::ProviderNotFound(..) =>
-                "Provider not found",
-            FisherError::PathNotFound(..) =>
-                "Path doesn't exist",
-            FisherError::PathNotADirectory(..) =>
-                "Path isn't a directory",
+                "provider not found",
+            FisherError::IoError(ref error) =>
+                error.description(),
         }
     }
 
     fn cause(&self) -> Option<&Error> {
-        None
+        match *self {
+            FisherError::IoError(ref error) => Some(error as &Error),
+            _ => None,
+        }
     }
-
 }
 
 impl fmt::Display for FisherError {
 
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.pretty_description())
-    }
+        // Get the correct description for the error
+        let description = match *self {
 
+            FisherError::ProviderNotFound(ref provider, ref file) =>
+                format!("Provider {} not found (in file {})", provider, file),
+
+            FisherError::IoError(ref error) =>
+                format!("{}", error),
+        };
+
+        write!(f, "{}", description)
+    }
 }
 
 impl fmt::Debug for FisherError {
 
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<FisherError: {}>", self.pretty_description())
+        write!(f, "<FisherError: {}>", self.description())
+    }
+}
+
+
+impl From<io::Error> for FisherError {
+
+    fn from(error: io::Error) -> Self {
+        FisherError::IoError(error)
+    }
+}
+
+
+pub fn abort<R, E: Error>(result: Result<R, E>) -> R {
+    // Exit if the result is an error
+    if result.is_err() {
+        // Show a nice error message
+        println!("{} {}",
+            ::ansi_term::Colour::Red.bold().paint("Error:"),
+            result.err().unwrap()
+        );
+
+        // And then exit
+        ::std::process::exit(1);
     }
 
+    result.unwrap()
 }
