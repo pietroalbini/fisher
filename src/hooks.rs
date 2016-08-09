@@ -21,7 +21,7 @@ use std::io::{BufReader, BufRead};
 use regex::Regex;
 
 use providers;
-use errors::{FisherResult, FisherError};
+use errors::FisherResult;
 
 
 pub type VecProviders = Vec<providers::HookProvider>;
@@ -73,13 +73,7 @@ impl Hook {
                 let name = cap.at(1).unwrap();
                 let data = cap.at(2).unwrap();
 
-                if let Some(provider) = providers::get(&name, &data) {
-                    result.push(provider);
-                } else {
-                    return Err(FisherError::ProviderNotFound(
-                        name.to_string(), file.clone()
-                    ));
-                }
+                result.push(try!(providers::get(&name, &data)));
             }
         }
 

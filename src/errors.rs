@@ -18,15 +18,18 @@ use std::fmt;
 use std::error::Error;
 use std::convert::From;
 
+use rustc_serialize::json;
+
 
 pub type FisherResult<T> = Result<T, FisherError>;
 
 
 pub enum FisherError {
-    ProviderNotFound(String, String),
+    ProviderNotFound(String),
 
-    // Generic IO Error
+    // Derived errors
     IoError(io::Error),
+    JsonError(json::DecoderError),
 }
 
 impl Error for FisherError {
@@ -37,12 +40,15 @@ impl Error for FisherError {
                 "provider not found",
             FisherError::IoError(ref error) =>
                 error.description(),
+            FisherError::JsonError(ref error) =>
+                error.description(),
         }
     }
 
     fn cause(&self) -> Option<&Error> {
         match *self {
             FisherError::IoError(ref error) => Some(error as &Error),
+            FisherError::JsonError(ref error) => Some(error as &Error),
             _ => None,
         }
     }
@@ -54,11 +60,39 @@ impl fmt::Display for FisherError {
         // Get the correct description for the error
         let description = match *self {
 
-            FisherError::ProviderNotFound(ref provider, ref file) =>
-                format!("Provider {} not found (in file {})", provider, file),
+            FisherError::ProviderNotFound(ref provider) =>
+                format!("Provider {} not found", provider),
 
             FisherError::IoError(ref error) =>
                 format!("{}", error),
+
+            // The default errors of rustc_serialize are really ugly btw
+            FisherError::JsonError(ref error) => {
+                use rustc_serialize::json::DecoderError;
+                use rustc_serialize::json::ParserError;
+
+                let message = match *error {
+
+                    DecoderError::MissingFieldError(ref field) =>
+                        format!("missing required field: {}", field),
+
+                    DecoderError::ParseError(ref pe) => match *pe {
+
+                        ParserError::IoError(ref io_error) =>
+                            format!("{}", io_error),
+
+                        ParserError::SyntaxError(ref code, ref r, ref c) => {
+                            let msg = json::error_str(code.clone());
+                            format!("{} (line {}, column {})", msg, r, c)
+                        },
+
+                    },
+
+                    _ => format!("{}", error),
+                };
+
+                format!("JSON error: {}", message)
+            },
         };
 
         write!(f, "{}", description)
@@ -77,6 +111,14 @@ impl From<io::Error> for FisherError {
 
     fn from(error: io::Error) -> Self {
         FisherError::IoError(error)
+    }
+}
+
+
+impl From<json::DecoderError> for FisherError {
+
+    fn from(error: json::DecoderError) -> Self {
+        FisherError::JsonError(error)
     }
 }
 

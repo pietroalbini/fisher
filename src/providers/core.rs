@@ -15,11 +15,12 @@
 
 use std::collections::HashMap;
 
-use rustc_serialize::json;
+use errors::{FisherResult, FisherError};
 
 
-pub type ValidatorFunc = fn(json::Json) -> bool;
-pub type EnvFunc = fn(json::Json) -> HashMap<String, String>;
+pub type CheckConfigFunc = fn(String) -> FisherResult<()>;
+pub type ValidatorFunc = fn(String) -> bool;
+pub type EnvFunc = fn(String) -> HashMap<String, String>;
 
 
 pub struct Providers {
@@ -38,12 +39,14 @@ impl Providers {
         self.providers.insert(name.to_string(), provider);
     }
 
-    pub fn by_name(&self, name: &String) -> Option<Provider> {
+    pub fn by_name(&self, name: &String) -> FisherResult<Provider> {
         match self.providers.get(name) {
             Some(provider) => {
-                Some(provider.clone())
+                Ok(provider.clone())
             },
-            None => None,
+            None => {
+                Err(FisherError::ProviderNotFound(name.clone()))
+            },
         }
     }
 
@@ -52,25 +55,33 @@ impl Providers {
 
 #[derive(Clone)]
 pub struct Provider {
+    check_config_func: CheckConfigFunc,
     validator_func: ValidatorFunc,
     env_func: EnvFunc,
 }
 
 impl Provider {
 
-    pub fn new(validator: ValidatorFunc, env: EnvFunc) -> Provider {
+    pub fn new(check_config: CheckConfigFunc, validator: ValidatorFunc,
+               env: EnvFunc) -> Provider {
         Provider {
+            check_config_func: check_config,
             validator_func: validator,
             env_func: env,
         }
     }
 
-    pub fn validate(&self, config: json::Json) -> bool {
+    pub fn check_config(&self, config: String) -> FisherResult<()> {
+        let check_config = self.check_config_func;
+        check_config(config)
+    }
+
+    pub fn validate(&self, config: String) -> bool {
         let validator = self.validator_func;
         validator(config)
     }
 
-    pub fn env(&self, config: json::Json) -> HashMap<String, String> {
+    pub fn env(&self, config: String) -> HashMap<String, String> {
         let env = self.env_func;
         env(config)
     }
@@ -81,16 +92,21 @@ impl Provider {
 #[derive(Clone)]
 pub struct HookProvider {
     provider: Provider,
-    config: json::Json,
+    config: String,
 }
 
 impl HookProvider {
 
-    pub fn new(provider: Provider, config: json::Json) -> HookProvider {
-        HookProvider {
+    pub fn new(provider: Provider, config: String)
+               -> FisherResult<HookProvider> {
+        // First of all, check if the config is correct
+        try!(provider.check_config(config.clone()));
+
+        // Then return the new provider
+        Ok(HookProvider {
             provider: provider,
             config: config,
-        }
+        })
     }
 
     pub fn validate(&self) -> bool {

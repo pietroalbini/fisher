@@ -17,12 +17,28 @@ use std::collections::HashMap;
 
 use rustc_serialize::json;
 
+use errors::FisherResult;
 
-pub fn validate(_config: json::Json) -> bool {
+
+#[derive(RustcDecodable)]
+struct Config {
+    secret: String,
+    allowed_ips: Option<Vec<String>>,
+}
+
+
+pub fn check_config(input: String) -> FisherResult<()> {
+    try!(json::decode::<Config>(&input));
+
+    Ok(())
+}
+
+
+pub fn validate(_config: String) -> bool {
     true
 }
 
 
-pub fn env(_config: json::Json) -> HashMap<String, String> {
+pub fn env(_config: String) -> HashMap<String, String> {
     HashMap::new()
 }

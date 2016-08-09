@@ -13,11 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use rustc_serialize::json;
-
 mod core;
 mod standalone;
 
+use errors::FisherResult;
 use providers::core::Provider;
 pub use providers::core::HookProvider;
 
@@ -27,6 +26,7 @@ lazy_static! {
         let mut providers = core::Providers::new();
 
         providers.add("Standalone", Provider::new(
+            standalone::check_config,
             standalone::validate,
             standalone::env,
         ));
@@ -36,15 +36,11 @@ lazy_static! {
 }
 
 
-pub fn get(name: &str, raw_config: &str) -> Option<HookProvider> {
-    // Parse the json
-    let config = json::Json::from_str(raw_config).unwrap();
+pub fn get(name: &str, raw_config: &str) -> FisherResult<HookProvider> {
+    // Use an owned string
+    let config = raw_config.to_string();
 
     // Get the associated provider
-    let provider = PROVIDERS.by_name(&name.to_string());
-    if provider.is_none() {
-        return None;
-    }
-
-    Some(HookProvider::new(provider.unwrap(), config))
+    let provider = try!(PROVIDERS.by_name(&name.to_string()));
+    HookProvider::new(provider, config)
 }
