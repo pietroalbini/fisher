@@ -17,13 +17,13 @@ use std::collections::HashMap;
 
 use rustc_serialize::json;
 
+use processor::Request;
 use errors::FisherResult;
 
 
 #[derive(RustcDecodable)]
 struct Config {
     secret: String,
-    allowed_ips: Option<Vec<String>>,
 }
 
 
@@ -34,7 +34,26 @@ pub fn check_config(input: String) -> FisherResult<()> {
 }
 
 
-pub fn validate(_config: String) -> bool {
+pub fn validate(req: Request, config: String) -> bool {
+    let config: Config = json::decode(&config).unwrap();
+
+    let secret;
+    if let Some(found) = req.params.get("secret") {
+        // Secret in the request parameters
+        secret = found;
+    } else if let Some(found) = req.headers.get("X-Fisher-Secret") {
+        // Secret in the HTTP headers
+        secret = found;
+    } else {
+        // No secret present, abort!
+        return false;
+    }
+
+    // Abort if the secret doesn't match
+    if secret != &config.secret {
+        return false;
+    }
+
     true
 }
 

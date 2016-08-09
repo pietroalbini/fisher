@@ -21,6 +21,7 @@ use std::io::{BufReader, BufRead};
 use regex::Regex;
 
 use providers;
+use processor;
 use errors::FisherResult;
 
 
@@ -91,6 +92,19 @@ impl Hook {
         Ok(result)
     }
 
+    pub fn validate(&self, req: &processor::Request) -> bool {
+        if self.providers.len() > 0 {
+            // Check every provider if they're present
+            for provider in &self.providers {
+                if provider.validate(req.clone()) {
+                    return true;
+                }
+            }
+            false
+        } else {
+            true
+        }
+    }
 }
 
 

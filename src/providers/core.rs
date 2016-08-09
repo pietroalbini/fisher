@@ -15,11 +15,12 @@
 
 use std::collections::HashMap;
 
+use processor::Request;
 use errors::{FisherResult, FisherError, ErrorKind};
 
 
 pub type CheckConfigFunc = fn(String) -> FisherResult<()>;
-pub type ValidatorFunc = fn(String) -> bool;
+pub type ValidatorFunc = fn(Request, String) -> bool;
 pub type EnvFunc = fn(String) -> HashMap<String, String>;
 
 
@@ -77,9 +78,9 @@ impl Provider {
         check_config(config)
     }
 
-    pub fn validate(&self, config: String) -> bool {
+    pub fn validate(&self, req: Request, config: String) -> bool {
         let validator = self.validator_func;
-        validator(config)
+        validator(req, config)
     }
 
     pub fn env(&self, config: String) -> HashMap<String, String> {
@@ -110,8 +111,8 @@ impl HookProvider {
         })
     }
 
-    pub fn validate(&self) -> bool {
-        self.provider.validate(self.config.clone())
+    pub fn validate(&self, req: Request) -> bool {
+        self.provider.validate(req, self.config.clone())
     }
 
     pub fn env(&self) -> HashMap<String, String> {
