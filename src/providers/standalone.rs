@@ -138,13 +138,6 @@ mod tests {
     #[test]
     fn test_env() {
         let config = r#"{"secret": "abcde"}"#;
-        let base_request = processor::Request {
-            headers: HashMap::new(),
-            params: HashMap::new(),
-            source: SocketAddr::new(
-                IpAddr::from_str("127.0.0.1").unwrap(), 80
-            ),
-        };
 
         // The environment must always be empty
         assert!(env(config.to_string()) == HashMap::new());
