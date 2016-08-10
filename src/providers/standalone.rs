@@ -61,3 +61,93 @@ pub fn validate(req: Request, config: String) -> bool {
 pub fn env(_config: String) -> HashMap<String, String> {
     HashMap::new()
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+    use std::collections::HashMap;
+    use std::net::{IpAddr, SocketAddr};
+
+    use super::{check_config, validate, env};
+    use processor;
+
+    #[test]
+    fn test_check_config() {
+        // Check if valid config is accepted
+        assert!(check_config(r#"{"secret":"abcde"}"#.to_string()).is_ok());
+
+        let wrong = vec![
+            // Empty configuration
+            r#"{}"#,
+
+            // Mispelled keys
+            r#"{"secrt": "abcde"}"#,
+
+            // Wrong types
+            r#"{"secret": 123}"#,
+            r#"{"secret": true}"#,
+            r#"{"secret": ["a", "b"]}"#,
+            r#"{"secret": {"a": "b"}}"#,
+        ];
+        for one in &wrong {
+            assert!(check_config(one.to_string()).is_err());
+        }
+    }
+
+    #[test]
+    fn test_validate() {
+        let config = r#"{"secret": "abcde"}"#;
+        let base_request = processor::Request {
+            headers: HashMap::new(),
+            params: HashMap::new(),
+            source: SocketAddr::new(
+                IpAddr::from_str("127.0.0.1").unwrap(), 80
+            ),
+        };
+
+        // Test a request with no headers or params
+        // It should not be validated
+        assert!(! validate(base_request.clone(), config.to_string()));
+
+        // Test a request with the secret param, but the wrong secret key
+        // It should not be validated
+        let mut req = base_request.clone();
+        req.params.insert("secret".to_string(), "12345".to_string());
+        assert!(! validate(req, config.to_string()));
+
+        // Test a request with the secret param and the correct secret key
+        // It should be validated
+        let mut req = base_request.clone();
+        req.params.insert("secret".to_string(), "abcde".to_string());
+        assert!(validate(req, config.to_string()));
+
+        // Test a request with the secret header, but the wrong secret key
+        // It should not be validated
+        let mut req = base_request.clone();
+        req.headers.insert("X-Fisher-Secret".to_string(), "12345".to_string());
+        assert!(! validate(req, config.to_string()));
+
+        // Test a request with the secret header and the correct secret key
+        // It should be validated
+        let mut req = base_request.clone();
+        req.headers.insert("X-Fisher-Secret".to_string(), "abcde".to_string());
+        assert!(validate(req, config.to_string()));
+    }
+
+    #[test]
+    fn test_env() {
+        let config = r#"{"secret": "abcde"}"#;
+        let base_request = processor::Request {
+            headers: HashMap::new(),
+            params: HashMap::new(),
+            source: SocketAddr::new(
+                IpAddr::from_str("127.0.0.1").unwrap(), 80
+            ),
+        };
+
+        // The environment must always be empty
+        assert!(env(config.to_string()) == HashMap::new());
+    }
+
+}
