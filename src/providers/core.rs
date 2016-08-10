@@ -120,3 +120,123 @@ impl HookProvider {
     }
 
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+    use std::collections::HashMap;
+    use std::net::{IpAddr, SocketAddr};
+
+    use processor::Request;
+    use super::{Providers, Provider, HookProvider};
+
+    #[test]
+    fn test_providers() {
+        // Create a new instance of Providers
+        let mut providers = Providers::new();
+
+        // Add a dummy provider
+        providers.add("Sample", Provider::new(
+            sample_provider::check_config,
+            sample_provider::validate,
+            sample_provider::env,
+        ));
+
+        // You should be able to get a provider if it exists
+        assert!(providers.by_name(&"Sample".to_string()).is_ok());
+
+        // But if it doesn't exists you should get an error
+        assert!(providers.by_name(&"Not-Exists".to_string()).is_err());
+    }
+
+    #[test]
+    fn test_provider() {
+        // Create a dummy request
+        let base_request = Request {
+            headers: HashMap::new(),
+            params: HashMap::new(),
+            source: SocketAddr::new(
+                IpAddr::from_str("127.0.0.1").unwrap(), 80
+            ),
+        };
+
+        // Create a dummy provider
+        let provider = Provider::new(
+            sample_provider::check_config,
+            sample_provider::validate,
+            sample_provider::env,
+        );
+
+        // You should be able to call the configuration checker
+        assert!(provider.check_config("yes".to_string()).is_ok());
+
+        // You should be able to call the request validator
+        assert!(provider.validate(base_request.clone(), "yes".to_string()));
+
+        // You should be able to call the environment creator
+        assert!(provider.env("yes".to_string()) == HashMap::new());
+    }
+
+    #[test]
+    fn test_hook_provider() {
+        // Create a dummy request
+        let base_request = Request {
+            headers: HashMap::new(),
+            params: HashMap::new(),
+            source: SocketAddr::new(
+                IpAddr::from_str("127.0.0.1").unwrap(), 80
+            ),
+        };
+
+        // Create a dummy provider
+        let provider = Provider::new(
+            sample_provider::check_config,
+            sample_provider::validate,
+            sample_provider::env,
+        );
+
+        // Try to ceate an hook provider with an invalid config
+        let provider_res = HookProvider::new(provider.clone(), "no".to_string());
+        assert!(provider_res.is_err());
+
+        // Create an hook provider with a valid config
+        let provider_res = HookProvider::new(provider.clone(), "yes".to_string());
+        assert!(provider_res.is_ok());
+
+        let provider = provider_res.unwrap();
+
+        // You should be able to call the request validator
+        assert!(provider.validate(base_request.clone()));
+
+        // You should be able to call the environment creator
+        assert!(provider.env() == HashMap::new());
+    }
+
+
+    // This module contains all the functions for a sample provider
+    mod sample_provider {
+        use std::collections::HashMap;
+
+        use errors::{FisherResult, FisherError, ErrorKind};
+        use processor::Request;
+
+        pub fn check_config(config: String) -> FisherResult<()> {
+            // If the configuration is "yes", then it's correct
+            if config == "yes" {
+                Ok(())
+            } else {
+                // This error doesn't make any sense, but it's still an error
+                Err(FisherError::new(ErrorKind::ProviderNotFound(config)))
+            }
+        }
+
+        pub fn validate(_req: Request, _config: String) -> bool {
+            true
+        }
+
+        pub fn env(_config: String) -> HashMap<String, String> {
+            HashMap::new()
+        }
+    }
+}
