@@ -13,6 +13,7 @@ chan="*"
 chan-signal="*"
 rustc-serialize="*"
 lazy_static="*"
+rand="^0.3"
 
 # TODO: use the release when >0.8.1 comes out
 nickel = { git="https://github.com/nickel-org/nickel.rs.git", rev="b77e4ca" }
