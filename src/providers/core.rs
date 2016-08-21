@@ -21,7 +21,7 @@ use errors::{FisherResult, FisherError, ErrorKind};
 
 pub type CheckConfigFunc = fn(String) -> FisherResult<()>;
 pub type ValidatorFunc = fn(Request, String) -> bool;
-pub type EnvFunc = fn(String) -> HashMap<String, String>;
+pub type EnvFunc = fn(Request, String) -> HashMap<String, String>;
 
 
 pub struct Providers {
@@ -83,9 +83,10 @@ impl Provider {
         validator(req, config)
     }
 
-    pub fn env(&self, config: String) -> HashMap<String, String> {
+    pub fn env(&self, req: Request, config: String)
+               -> HashMap<String, String> {
         let env = self.env_func;
-        env(config)
+        env(req, config)
     }
 
 }
@@ -115,15 +116,15 @@ impl HookProvider {
         self.provider.validate(req, self.config.clone())
     }
 
-    pub fn env(&self) -> HashMap<String, String> {
-        self.provider.env(self.config.clone())
+    pub fn env(&self, req: Request) -> HashMap<String, String> {
+        self.provider.env(req, self.config.clone())
     }
 
 }
 
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::str::FromStr;
     use std::collections::HashMap;
     use std::net::{IpAddr, SocketAddr};
@@ -152,15 +153,6 @@ mod tests {
 
     #[test]
     fn test_provider() {
-        // Create a dummy request
-        let base_request = Request {
-            headers: HashMap::new(),
-            params: HashMap::new(),
-            source: SocketAddr::new(
-                IpAddr::from_str("127.0.0.1").unwrap(), 80
-            ),
-        };
-
         // Create a dummy provider
         let provider = Provider::new(
             sample_provider::check_config,
@@ -172,23 +164,14 @@ mod tests {
         assert!(provider.check_config("yes".to_string()).is_ok());
 
         // You should be able to call the request validator
-        assert!(provider.validate(base_request.clone(), "yes".to_string()));
+        assert!(provider.validate(dummy_request(), "yes".to_string()));
 
         // You should be able to call the environment creator
-        assert!(provider.env("yes".to_string()) == HashMap::new());
+        assert!(provider.env(dummy_request(), String::new()) == HashMap::new());
     }
 
     #[test]
     fn test_hook_provider() {
-        // Create a dummy request
-        let base_request = Request {
-            headers: HashMap::new(),
-            params: HashMap::new(),
-            source: SocketAddr::new(
-                IpAddr::from_str("127.0.0.1").unwrap(), 80
-            ),
-        };
-
         // Create a dummy provider
         let provider = Provider::new(
             sample_provider::check_config,
@@ -207,10 +190,21 @@ mod tests {
         let provider = provider_res.unwrap();
 
         // You should be able to call the request validator
-        assert!(provider.validate(base_request.clone()));
+        assert!(provider.validate(dummy_request()));
 
         // You should be able to call the environment creator
-        assert!(provider.env() == HashMap::new());
+        assert!(provider.env(dummy_request()) == HashMap::new());
+    }
+
+
+    pub fn dummy_request() -> Request {
+        Request {
+            headers: HashMap::new(),
+            params: HashMap::new(),
+            source: SocketAddr::new(
+                IpAddr::from_str("127.0.0.1").unwrap(), 80
+            ),
+        }
     }
 
 
@@ -235,7 +229,7 @@ mod tests {
             true
         }
 
-        pub fn env(_config: String) -> HashMap<String, String> {
+        pub fn env(_req: Request, _config: String) -> HashMap<String, String> {
             HashMap::new()
         }
     }

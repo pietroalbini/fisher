@@ -15,8 +15,14 @@
 
 use std::net::SocketAddr;
 use std::collections::{HashMap, VecDeque};
+use std::process;
+use std::os::unix::process::ExitStatusExt;
+use std::fs;
 
-use hooks::Hook;
+use hooks::JobHook;
+use utils;
+use errors;
+use errors::{FisherError, ErrorKind, FisherResult};
 
 use chan;
 
@@ -34,25 +40,49 @@ pub struct Request {
 
 #[derive(Clone)]
 pub struct Job {
-    hook_name: String,
+    hook: JobHook,
     request: Request,
 }
 
 impl Job {
 
-    pub fn new(hook_name: String, request: Request) -> Job {
+    pub fn new(hook: JobHook, request: Request) -> Job {
         Job {
-            hook_name: hook_name,
+            hook: hook,
             request: request,
         }
     }
 
-    pub fn process(&self, hooks: &HashMap<String, Hook>) {
-        let hook = hooks.get(&self.hook_name).unwrap();
-
-        println!("Processing hook {}!", hook.name);
+    pub fn hook_name(&self) -> String {
+        self.hook.name()
     }
 
+    pub fn process(&self) -> FisherResult<()> {
+        let mut command = process::Command::new(self.hook.exec());
+
+        // Use a random working directory
+        let working_directory = try!(utils::create_temp_dir());
+        command.current_dir(working_directory.to_str().unwrap());
+
+        // Apply the environment
+        for (key, value) in self.hook.env(self.request.clone()) {
+            command.env(key, value);
+        }
+
+        // Execute the hook
+        let output = try!(command.output());
+        if ! output.status.success() {
+            return Err(FisherError::new(ErrorKind::HookExecutionFailed(
+                output.status.code(),
+                output.status.signal(),
+            )));
+        }
+
+        // Remove the temp directory
+        try!(fs::remove_dir_all(&working_directory));
+
+        Ok(())
+    }
 }
 
 
@@ -70,7 +100,7 @@ impl ProcessorManager {
         }
     }
 
-    pub fn start(&mut self, hooks: HashMap<String, Hook>, max_threads: u16) {
+    pub fn start(&mut self, max_threads: u16) {
         // This is used to retrieve the sender we want from the child thread
         let (sender_send, sender_recv) = chan::sync(0);
 
@@ -79,7 +109,7 @@ impl ProcessorManager {
         let (stop_wait_send, stop_wait_recv) = chan::sync(0);
 
         ::std::thread::spawn(move || {
-            let (mut processor, input) = Processor::new(hooks, max_threads);
+            let (mut processor, input) = Processor::new(max_threads);
 
             // Send the sender back to the parent thread
             sender_send.send(input);
@@ -119,7 +149,6 @@ impl ProcessorManager {
 
 
 struct Processor {
-    hooks: HashMap<String, Hook>,
     jobs: VecDeque<Job>,
 
     should_stop: bool,
@@ -132,13 +161,11 @@ struct Processor {
 
 impl Processor {
 
-    pub fn new(hooks: HashMap<String, Hook>, max_threads: u16)
-               -> (Processor, SenderChan) {
+    pub fn new(max_threads: u16) -> (Processor, SenderChan) {
         // Create the channel for the input
         let (input_send, input_recv) = chan::async();
 
         let processor = Processor {
-            hooks: hooks,
             jobs: VecDeque::new(),
 
             should_stop: false,
@@ -201,18 +228,21 @@ impl Processor {
                 },
             }
         }
-
-        println!("Processor exited!");
     }
 
     fn spawn_thread(&mut self, job: Job) {
         let thread_end = self.thread_end.clone().unwrap();
-        let hooks = self.hooks.clone();
 
         self.threads_count += 1;
 
         ::std::thread::spawn(move || {
-            job.process(&hooks);
+            let result = job.process();
+
+            // Display the error if there is one
+            if let Err(mut error) = result {
+                error.set_hook(job.hook_name());
+                let _ = errors::print_err::<()>(Err(error));
+            }
 
             // Notify the end of this thread
             thread_end.send(());

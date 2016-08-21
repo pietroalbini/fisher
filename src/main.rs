@@ -56,7 +56,7 @@ fn main() {
     let mut webapi = web::WebAPI::new(hooks.clone());
 
     // Start everything
-    processor.start(hooks, options.max_threads);
+    processor.start(options.max_threads);
     webapi.listen(&options.bind, processor.sender().unwrap());
 
     // Wait until SIGINT or SIGTERM is received

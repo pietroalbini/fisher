@@ -20,8 +20,8 @@ use std::io;
 use std::path;
 use std::sync;
 
-use rand;
-use rand::{Rng, SeedableRng};
+use rand::{self, Rng};
+#[cfg(test)] use rand::{SeedableRng};
 
 use errors;
 use errors::FisherResult;

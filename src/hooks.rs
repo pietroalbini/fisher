@@ -38,9 +38,9 @@ lazy_static! {
 
 #[derive(Clone)]
 pub struct Hook {
-    pub name: String,
-    pub exec: String,
-    pub providers: VecProviders,
+    name: String,
+    exec: String,
+    providers: VecProviders,
 }
 
 impl Hook {
@@ -92,17 +92,54 @@ impl Hook {
         Ok(result)
     }
 
-    pub fn validate(&self, req: &processor::Request) -> bool {
+    pub fn validate(&self, req: &processor::Request) -> Option<JobHook> {
         if self.providers.len() > 0 {
             // Check every provider if they're present
             for provider in &self.providers {
                 if provider.validate(req.clone()) {
-                    return true;
+                    return Some(JobHook::new(
+                        self.clone(), Some(provider.clone())
+                    ));
                 }
             }
-            false
+            None
         } else {
-            true
+            Some(JobHook::new(self.clone(), None))
+        }
+    }
+}
+
+
+#[derive(Clone)]
+pub struct JobHook {
+    hook: Hook,
+    provider: Option<providers::HookProvider>,
+}
+
+impl JobHook {
+
+    fn new(hook: Hook, provider: Option<providers::HookProvider>) -> Self {
+        JobHook {
+            hook: hook,
+            provider: provider,
+        }
+    }
+
+    pub fn name(&self) -> String {
+        self.hook.name.clone()
+    }
+
+    pub fn exec(&self) -> String {
+        self.hook.exec.clone()
+    }
+
+    pub fn env(&self, req: processor::Request) -> HashMap<String, String> {
+        // If there is a provider return the derived environment, else an
+        // empty one
+        if let Some(ref provider) = self.provider {
+            provider.env(req)
+        } else {
+            HashMap::new()
         }
     }
 }
@@ -128,7 +165,7 @@ pub fn collect<'a>(base: &String) -> FisherResult<Hooks> {
         }
 
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
-        let exec = path.to_str().unwrap().to_string();
+        let exec = try!(fs::canonicalize(path)).to_str().unwrap().to_string();
 
         let hook = try!(Hook::load(name.clone(), exec));
         result.insert(name.clone(), hook);

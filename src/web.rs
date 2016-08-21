@@ -140,9 +140,9 @@ impl WebAPI {
 
                 let request = convert_request(&req);
 
-                if hook.validate(&request.clone()) {
+                if let Some(job_hook) = hook.validate(&request.clone()) {
                     // If the hook is valid, create a new job and queue it
-                    let job = Job::new(hook.name, request);
+                    let job = Job::new(job_hook, request);
                     sender.send(Some(job));
 
                     r#"{"status":"queued"}"#

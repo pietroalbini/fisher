@@ -26,6 +26,7 @@ pub type FisherResult<T> = Result<T, FisherError>;
 
 pub enum ErrorKind {
     ProviderNotFound(String),
+    HookExecutionFailed(Option<i32>, Option<i32>),
 
     // Derived errors
     IoError(io::Error),
@@ -39,6 +40,7 @@ pub struct FisherError {
     // Additional information
     file: Option<String>,
     line: Option<u32>,
+    hook: Option<String>,
 }
 
 impl FisherError {
@@ -50,6 +52,7 @@ impl FisherError {
             // Those can be filled after
             file: None,
             line: None,
+            hook: None,
         }
     }
 
@@ -73,6 +76,14 @@ impl FisherError {
         }
     }
 
+    pub fn set_hook(&mut self, hook: String) {
+        self.hook = Some(hook);
+    }
+
+    pub fn processing(&self) -> Option<String> {
+        self.hook.clone()
+    }
+
 }
 
 
@@ -82,6 +93,8 @@ impl Error for FisherError {
         match self.kind {
             ErrorKind::ProviderNotFound(..) =>
                 "provider not found",
+            ErrorKind::HookExecutionFailed(..) =>
+                "hook returned non-zero exit code",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -106,6 +119,18 @@ impl fmt::Display for FisherError {
 
             ErrorKind::ProviderNotFound(ref provider) =>
                 format!("Provider {} not found", provider),
+
+            ErrorKind::HookExecutionFailed(exit_code_opt, signal_opt) =>
+                if let Some(exit_code) = exit_code_opt {
+                    // The hook returned an exit code
+                    format!("hook returned non-zero exit code: {}", exit_code)
+                } else if let Some(signal) = signal_opt {
+                    // The hook was killed
+                    format!("hook stopped with signal {}", signal)
+                } else {
+                    // This shouldn't happen...
+                    "hook execution failed".to_string()
+                },
 
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),
@@ -170,10 +195,9 @@ impl From<json::DecoderError> for FisherError {
 }
 
 
-pub fn unwrap<T>(result: Result<T, FisherError>) -> T {
-    // Exit if the result is an error
-    if let Err(error) = result {
-        // Show a nice error message
+pub fn print_err<T>(result: Result<T, FisherError>) -> Result<T, FisherError> {
+    // Show a nice error message
+    if let Err(ref error) = result {
         println!("{} {}",
             ::ansi_term::Colour::Red.bold().paint("Error:"),
             error,
@@ -184,10 +208,26 @@ pub fn unwrap<T>(result: Result<T, FisherError>) -> T {
                 location,
             );
         }
-
-        // And then exit
-        ::std::process::exit(1);
+        if let Some(hook) = error.processing() {
+            println!("{} {}",
+                ::ansi_term::Colour::Yellow.bold().paint("While processing:"),
+                hook,
+            );
+        }
     }
 
-    result.unwrap()
+    result
+}
+
+
+pub fn unwrap<T>(result: Result<T, FisherError>) -> T {
+    // Print the error message if necessary
+    match print_err(result) {
+        Err(..) => {
+            ::std::process::exit(1);
+        },
+        Ok(t) => {
+            return t;
+        }
+    }
 }
