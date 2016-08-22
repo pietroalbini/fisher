@@ -24,6 +24,26 @@ use errors::FisherResult;
 #[derive(RustcDecodable)]
 struct Config {
     secret: String,
+
+    param_name: Option<String>,
+    header_name: Option<String>,
+}
+
+impl Config {
+
+    fn param_name(&self) -> &str {
+        match self.param_name {
+            Some(ref name) => name,
+            None => "secret",
+        }
+    }
+
+    fn header_name(&self) -> &str {
+        match self.header_name {
+            Some(ref name) => name,
+            None => "X-Fisher-Secret",
+        }
+    }
 }
 
 
@@ -38,10 +58,10 @@ pub fn validate(req: Request, config: String) -> bool {
     let config: Config = json::decode(&config).unwrap();
 
     let secret;
-    if let Some(found) = req.params.get("secret") {
+    if let Some(found) = req.params.get(config.param_name()) {
         // Secret in the request parameters
         secret = found;
-    } else if let Some(found) = req.headers.get("X-Fisher-Secret") {
+    } else if let Some(found) = req.headers.get(config.header_name()) {
         // Secret in the HTTP headers
         secret = found;
     } else {
@@ -96,33 +116,42 @@ mod tests {
     #[test]
     fn test_validate() {
         let config = r#"{"secret": "abcde"}"#;
+        let config_custom = concat!(
+            r#"{"secret": "abcde", "param_name": "a","#,
+            r#" "header_name": "X-A"}"#
+        );
 
+        test_validate_inner(config, "secret", "X-Fisher-Secret");
+        test_validate_inner(config_custom, "a", "X-A");
+    }
+
+    fn test_validate_inner(config: &str, param_name: &str, header_name: &str) {
         // Test a request with no headers or params
-        // It should not be validated
+        // It should not be validate
         assert!(! validate(dummy_request(), config.to_string()));
 
         // Test a request with the secret param, but the wrong secret key
         // It should not be validated
         let mut req = dummy_request();
-        req.params.insert("secret".to_string(), "12345".to_string());
+        req.params.insert(param_name.to_string(), "12345".to_string());
         assert!(! validate(req, config.to_string()));
 
         // Test a request with the secret param and the correct secret key
         // It should be validated
         let mut req = dummy_request();
-        req.params.insert("secret".to_string(), "abcde".to_string());
+        req.params.insert(param_name.to_string(), "abcde".to_string());
         assert!(validate(req, config.to_string()));
 
         // Test a request with the secret header, but the wrong secret key
         // It should not be validated
         let mut req = dummy_request();
-        req.headers.insert("X-Fisher-Secret".to_string(), "12345".to_string());
+        req.headers.insert(header_name.to_string(), "12345".to_string());
         assert!(! validate(req, config.to_string()));
 
         // Test a request with the secret header and the correct secret key
         // It should be validated
         let mut req = dummy_request();
-        req.headers.insert("X-Fisher-Secret".to_string(), "abcde".to_string());
+        req.headers.insert(header_name.to_string(), "abcde".to_string());
         assert!(validate(req, config.to_string()));
     }
 
