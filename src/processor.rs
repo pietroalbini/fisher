@@ -18,6 +18,7 @@ use std::collections::{HashMap, VecDeque};
 use std::process;
 use std::os::unix::process::ExitStatusExt;
 use std::fs;
+use std::env;
 
 use hooks::JobHook;
 use utils;
@@ -25,6 +26,19 @@ use errors;
 use errors::{FisherError, ErrorKind, FisherResult};
 
 use chan;
+
+
+lazy_static! {
+    static ref DEFAULT_ENV: Vec<String> = vec![
+        "PATH".to_string(),
+        "USER".to_string(),
+        "SHELL".to_string(),
+
+        // Internationalization stuff
+        "LC_ALL".to_string(),
+        "LANG".to_string(),
+    ];
+}
 
 
 pub type SenderChan = chan::Sender<Option<Job>>;
@@ -60,14 +74,13 @@ impl Job {
     pub fn process(&self) -> FisherResult<()> {
         let mut command = process::Command::new(self.hook.exec());
 
+        // Prepare the command's environment variables
+        self.prepare_env(&mut command);
+
         // Use a random working directory
         let working_directory = try!(utils::create_temp_dir());
         command.current_dir(working_directory.to_str().unwrap());
-
-        // Apply the environment
-        for (key, value) in self.hook.env(self.request.clone()) {
-            command.env(key, value);
-        }
+        command.env("HOME".to_string(), working_directory.to_str().unwrap());
 
         // Execute the hook
         let output = try!(command.output());
@@ -82,6 +95,28 @@ impl Job {
         try!(fs::remove_dir_all(&working_directory));
 
         Ok(())
+    }
+
+    fn prepare_env(&self, command: &mut process::Command) {
+        // First of all clear the environment
+        command.env_clear();
+
+        // Apply the default environment
+        // This is done (instead of the automatic inheritage) to whitelist
+        // which environment variables we want
+        for (key, value) in env::vars() {
+            // Set only whitelisted keys
+            if ! DEFAULT_ENV.contains(&key) {
+                continue;
+            }
+
+            command.env(key, value);
+        }
+
+        // Apply the hook-specific environment
+        for (key, value) in self.hook.env(self.request.clone()) {
+            command.env(key, value);
+        }
     }
 }
 
