@@ -14,5 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 mod tempdir;
+mod copy_to_clone;
 
 pub use utils::tempdir::create_temp_dir;
+pub use utils::copy_to_clone::CopyToClone;

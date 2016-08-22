@@ -17,6 +17,7 @@ use std::collections::HashMap;
 
 use processor::Request;
 use errors::{FisherResult, FisherError, ErrorKind};
+use utils::CopyToClone;
 
 
 pub type CheckConfigFunc = fn(String) -> FisherResult<()>;
@@ -57,9 +58,9 @@ impl Providers {
 
 #[derive(Clone)]
 pub struct Provider {
-    check_config_func: CheckConfigFunc,
-    validator_func: ValidatorFunc,
-    env_func: EnvFunc,
+    check_config_func: CopyToClone<CheckConfigFunc>,
+    validator_func: CopyToClone<ValidatorFunc>,
+    env_func: CopyToClone<EnvFunc>,
 }
 
 impl Provider {
@@ -67,26 +68,26 @@ impl Provider {
     pub fn new(check_config: CheckConfigFunc, validator: ValidatorFunc,
                env: EnvFunc) -> Provider {
         Provider {
-            check_config_func: check_config,
-            validator_func: validator,
-            env_func: env,
+            check_config_func: CopyToClone::new(check_config),
+            validator_func: CopyToClone::new(validator),
+            env_func: CopyToClone::new(env),
         }
     }
 
     pub fn check_config(&self, config: String) -> FisherResult<()> {
-        let check_config = self.check_config_func;
-        check_config(config)
+        // The func must be dereferenced, since it's wrapped in CopyToClone
+        (*self.check_config_func)(config)
     }
 
     pub fn validate(&self, req: Request, config: String) -> bool {
-        let validator = self.validator_func;
-        validator(req, config)
+        // The func must be dereferenced, since it's wrapped in CopyToClone
+        (*self.validator_func)(req, config)
     }
 
     pub fn env(&self, req: Request, config: String)
                -> HashMap<String, String> {
-        let env = self.env_func;
-        env(req, config)
+        // The func must be dereferenced, since it's wrapped in CopyToClone
+        (*self.env_func)(req, config)
     }
 
 }
