@@ -47,15 +47,15 @@ impl Config {
 }
 
 
-pub fn check_config(input: String) -> FisherResult<()> {
-    try!(json::decode::<Config>(&input));
+pub fn check_config(input: &str) -> FisherResult<()> {
+    try!(json::decode::<Config>(input));
 
     Ok(())
 }
 
 
-pub fn validate(req: Request, config: String) -> bool {
-    let config: Config = json::decode(&config).unwrap();
+pub fn validate(req: &Request, config: &str) -> bool {
+    let config: Config = json::decode(config).unwrap();
 
     let secret;
     if let Some(found) = req.params.get(config.param_name()) {
@@ -78,7 +78,7 @@ pub fn validate(req: Request, config: String) -> bool {
 }
 
 
-pub fn env(_req: Request, _config: String) -> HashMap<String, String> {
+pub fn env(_req: &Request, _config: &str) -> HashMap<String, String> {
     HashMap::new()
 }
 
@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn test_check_config() {
         // Check if valid config is accepted
-        assert!(check_config(r#"{"secret":"abcde"}"#.to_string()).is_ok());
+        assert!(check_config(r#"{"secret":"abcde"}"#).is_ok());
 
         let wrong = vec![
             // Empty configuration
@@ -109,7 +109,7 @@ mod tests {
             r#"{"secret": {"a": "b"}}"#,
         ];
         for one in &wrong {
-            assert!(check_config(one.to_string()).is_err());
+            assert!(check_config(one).is_err());
         }
     }
 
@@ -128,31 +128,31 @@ mod tests {
     fn test_validate_inner(config: &str, param_name: &str, header_name: &str) {
         // Test a request with no headers or params
         // It should not be validate
-        assert!(! validate(dummy_request(), config.to_string()));
+        assert!(! validate(&dummy_request(), config));
 
         // Test a request with the secret param, but the wrong secret key
         // It should not be validated
         let mut req = dummy_request();
         req.params.insert(param_name.to_string(), "12345".to_string());
-        assert!(! validate(req, config.to_string()));
+        assert!(! validate(&req, config));
 
         // Test a request with the secret param and the correct secret key
         // It should be validated
         let mut req = dummy_request();
         req.params.insert(param_name.to_string(), "abcde".to_string());
-        assert!(validate(req, config.to_string()));
+        assert!(validate(&req, config));
 
         // Test a request with the secret header, but the wrong secret key
         // It should not be validated
         let mut req = dummy_request();
         req.headers.insert(header_name.to_string(), "12345".to_string());
-        assert!(! validate(req, config.to_string()));
+        assert!(! validate(&req, config));
 
         // Test a request with the secret header and the correct secret key
         // It should be validated
         let mut req = dummy_request();
         req.headers.insert(header_name.to_string(), "abcde".to_string());
-        assert!(validate(req, config.to_string()));
+        assert!(validate(&req, config));
     }
 
     #[test]
@@ -160,7 +160,7 @@ mod tests {
         let config = r#"{"secret": "abcde"}"#;
 
         // The environment must always be empty
-        assert!(env(dummy_request(), config.to_string()) == HashMap::new());
+        assert!(env(&dummy_request(), config) == HashMap::new());
     }
 
 }

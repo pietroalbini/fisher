@@ -20,9 +20,9 @@ use errors::{FisherResult, FisherError, ErrorKind};
 use utils::CopyToClone;
 
 
-pub type CheckConfigFunc = fn(String) -> FisherResult<()>;
-pub type ValidatorFunc = fn(Request, String) -> bool;
-pub type EnvFunc = fn(Request, String) -> HashMap<String, String>;
+pub type CheckConfigFunc = fn(&str) -> FisherResult<()>;
+pub type ValidatorFunc = fn(&Request, &str) -> bool;
+pub type EnvFunc = fn(&Request, &str) -> HashMap<String, String>;
 
 
 pub struct Providers {
@@ -41,13 +41,13 @@ impl Providers {
         self.providers.insert(name.to_string(), provider);
     }
 
-    pub fn by_name(&self, name: &String) -> FisherResult<Provider> {
-        match self.providers.get(name) {
+    pub fn by_name(&self, name: &str) -> FisherResult<Provider> {
+        match self.providers.get(&name.to_string()) {
             Some(provider) => {
                 Ok(provider.clone())
             },
             None => {
-                let kind = ErrorKind::ProviderNotFound(name.clone());
+                let kind = ErrorKind::ProviderNotFound(name.to_string());
                 Err(FisherError::new(kind))
             },
         }
@@ -74,17 +74,17 @@ impl Provider {
         }
     }
 
-    pub fn check_config(&self, config: String) -> FisherResult<()> {
+    pub fn check_config(&self, config: &str) -> FisherResult<()> {
         // The func must be dereferenced, since it's wrapped in CopyToClone
         (*self.check_config_func)(config)
     }
 
-    pub fn validate(&self, req: Request, config: String) -> bool {
+    pub fn validate(&self, req: &Request, config: &str) -> bool {
         // The func must be dereferenced, since it's wrapped in CopyToClone
         (*self.validator_func)(req, config)
     }
 
-    pub fn env(&self, req: Request, config: String)
+    pub fn env(&self, req: &Request, config: &str)
                -> HashMap<String, String> {
         // The func must be dereferenced, since it's wrapped in CopyToClone
         (*self.env_func)(req, config)
@@ -104,7 +104,7 @@ impl HookProvider {
     pub fn new(provider: Provider, config: String)
                -> FisherResult<HookProvider> {
         // First of all, check if the config is correct
-        try!(provider.check_config(config.clone()));
+        try!(provider.check_config(&config));
 
         // Then return the new provider
         Ok(HookProvider {
@@ -113,12 +113,12 @@ impl HookProvider {
         })
     }
 
-    pub fn validate(&self, req: Request) -> bool {
-        self.provider.validate(req, self.config.clone())
+    pub fn validate(&self, req: &Request) -> bool {
+        self.provider.validate(req, &self.config)
     }
 
-    pub fn env(&self, req: Request) -> HashMap<String, String> {
-        self.provider.env(req, self.config.clone())
+    pub fn env(&self, req: &Request) -> HashMap<String, String> {
+        self.provider.env(req, &self.config)
     }
 
 }
@@ -161,14 +161,16 @@ pub mod tests {
             sample_provider::env,
         );
 
+        let request = dummy_request();
+
         // You should be able to call the configuration checker
-        assert!(provider.check_config("yes".to_string()).is_ok());
+        assert!(provider.check_config("yes").is_ok());
 
         // You should be able to call the request validator
-        assert!(provider.validate(dummy_request(), "yes".to_string()));
+        assert!(provider.validate(&request, "yes"));
 
         // You should be able to call the environment creator
-        assert!(provider.env(dummy_request(), String::new()) == HashMap::new());
+        assert!(provider.env(&request, "") == HashMap::new());
     }
 
     #[test]
@@ -179,6 +181,8 @@ pub mod tests {
             sample_provider::validate,
             sample_provider::env,
         );
+
+        let request = dummy_request();
 
         // Try to ceate an hook provider with an invalid config
         let provider_res = HookProvider::new(provider.clone(), "no".to_string());
@@ -191,10 +195,10 @@ pub mod tests {
         let provider = provider_res.unwrap();
 
         // You should be able to call the request validator
-        assert!(provider.validate(dummy_request()));
+        assert!(provider.validate(&request));
 
         // You should be able to call the environment creator
-        assert!(provider.env(dummy_request()) == HashMap::new());
+        assert!(provider.env(&request) == HashMap::new());
     }
 
 
@@ -216,21 +220,23 @@ pub mod tests {
         use errors::{FisherResult, FisherError, ErrorKind};
         use processor::Request;
 
-        pub fn check_config(config: String) -> FisherResult<()> {
+        pub fn check_config(config: &str) -> FisherResult<()> {
             // If the configuration is "yes", then it's correct
             if config == "yes" {
                 Ok(())
             } else {
                 // This error doesn't make any sense, but it's still an error
-                Err(FisherError::new(ErrorKind::ProviderNotFound(config)))
+                Err(FisherError::new(
+                    ErrorKind::ProviderNotFound(String::new())
+                ))
             }
         }
 
-        pub fn validate(_req: Request, _config: String) -> bool {
+        pub fn validate(_req: &Request, _config: &str) -> bool {
             true
         }
 
-        pub fn env(_req: Request, _config: String) -> HashMap<String, String> {
+        pub fn env(_req: &Request, _config: &str) -> HashMap<String, String> {
             HashMap::new()
         }
     }

@@ -114,7 +114,7 @@ impl Job {
         }
 
         // Apply the hook-specific environment
-        for (key, value) in self.hook.env(self.request.clone()) {
+        for (key, value) in self.hook.env(&self.request) {
             command.env(key, value);
         }
     }

@@ -96,7 +96,7 @@ impl Hook {
         if self.providers.len() > 0 {
             // Check every provider if they're present
             for provider in &self.providers {
-                if provider.validate(req.clone()) {
+                if provider.validate(&req) {
                     return Some(JobHook::new(
                         self.clone(), Some(provider.clone())
                     ));
@@ -133,7 +133,7 @@ impl JobHook {
         self.hook.exec.clone()
     }
 
-    pub fn env(&self, req: processor::Request) -> HashMap<String, String> {
+    pub fn env(&self, req: &processor::Request) -> HashMap<String, String> {
         // If there is a provider return the derived environment, else an
         // empty one
         if let Some(ref provider) = self.provider {
