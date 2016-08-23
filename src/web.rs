@@ -26,13 +26,14 @@ use url::form_urlencoded;
 use rustc_serialize::json::{Json, ToJson};
 
 use hooks::Hook;
-use processor::{Request, Job, ProcessorInput, SenderChan};
+use processor::{HealthDetails, Request, Job, ProcessorInput, SenderChan};
 
 
 enum JsonResponse {
     NotFound,
     Rejected,
     Queued,
+    HealthStatus(HealthDetails),
 }
 
 impl ToJson for JsonResponse {
@@ -43,8 +44,13 @@ impl ToJson for JsonResponse {
         map.insert("status".to_string(), match *self {
             JsonResponse::NotFound => "not_found",
             JsonResponse::Rejected => "rejected",
-            JsonResponse::Queued => "queued",
+            JsonResponse::Queued => "ok",
+            JsonResponse::HealthStatus(..) => "ok"
         }.to_string().to_json());
+
+        if let JsonResponse::HealthStatus(ref details) = *self {
+            map.insert("result".to_string(), details.to_json());
+        }
 
         Json::Object(map)
     }
@@ -174,6 +180,19 @@ impl WebAPI {
                 }
             });
         }
+
+
+        let sender = self.sender_chan.clone().unwrap();
+        app.get("/health", middleware! {
+            let (details_send, details_recv) = chan::async();
+
+            // Get the details from the processor
+            sender.send(ProcessorInput::HealthStatus(details_send));
+            let details = details_recv.recv().unwrap();
+
+            JsonResponse::HealthStatus(details).to_json()
+        });
+
 
         // This middleware provides a basic Not found page
         app.utilize(middleware! { |_req, mut res|

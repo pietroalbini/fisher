@@ -14,11 +14,13 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::net::SocketAddr;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::process;
 use std::os::unix::process::ExitStatusExt;
 use std::fs;
 use std::env;
+
+use rustc_serialize::json::{Json, ToJson};
 
 use hooks::JobHook;
 use utils;
@@ -187,6 +189,7 @@ impl ProcessorManager {
 pub enum ProcessorInput {
     StopSignal,
     Job(Job),
+    HealthStatus(chan::Sender<HealthDetails>),
 }
 
 
@@ -253,6 +256,9 @@ impl Processor {
                                 self.spawn_thread(job);
                             }
                         },
+                        ProcessorInput::HealthStatus(return_to) => {
+                            return_to.send(HealthDetails::of(&self));
+                        },
                     };
                 },
                 // This means a thread exited
@@ -293,4 +299,32 @@ impl Processor {
         });
     }
 
+}
+
+
+#[derive(Clone)]
+pub struct HealthDetails {
+    queue_size: usize,
+}
+
+impl HealthDetails {
+
+    fn of(processor: &Processor) -> Self {
+        // Collect some details of that processor
+        let queue_size = processor.jobs.len();
+
+        HealthDetails {
+            queue_size: queue_size,
+        }
+    }
+}
+
+impl ToJson for HealthDetails {
+
+    fn to_json(&self) -> Json {
+        let mut map = BTreeMap::new();
+        map.insert("queue_size".to_string(), self.queue_size.to_json());
+
+        Json::Object(map)
+    }
 }
