@@ -41,7 +41,7 @@ lazy_static! {
 }
 
 
-pub type SenderChan = chan::Sender<Option<Job>>;
+pub type SenderChan = chan::Sender<ProcessorInput>;
 
 
 #[derive(Clone)]
@@ -163,7 +163,7 @@ impl ProcessorManager {
         match self.sender {
             Some(ref sender) => {
                 // Tell the processor to exit as soon as possible
-                sender.send(None);
+                sender.send(ProcessorInput::StopSignal);
 
                 // Wait until the processor did its work
                 match self.stop_wait {
@@ -183,6 +183,13 @@ impl ProcessorManager {
 }
 
 
+#[derive(Clone)]
+pub enum ProcessorInput {
+    StopSignal,
+    Job(Job),
+}
+
+
 struct Processor {
     jobs: VecDeque<Job>,
 
@@ -190,7 +197,7 @@ struct Processor {
     threads_count: u16,
     max_threads: u16,
 
-    input: chan::Receiver<Option<Job>>,
+    input: chan::Receiver<ProcessorInput>,
     thread_end: Option<chan::Sender<()>>,
 }
 
@@ -228,23 +235,25 @@ impl Processor {
                 input_chan.recv() -> input => {
                     let input = input.unwrap();
 
-                    // If the received input is None, it means it's time to
-                    // stop when no more jobs are left
-                    if input.is_none() {
-                        self.should_stop = true;
+                    match input {
+                        ProcessorInput::StopSignal => {
+                            // It's time to stop when no more jobs are left
+                            self.should_stop = true;
 
-                        // If no more jobs are left now, exit
-                        if self.jobs.is_empty() {
-                            break;
-                        }
-                    } else {
-                        // Queue a new thread if there are too many threads
-                        if self.threads_count >= self.max_threads {
-                            self.jobs.push_back(input.unwrap());
-                        } else {
-                            self.spawn_thread(input.unwrap());
-                        }
-                    }
+                            // If no more jobs are left now, exit
+                            if self.jobs.is_empty() {
+                                break;
+                            }
+                        },
+                        ProcessorInput::Job(job) => {
+                            // Queue a new thread if there are too many threads
+                            if self.threads_count >= self.max_threads {
+                                self.jobs.push_back(job);
+                            } else {
+                                self.spawn_thread(job);
+                            }
+                        },
+                    };
                 },
                 // This means a thread exited
                 thread_end_recv.recv() => {

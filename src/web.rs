@@ -25,7 +25,7 @@ use hyper::uri::RequestUri;
 use url::form_urlencoded;
 
 use hooks::Hook;
-use processor::{Request, Job, SenderChan};
+use processor::{Request, Job, ProcessorInput, SenderChan};
 
 
 pub struct WebAPI {
@@ -143,7 +143,7 @@ impl WebAPI {
                 if let Some(job_hook) = hook.validate(&request.clone()) {
                     // If the hook is valid, create a new job and queue it
                     let job = Job::new(job_hook, request);
-                    sender.send(Some(job));
+                    sender.send(ProcessorInput::Job(job));
 
                     r#"{"status":"queued"}"#
                 } else {
