@@ -13,19 +13,42 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use ansi_term::Colour;
 use chan;
 use nickel;
-use nickel::{Nickel, MediaType, HttpRouter, Options};
+use nickel::{Nickel, HttpRouter, Options};
 use nickel::status::StatusCode;
 use hyper::method::Method;
 use hyper::uri::RequestUri;
 use url::form_urlencoded;
+use rustc_serialize::json::{Json, ToJson};
 
 use hooks::Hook;
 use processor::{Request, Job, ProcessorInput, SenderChan};
+
+
+enum JsonResponse {
+    NotFound,
+    Rejected,
+    Queued,
+}
+
+impl ToJson for JsonResponse {
+
+    fn to_json(&self) -> Json {
+        let mut map = BTreeMap::new();
+
+        map.insert("status".to_string(), match *self {
+            JsonResponse::NotFound => "not_found",
+            JsonResponse::Rejected => "rejected",
+            JsonResponse::Queued => "queued",
+        }.to_string().to_json());
+
+        Json::Object(map)
+    }
+}
 
 
 pub struct WebAPI {
@@ -121,8 +144,6 @@ impl WebAPI {
 
             // This middleware processes incoming hooks
             app.add_route(method, "/hook/:hook", middleware! { |req, mut res|
-                res.set(MediaType::Json);
-
                 let hook_name = req.param("hook").unwrap().to_string();
 
                 // Ignore requests without a valid hook
@@ -145,21 +166,20 @@ impl WebAPI {
                     let job = Job::new(job_hook, request);
                     sender.send(ProcessorInput::Job(job));
 
-                    r#"{"status":"queued"}"#
+                    JsonResponse::Queued.to_json()
                 } else {
                     // Else send a great 403 Forbidden
                     res.set(StatusCode::Forbidden);
-                    r#"{"status":"rejected"}"#
+                    JsonResponse::Rejected.to_json()
                 }
             });
         }
 
         // This middleware provides a basic Not found page
         app.utilize(middleware! { |_req, mut res|
-            res.set(MediaType::Json);
             res.set(StatusCode::NotFound);
 
-            r#"{"status":"not_found"}"#
+            JsonResponse::NotFound.to_json()
         });
 
         app
