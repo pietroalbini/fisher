@@ -267,7 +267,87 @@ fn params_from_request(req: &nickel::Request) -> HashMap<String, String> {
 
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use std::path::PathBuf;
+    use std::fs;
+
+    use chan;
+    use hyper::client as hyper;
+    use hyper::method::Method;
+
+    use super::WebAPI;
+    use hooks;
+    use hooks::tests::create_sample_hooks;
+    use processor::ProcessorInput;
+
+
+    pub struct TestInstance {
+        inst: WebAPI,
+        url: String,
+        client: hyper::Client,
+
+        tempdir: PathBuf,
+        input_recv: chan::Receiver<ProcessorInput>,
+    }
+
+    impl TestInstance {
+
+        pub fn new() -> Self {
+            // Create a new instance of WebAPI
+            let tempdir = create_sample_hooks();
+            let mut inst = WebAPI::new(hooks::collect(
+                &tempdir.to_str().unwrap().to_string()
+            ).unwrap());
+
+            // Create the input channel
+            let (input_send, input_recv) = chan::async();
+
+            // Start the web server
+            let addr = inst.listen("127.0.0.1:0", true, input_send).unwrap();
+
+            // Create the HTTP client
+            let url = format!("http://{}", addr);
+            let client = hyper::Client::new();
+
+            TestInstance {
+                inst: inst,
+                url: url,
+                client: client,
+
+                tempdir: tempdir,
+                input_recv: input_recv,
+            }
+        }
+
+        pub fn close(&mut self) {
+            // Close the instance
+            self.inst.stop();
+
+            // Remove the directory
+            fs::remove_dir_all(&self.tempdir).unwrap();
+        }
+
+        pub fn request(&mut self, method: Method, url: &str)
+                       -> hyper::RequestBuilder {
+            // Create the HTTP request
+            self.client.request(method, &format!("{}{}", self.url, url))
+        }
+
+        pub fn processor_input(&self) -> Option<ProcessorInput> {
+            let input_recv = &self.input_recv;
+
+            // This returns Some only if there is something right now
+            chan_select! {
+                default => {
+                    return None;
+                },
+                input_recv.recv() -> input => {
+                    return Some(input.unwrap());
+                },
+            };
+        }
+    }
+
 
     mod json_responses {
         use rustc_serialize::json::ToJson;
@@ -351,5 +431,61 @@ mod tests {
             );
         }
 
+    }
+
+
+    mod web_api {
+        use hyper::status::StatusCode;
+        use hyper::method::Method;
+
+        use processor::ProcessorInput;
+        use super::TestInstance;
+
+
+        #[test]
+        fn test_startup() {
+            let mut inst = TestInstance::new();
+
+            // Test if the Web API is working fine
+            let res = inst.request(Method::Get, "/").send().unwrap();
+            assert_eq!(res.status, StatusCode::NotFound);
+
+            inst.close();
+        }
+
+        #[test]
+        fn test_hook_call() {
+            let mut inst = TestInstance::new();
+
+            // It shouldn't be possible to call a non-existing hook
+            let res = inst.request(Method::Get, "/hook/invalid")
+                          .send().unwrap();
+            assert_eq!(res.status, StatusCode::NotFound);
+            assert!(inst.processor_input().is_none());
+
+            // Call the example hook without authorization
+            let res = inst.request(Method::Get, "/hook/example.sh")
+                          .send().unwrap();
+            assert_eq!(res.status, StatusCode::Forbidden);
+            assert!(inst.processor_input().is_none());
+
+            // Call the example hook with authorization
+            let res = inst.request(Method::Get, "/hook/example?secret=12345")
+                          .send().unwrap();
+            assert_eq!(res.status, StatusCode::Ok);
+
+            // Assert a job is queued
+            let input = inst.processor_input();
+            assert!(input.is_some());
+
+            // Assert the right job is queued
+            if let ProcessorInput::Job(job) = input.unwrap() {
+                assert_eq!(job.hook_name(), "example");
+            } else {
+                panic!("Wrong processor input received");
+            }
+
+            inst.close();
+        }
     }
 }
