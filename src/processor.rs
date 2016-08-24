@@ -305,6 +305,7 @@ impl Processor {
 #[derive(Clone)]
 pub struct HealthDetails {
     queue_size: usize,
+    active_jobs: u16,
 }
 
 impl HealthDetails {
@@ -312,9 +313,11 @@ impl HealthDetails {
     fn of(processor: &Processor) -> Self {
         // Collect some details of that processor
         let queue_size = processor.jobs.len();
+        let active_jobs = processor.threads_count;
 
         HealthDetails {
             queue_size: queue_size,
+            active_jobs: active_jobs,
         }
     }
 }
@@ -324,6 +327,7 @@ impl ToJson for HealthDetails {
     fn to_json(&self) -> Json {
         let mut map = BTreeMap::new();
         map.insert("queue_size".to_string(), self.queue_size.to_json());
+        map.insert("active_jobs".to_string(), self.active_jobs.to_json());
 
         Json::Object(map)
     }
