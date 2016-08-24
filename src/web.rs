@@ -14,8 +14,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::{BTreeMap, HashMap};
+use std::net::SocketAddr;
 
-use ansi_term::Colour;
 use chan;
 use nickel;
 use nickel::{Nickel, HttpRouter, Options};
@@ -76,7 +76,7 @@ impl WebAPI {
     }
 
     pub fn listen(&mut self, bind: &str, enable_health: bool,
-                  sender: SenderChan) {
+                  sender: SenderChan) -> Result<SocketAddr, String> {
         // Store the sender channel
         self.sender_chan = Some(sender);
 
@@ -89,34 +89,35 @@ impl WebAPI {
         let (send_stop, recv_stop) = chan::sync(0);
         self.stop_chan = Some(send_stop);
 
+        // This channel is used to receive the result from the thread, which
+        // will be returned
+        let (return_send, return_recv) = chan::async();
+
         ::std::thread::spawn(move || {
             let bind: &str = &bind;
             match app.listen(bind) {
                 Ok(listener) => {
-                    println!("{} on {}",
-                        Colour::Green.bold().paint("Web API listening"), bind
-                    );
+                    // Send the socket address to the main thread
+                    let sock = listener.socket();
+                    return_send.send(Ok(sock));
 
                     // This blocks until someone sends something to
                     // self.stop_chan
                     recv_stop.recv();
-
-                    println!("Stopping web server...");
 
                     // Detach the webserver from the current thread, allowing
                     // the process to exit
                     listener.detach();
                 },
                 Err(error) => {
-                    println!("{} on {}: {}",
-                        Colour::Red.bold().paint(
-                            "Failed to start the Web API"
-                        ), bind, error
-                    );
-                    ::std::process::exit(1);
+                    // Send the error
+                    return_send.send(Err(format!("{}", error)));
                 }
             }
         });
+
+        // Return what the thread sends
+        return_recv.recv().unwrap()
     }
 
     pub fn stop(&mut self) -> bool {

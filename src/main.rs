@@ -34,6 +34,7 @@ mod processor;
 mod web;
 
 use chan_signal::Signal;
+use ansi_term::Colour;
 
 
 fn get_hooks(base: &String) -> hooks::Hooks {
@@ -43,6 +44,32 @@ fn get_hooks(base: &String) -> hooks::Hooks {
     println!("Total hooks collected: {}", hooks.len());
 
     hooks
+}
+
+
+fn web_listen(options: &cli::FisherSettings, webapi: &mut web::WebAPI,
+              processor: &processor::ProcessorManager) {
+    // Start the web listener
+    let result = webapi.listen(
+        &options.bind, options.enable_health,
+        processor.sender().unwrap(),
+    );
+
+    match result {
+        Ok(socket) => {
+            println!("{} on {}",
+                Colour::Green.bold().paint("Web API listening"), socket
+            );
+        },
+        Err(error) => {
+            println!("{} on {}: {}",
+                Colour::Red.bold().paint(
+                    "Failed to start the Web API"
+                ), options.bind, error
+            );
+            ::std::process::exit(1);
+        },
+    };
 }
 
 
@@ -57,10 +84,7 @@ fn main() {
 
     // Start everything
     processor.start(options.max_threads);
-    webapi.listen(
-        &options.bind, options.enable_health,
-        processor.sender().unwrap()
-    );
+    web_listen(&options, &mut webapi, &processor);
 
     // Wait until SIGINT or SIGTERM is received
     exit_signal.recv().unwrap();
