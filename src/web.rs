@@ -31,8 +31,8 @@ use processor::{HealthDetails, Request, Job, ProcessorInput, SenderChan};
 
 enum JsonResponse {
     NotFound,
-    Rejected,
-    Queued,
+    Forbidden,
+    Ok,
     HealthStatus(HealthDetails),
 }
 
@@ -43,8 +43,8 @@ impl ToJson for JsonResponse {
 
         map.insert("status".to_string(), match *self {
             JsonResponse::NotFound => "not_found",
-            JsonResponse::Rejected => "rejected",
-            JsonResponse::Queued => "ok",
+            JsonResponse::Forbidden => "forbidden",
+            JsonResponse::Ok => "ok",
             JsonResponse::HealthStatus(..) => "ok"
         }.to_string().to_json());
 
@@ -173,11 +173,11 @@ impl WebAPI {
                     let job = Job::new(job_hook, request);
                     sender.send(ProcessorInput::Job(job));
 
-                    JsonResponse::Queued.to_json()
+                    JsonResponse::Ok.to_json()
                 } else {
                     // Else send a great 403 Forbidden
                     res.set(StatusCode::Forbidden);
-                    JsonResponse::Rejected.to_json()
+                    JsonResponse::Forbidden.to_json()
                 }
             });
         }
