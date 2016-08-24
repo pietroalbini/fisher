@@ -75,14 +75,15 @@ impl WebAPI {
         }
     }
 
-    pub fn listen(&mut self, bind: &str, sender: SenderChan) {
+    pub fn listen(&mut self, bind: &str, enable_health: bool,
+                  sender: SenderChan) {
         // Store the sender channel
         self.sender_chan = Some(sender);
 
         // This is to fix lifetime issues with the thread below
         let bind = bind.to_string();
 
-        let app = self.configure_nickel();
+        let app = self.configure_nickel(enable_health);
 
         // This channel is used so it's possible to stop the listener
         let (send_stop, recv_stop) = chan::sync(0);
@@ -136,7 +137,7 @@ impl WebAPI {
         }
     }
 
-    fn configure_nickel(&self) -> Nickel {
+    fn configure_nickel(&self, enable_health: bool) -> Nickel {
         let mut app = Nickel::new();
 
         // Disable the default message nickel prints on stdout
@@ -182,16 +183,26 @@ impl WebAPI {
         }
 
 
-        let sender = self.sender_chan.clone().unwrap();
-        app.get("/health", middleware! {
-            let (details_send, details_recv) = chan::async();
+        // Health reporting can be disabled by the user
+        if enable_health {
+            let sender = self.sender_chan.clone().unwrap();
 
-            // Get the details from the processor
-            sender.send(ProcessorInput::HealthStatus(details_send));
-            let details = details_recv.recv().unwrap();
+            app.get("/health", middleware! {
+                let (details_send, details_recv) = chan::async();
 
-            JsonResponse::HealthStatus(details).to_json()
-        });
+                // Get the details from the processor
+                sender.send(ProcessorInput::HealthStatus(details_send));
+                let details = details_recv.recv().unwrap();
+
+                JsonResponse::HealthStatus(details).to_json()
+            });
+        } else {
+            app.get("/health", middleware! { |_req, mut res|
+                res.set(StatusCode::Forbidden);
+
+                JsonResponse::Forbidden.to_json()
+            });
+        }
 
 
         // This middleware provides a basic Not found page

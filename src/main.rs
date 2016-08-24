@@ -57,7 +57,10 @@ fn main() {
 
     // Start everything
     processor.start(options.max_threads);
-    webapi.listen(&options.bind, processor.sender().unwrap());
+    webapi.listen(
+        &options.bind, options.enable_health,
+        processor.sender().unwrap()
+    );
 
     // Wait until SIGINT or SIGTERM is received
     exit_signal.recv().unwrap();

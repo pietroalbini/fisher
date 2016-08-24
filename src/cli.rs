@@ -22,6 +22,7 @@ pub struct FisherSettings {
     pub bind: String,
     pub hooks_dir: String,
     pub max_threads: u16,
+    pub enable_health: bool,
 }
 
 
@@ -43,6 +44,10 @@ fn create_cli<'a, 'b>() -> App<'a, 'b> {
              .long("jobs").short("j")
              .value_name("JOBS_COUNT")
              .help("How much concurrent jobs to run"))
+
+        .arg(Arg::with_name("disable_health")
+             .long("no-health")
+             .help("Disable the /health endpoint"))
     ;
 
     app
@@ -68,5 +73,6 @@ pub fn parse() -> FisherSettings {
         bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").to_string(),
         hooks_dir: matches.value_of("hooks").unwrap().to_string(),
         max_threads: max_threads,
+        enable_health: ! matches.is_present("disable_health"),
     }
 }
