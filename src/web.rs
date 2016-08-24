@@ -263,3 +263,92 @@ fn params_from_request(req: &nickel::Request) -> HashMap<String, String> {
         None => HashMap::new(),
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+
+    mod json_responses {
+        use rustc_serialize::json::ToJson;
+
+        use processor::HealthDetails;
+        use super::super::JsonResponse;
+
+
+        #[test]
+        fn test_not_found() {
+            let response = JsonResponse::NotFound.to_json();
+
+            // The result must be an object
+            let obj = response.as_object().unwrap();
+
+            // The status must be "not_found"
+            assert_eq!(
+                obj.get("status").unwrap().as_string().unwrap(),
+                "not_found".to_string()
+            );
+        }
+
+
+        #[test]
+        fn test_forbidden() {
+            let response = JsonResponse::Forbidden.to_json();
+
+            // The result must be an object
+            let obj = response.as_object().unwrap();
+
+            // The status must be "forbidden"
+            assert_eq!(
+                obj.get("status").unwrap().as_string().unwrap(),
+                "forbidden".to_string()
+            );
+        }
+
+
+        #[test]
+        fn test_ok() {
+            let response = JsonResponse::Ok.to_json();
+
+            // The result must be an object
+            let obj = response.as_object().unwrap();
+
+            // The status must be "ok"
+            assert_eq!(
+                obj.get("status").unwrap().as_string().unwrap(),
+                "ok".to_string()
+            );
+        }
+
+
+        #[test]
+        fn test_health_status() {
+            let response = JsonResponse::HealthStatus(HealthDetails {
+                active_jobs: 1,
+                queue_size: 2,
+            }).to_json();
+
+            // The result must be an object
+            let obj = response.as_object().unwrap();
+
+            // The status must be "ok"
+            assert_eq!(
+                obj.get("status").unwrap().as_string().unwrap(),
+                "ok".to_string()
+            );
+
+            // It must have an object called "result"
+            let result = obj.get("result").unwrap().as_object().unwrap();
+
+            // The result must contain "active_jobs" and "queue_size"
+            assert_eq!(
+                result.get("active_jobs").unwrap().as_u64().unwrap(),
+                1 as u64
+            );
+            assert_eq!(
+                result.get("queue_size").unwrap().as_u64().unwrap(),
+                2 as u64
+            );
+        }
+
+    }
+}

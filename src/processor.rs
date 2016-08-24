@@ -304,8 +304,8 @@ impl Processor {
 
 #[derive(Clone)]
 pub struct HealthDetails {
-    queue_size: usize,
-    active_jobs: u16,
+    pub queue_size: usize,
+    pub active_jobs: u16,
 }
 
 impl HealthDetails {
