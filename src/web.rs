@@ -278,7 +278,7 @@ pub mod tests {
     use super::WebAPI;
     use hooks;
     use hooks::tests::create_sample_hooks;
-    use processor::ProcessorInput;
+    use processor::{HealthDetails, ProcessorInput};
 
 
     pub struct TestInstance {
@@ -292,7 +292,7 @@ pub mod tests {
 
     impl TestInstance {
 
-        pub fn new() -> Self {
+        pub fn new(health: bool) -> Self {
             // Create a new instance of WebAPI
             let tempdir = create_sample_hooks();
             let mut inst = WebAPI::new(hooks::collect(
@@ -303,7 +303,7 @@ pub mod tests {
             let (input_send, input_recv) = chan::async();
 
             // Start the web server
-            let addr = inst.listen("127.0.0.1:0", true, input_send).unwrap();
+            let addr = inst.listen("127.0.0.1:0", health, input_send).unwrap();
 
             // Create the HTTP client
             let url = format!("http://{}", addr);
@@ -343,6 +343,59 @@ pub mod tests {
                 },
                 input_recv.recv() -> input => {
                     return Some(input.unwrap());
+                },
+            };
+        }
+
+        pub fn next_health(&self, details: HealthDetails) -> NextHealthCheck {
+            let input_chan = self.input_recv.clone();
+            let (result_send, result_recv) = chan::async();
+
+            ::std::thread::spawn(move || {
+                let input = input_chan.recv().unwrap();
+
+                if let ProcessorInput::HealthStatus(ref sender) = input {
+                    // Send the HealthDetails we want
+                    sender.send(details);
+
+                    // Everything was OK
+                    result_send.send(None);
+                } else {
+                    result_send.send(Some(
+                        "Wrong kind of ProcessorInput received!".to_string()
+                    ));
+                }
+            });
+
+            NextHealthCheck::new(result_recv)
+        }
+    }
+
+
+    pub struct NextHealthCheck {
+        result_recv: chan::Receiver<Option<String>>,
+    }
+
+    impl NextHealthCheck {
+
+        fn new(result_recv: chan::Receiver<Option<String>>) -> Self {
+            NextHealthCheck {
+                result_recv: result_recv,
+            }
+        }
+
+        fn check(&self) {
+            let result_recv = &self.result_recv;
+
+            chan_select! {
+                default => {
+                    panic!("No ProcessorInput received!");
+                },
+                result_recv.recv() -> result => {
+                    // Forward panics
+                    if let Some(message) = result.unwrap() {
+                        panic!(message);
+                    }
                 },
             };
         }
@@ -435,16 +488,19 @@ pub mod tests {
 
 
     mod web_api {
+        use std::io::Read;
+
         use hyper::status::StatusCode;
         use hyper::method::Method;
+        use rustc_serialize::json::Json;
 
-        use processor::ProcessorInput;
+        use processor::{HealthDetails, ProcessorInput};
         use super::TestInstance;
 
 
         #[test]
         fn test_startup() {
-            let mut inst = TestInstance::new();
+            let mut inst = TestInstance::new(true);
 
             // Test if the Web API is working fine
             let res = inst.request(Method::Get, "/").send().unwrap();
@@ -455,7 +511,7 @@ pub mod tests {
 
         #[test]
         fn test_hook_call() {
-            let mut inst = TestInstance::new();
+            let mut inst = TestInstance::new(true);
 
             // It shouldn't be possible to call a non-existing hook
             let res = inst.request(Method::Get, "/hook/invalid")
@@ -484,6 +540,55 @@ pub mod tests {
             } else {
                 panic!("Wrong processor input received");
             }
+
+            inst.close();
+        }
+
+        #[test]
+        fn test_health_disabled() {
+            // Create the instance with disabled health status
+            let mut inst = TestInstance::new(false);
+
+            // It shouldn't be possible to get the health status
+            let res = inst.request(Method::Get, "/health").send().unwrap();
+            assert_eq!(res.status, StatusCode::Forbidden);
+
+            inst.close();
+        }
+
+        #[test]
+        fn test_health_enabled() {
+            // Create the instance with enabled health status
+            let mut inst = TestInstance::new(true);
+
+            let check_after = inst.next_health(HealthDetails {
+                queue_size: 1,
+                active_jobs: 2,
+            });
+
+            // Assert the request is OK
+            let mut res = inst.request(Method::Get, "/health").send().unwrap();
+            assert_eq!(res.status, StatusCode::Ok);
+
+            // Decode the output
+            let mut content = String::new();
+            res.read_to_string(&mut content).unwrap();
+            let data = Json::from_str(&content).unwrap();
+            let data_obj = data.as_object().unwrap();
+
+            // Check the content of the returned JSON
+            let result = data_obj.get("result").unwrap().as_object().unwrap();
+            assert_eq!(
+                result.get("queue_size").unwrap().as_u64().unwrap(),
+                1 as u64
+            );
+            assert_eq!(
+                result.get("active_jobs").unwrap().as_u64().unwrap(),
+                2 as u64
+            );
+
+            // Check if there were any problems into the next_health thread
+            check_after.check();
 
             inst.close();
         }
