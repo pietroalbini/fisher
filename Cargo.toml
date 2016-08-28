@@ -4,16 +4,17 @@ version = "0.1.0"
 authors = ["Pietro Albini <pietro@pietroalbini.io>"]
 
 [dependencies]
-url="*"
-hyper="*"
-ansi_term="*"
-regex="*"
-clap="*"
-chan="*"
-chan-signal="*"
-rustc-serialize="*"
-lazy_static="*"
+url="^1.2"
+hyper="^0.9"
+ansi_term="^0.9"
+regex="^0.1"
+clap="^2.11"
+chan="^0.1"
+chan-signal="^0.1"
+rustc-serialize="^0.3"
+lazy_static="^0.2"
 rand="^0.3"
+tempdir="^0.3"
 
 # TODO: use the release when >0.8.1 comes out
 nickel = { git="https://github.com/nickel-org/nickel.rs.git", rev="b77e4ca" }
