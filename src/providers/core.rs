@@ -143,7 +143,7 @@ pub mod tests {
     use std::net::{IpAddr, SocketAddr};
 
     use processor::{Request, RequestType};
-    use super::{Providers, Provider, HookProvider};
+    use super::{Providers, HookProvider};
 
     #[test]
     fn test_providers() {
@@ -151,12 +151,7 @@ pub mod tests {
         let mut providers = Providers::new();
 
         // Add a dummy provider
-        providers.add("Sample", Provider::new(
-            sample_provider::check_config,
-            sample_provider::request_type,
-            sample_provider::validate,
-            sample_provider::env,
-        ));
+        providers.add("Sample", provider::get());
 
         // You should be able to get a provider if it exists
         assert!(providers.by_name(&"Sample".to_string()).is_ok());
@@ -168,12 +163,7 @@ pub mod tests {
     #[test]
     fn test_provider() {
         // Create a dummy provider
-        let provider = Provider::new(
-            sample_provider::check_config,
-            sample_provider::request_type,
-            sample_provider::validate,
-            sample_provider::env,
-        );
+        let provider = provider::get();
 
         let request = dummy_request();
 
@@ -196,17 +186,12 @@ pub mod tests {
     #[test]
     fn test_hook_provider() {
         // Create a dummy provider
-        let provider = Provider::new(
-            sample_provider::check_config,
-            sample_provider::request_type,
-            sample_provider::validate,
-            sample_provider::env,
-        );
+        let provider = provider::get();
 
         let request = dummy_request();
 
         // Try to ceate an hook provider with an invalid config
-        let provider_res = HookProvider::new(provider.clone(), "no".to_string());
+        let provider_res = HookProvider::new(provider.clone(), "FAIL".to_string());
         assert!(provider_res.is_err());
 
         // Create an hook provider with a valid config
@@ -237,16 +222,28 @@ pub mod tests {
     }
 
 
-    // This module contains all the functions for a sample provider
-    mod sample_provider {
+    // This provider is used during tests
+    pub mod provider {
         use std::collections::HashMap;
 
+        use super::super::Provider;
         use errors::{FisherResult, FisherError, ErrorKind};
         use processor::{Request, RequestType};
 
+
+        pub fn get() -> Provider {
+            Provider::new(
+                check_config,
+                request_type,
+                validate,
+                env,
+            )
+        }
+
+
         pub fn check_config(config: &str) -> FisherResult<()> {
             // If the configuration is "yes", then it's correct
-            if config == "yes" {
+            if config != "FAIL" {
                 Ok(())
             } else {
                 // This error doesn't make any sense, but it's still an error
@@ -256,13 +253,37 @@ pub mod tests {
             }
         }
 
-        pub fn request_type(_req: &Request, _config: &str) -> RequestType {
+
+        pub fn request_type(req: &Request, _config: &str) -> RequestType {
+            // Allow to override the result of this
+            if let Some(request_type) = req.params.get("request_type") {
+                match request_type.as_ref() {
+                    // "ping" will return RequestType::Ping
+                    "ping" => {
+                        return RequestType::Ping;
+                    },
+                    _ => {}
+                }
+            }
+
+            // Return ExecuteHook anywhere else
             RequestType::ExecuteHook
         }
 
-        pub fn validate(_req: &Request, _config: &str) -> bool {
-            true
+
+        pub fn validate(req: &Request, _config: &str) -> bool {
+            // If the secret param is provided, validate it
+            if let Some(secret) = req.params.get("secret") {
+                if secret == "testing" {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+           true
         }
+
 
         pub fn env(_req: &Request, _config: &str) -> HashMap<String, String> {
             HashMap::new()

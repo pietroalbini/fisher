@@ -211,7 +211,7 @@ pub mod tests {
             .unwrap();
         write!(hook, "{}", concat!(
             r#"#!/bin/bash"#, "\n",
-            r#"## Fisher-Standalone: {"secret": "12345"}"#, "\n",
+            r#"## Fisher-Testing: {}"#, "\n",
             r#"echo "Hello world""#, "\n",
         )).unwrap();
 

@@ -232,13 +232,13 @@ mod tests {
         assert!(inst.processor_input().is_none());
 
         // Call the example hook without authorization
-        let res = inst.request(Method::Get, "/hook/example.sh")
+        let res = inst.request(Method::Get, "/hook/example?secret=invalid")
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::Forbidden);
         assert!(inst.processor_input().is_none());
 
         // Call the example hook with authorization
-        let res = inst.request(Method::Get, "/hook/example?secret=12345")
+        let res = inst.request(Method::Get, "/hook/example?secret=testing")
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::Ok);
 

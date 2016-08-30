@@ -32,6 +32,16 @@ macro_rules! provider {
             module::env,
         ));
     };
+    ($providers:expr, $name:expr, $module:path, $cfg:meta) => {{
+        #[cfg($cfg)]
+        fn inner(providers: &mut core::Providers) {
+            provider!(providers, $name, $module);
+        }
+        #[cfg(not($cfg))]
+        fn inner(_providers: &mut core::Providers) {}
+
+        inner(&mut $providers);
+    }};
 }
 
 
@@ -40,6 +50,9 @@ lazy_static! {
         let mut p = core::Providers::new();
 
         provider!(p, "Standalone", self::standalone);
+
+        // This is added only during unit tests
+        provider!(p, "Testing", self::core::tests::provider, test);
 
         p
     };
