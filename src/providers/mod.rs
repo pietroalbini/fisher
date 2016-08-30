@@ -21,17 +21,26 @@ use providers::core::Provider;
 pub use providers::core::HookProvider;
 
 
+// This macro simplifies adding new providers
+macro_rules! provider {
+    ($providers:expr, $name:expr, $module:path) => {
+        use $module as module;
+        $providers.add($name, Provider::new(
+            module::check_config,
+            module::validate,
+            module::env,
+        ));
+    };
+}
+
+
 lazy_static! {
     static ref PROVIDERS: core::Providers = {
-        let mut providers = core::Providers::new();
+        let mut p = core::Providers::new();
 
-        providers.add("Standalone", Provider::new(
-            standalone::check_config,
-            standalone::validate,
-            standalone::env,
-        ));
+        provider!(p, "Standalone", self::standalone);
 
-        providers
+        p
     };
 }
 
