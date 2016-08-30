@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use rustc_serialize::json;
 
-use processor::Request;
+use processor::{Request, RequestType};
 use errors::FisherResult;
 
 
@@ -54,6 +54,12 @@ pub fn check_config(input: &str) -> FisherResult<()> {
 }
 
 
+pub fn request_type(_req: &Request, _config: &str) -> RequestType {
+    // This provider supports only RequestType::ExecuteHook
+    RequestType::ExecuteHook
+}
+
+
 pub fn validate(req: &Request, config: &str) -> bool {
     let config: Config = json::decode(config).unwrap();
 
@@ -87,7 +93,8 @@ pub fn env(_req: &Request, _config: &str) -> HashMap<String, String> {
 mod tests {
     use std::collections::HashMap;
 
-    use super::{check_config, validate, env};
+    use super::{check_config, request_type, validate, env};
+    use processor::RequestType;
     use providers::core::tests::dummy_request;
 
     #[test]
@@ -111,6 +118,16 @@ mod tests {
         for one in &wrong {
             assert!(check_config(one).is_err());
         }
+    }
+
+    #[test]
+    fn test_request_type() {
+        let config = r#"{"secret": "abcde"}"#;
+
+        assert_eq!(
+            request_type(&dummy_request(), &config),
+            RequestType::ExecuteHook
+        );
     }
 
     #[test]

@@ -23,7 +23,7 @@ use hyper::method::Method;
 use rustc_serialize::json::ToJson;
 
 use hooks::Hook;
-use processor::{Job, ProcessorInput, SenderChan};
+use processor::{RequestType, Job, ProcessorInput, SenderChan};
 use web::responses::JsonResponse;
 use web::utils::convert_request;
 
@@ -140,10 +140,18 @@ impl WebAPI {
 
                 let request = convert_request(&req);
 
-                if let Some(job_hook) = hook.validate(&request.clone()) {
-                    // If the hook is valid, create a new job and queue it
-                    let job = Job::new(job_hook, request);
-                    sender.send(ProcessorInput::Job(job));
+                if let Some(job_hook) = hook.validate(&request) {
+                    // Do something different based on the request type
+                    match job_hook.request_type(&request) {
+                        // Don't do anything when it's only a ping
+                        RequestType::Ping => {},
+
+                        // Queue a job if the hook should be executed
+                        RequestType::ExecuteHook => {
+                            let job = Job::new(job_hook, request);
+                            sender.send(ProcessorInput::Job(job));
+                        },
+                    }
 
                     JsonResponse::Ok.to_json()
                 } else {

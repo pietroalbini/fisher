@@ -15,12 +15,13 @@
 
 use std::collections::HashMap;
 
-use processor::Request;
+use processor::{Request, RequestType};
 use errors::{FisherResult, FisherError, ErrorKind};
 use utils::CopyToClone;
 
 
 pub type CheckConfigFunc = fn(&str) -> FisherResult<()>;
+pub type RequestTypeFunc = fn(&Request, &str) -> RequestType;
 pub type ValidatorFunc = fn(&Request, &str) -> bool;
 pub type EnvFunc = fn(&Request, &str) -> HashMap<String, String>;
 
@@ -59,16 +60,18 @@ impl Providers {
 #[derive(Clone)]
 pub struct Provider {
     check_config_func: CopyToClone<CheckConfigFunc>,
+    request_type_func: CopyToClone<RequestTypeFunc>,
     validator_func: CopyToClone<ValidatorFunc>,
     env_func: CopyToClone<EnvFunc>,
 }
 
 impl Provider {
 
-    pub fn new(check_config: CheckConfigFunc, validator: ValidatorFunc,
-               env: EnvFunc) -> Provider {
+    pub fn new(check_config: CheckConfigFunc, request_type: RequestTypeFunc,
+               validator: ValidatorFunc, env: EnvFunc) -> Provider {
         Provider {
             check_config_func: CopyToClone::new(check_config),
+            request_type_func: CopyToClone::new(request_type),
             validator_func: CopyToClone::new(validator),
             env_func: CopyToClone::new(env),
         }
@@ -77,6 +80,11 @@ impl Provider {
     pub fn check_config(&self, config: &str) -> FisherResult<()> {
         // The func must be dereferenced, since it's wrapped in CopyToClone
         (*self.check_config_func)(config)
+    }
+
+    pub fn request_type(&self, req: &Request, config: &str) -> RequestType {
+        // The func must be dereferenced, since it's wrapped in CopyToClone
+        (*self.request_type_func)(req, config)
     }
 
     pub fn validate(&self, req: &Request, config: &str) -> bool {
@@ -113,6 +121,10 @@ impl HookProvider {
         })
     }
 
+    pub fn request_type(&self, req: &Request) -> RequestType {
+        self.provider.request_type(req, &self.config)
+    }
+
     pub fn validate(&self, req: &Request) -> bool {
         self.provider.validate(req, &self.config)
     }
@@ -130,7 +142,7 @@ pub mod tests {
     use std::collections::HashMap;
     use std::net::{IpAddr, SocketAddr};
 
-    use processor::Request;
+    use processor::{Request, RequestType};
     use super::{Providers, Provider, HookProvider};
 
     #[test]
@@ -141,6 +153,7 @@ pub mod tests {
         // Add a dummy provider
         providers.add("Sample", Provider::new(
             sample_provider::check_config,
+            sample_provider::request_type,
             sample_provider::validate,
             sample_provider::env,
         ));
@@ -157,6 +170,7 @@ pub mod tests {
         // Create a dummy provider
         let provider = Provider::new(
             sample_provider::check_config,
+            sample_provider::request_type,
             sample_provider::validate,
             sample_provider::env,
         );
@@ -165,6 +179,12 @@ pub mod tests {
 
         // You should be able to call the configuration checker
         assert!(provider.check_config("yes").is_ok());
+
+        // You should be able to call the request type checker
+        assert_eq!(
+            provider.request_type(&request, "yes"),
+            RequestType::ExecuteHook
+        );
 
         // You should be able to call the request validator
         assert!(provider.validate(&request, "yes"));
@@ -178,6 +198,7 @@ pub mod tests {
         // Create a dummy provider
         let provider = Provider::new(
             sample_provider::check_config,
+            sample_provider::request_type,
             sample_provider::validate,
             sample_provider::env,
         );
@@ -193,6 +214,9 @@ pub mod tests {
         assert!(provider_res.is_ok());
 
         let provider = provider_res.unwrap();
+
+        // You should be able to call the request type checker
+        assert_eq!(provider.request_type(&request), RequestType::ExecuteHook);
 
         // You should be able to call the request validator
         assert!(provider.validate(&request));
@@ -218,7 +242,7 @@ pub mod tests {
         use std::collections::HashMap;
 
         use errors::{FisherResult, FisherError, ErrorKind};
-        use processor::Request;
+        use processor::{Request, RequestType};
 
         pub fn check_config(config: &str) -> FisherResult<()> {
             // If the configuration is "yes", then it's correct
@@ -230,6 +254,10 @@ pub mod tests {
                     ErrorKind::ProviderNotFound(String::new())
                 ))
             }
+        }
+
+        pub fn request_type(_req: &Request, _config: &str) -> RequestType {
+            RequestType::ExecuteHook
         }
 
         pub fn validate(_req: &Request, _config: &str) -> bool {

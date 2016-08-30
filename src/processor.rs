@@ -46,6 +46,13 @@ lazy_static! {
 pub type SenderChan = chan::Sender<ProcessorInput>;
 
 
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum RequestType {
+    ExecuteHook,
+    Ping,
+}
+
+
 #[derive(Clone)]
 pub struct Request {
     pub source: SocketAddr,

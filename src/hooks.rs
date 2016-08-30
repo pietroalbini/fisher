@@ -21,7 +21,7 @@ use std::io::{BufReader, BufRead};
 use regex::Regex;
 
 use providers;
-use processor;
+use processor::{Request, RequestType};
 use errors::FisherResult;
 
 
@@ -92,7 +92,7 @@ impl Hook {
         Ok(result)
     }
 
-    pub fn validate(&self, req: &processor::Request) -> Option<JobHook> {
+    pub fn validate(&self, req: &Request) -> Option<JobHook> {
         if self.providers.len() > 0 {
             // Check every provider if they're present
             for provider in &self.providers {
@@ -133,7 +133,17 @@ impl JobHook {
         self.hook.exec.clone()
     }
 
-    pub fn env(&self, req: &processor::Request) -> HashMap<String, String> {
+    pub fn request_type(&self, req: &Request) -> RequestType {
+        // If there is a provider return what it says, else assume the request
+        // type is RequestType::ExecuteHook
+        if let Some(ref provider) = self.provider {
+            provider.request_type(req)
+        } else {
+            RequestType::ExecuteHook
+        }
+    }
+
+    pub fn env(&self, req: &Request) -> HashMap<String, String> {
         // If there is a provider return the derived environment, else an
         // empty one
         if let Some(ref provider) = self.provider {
