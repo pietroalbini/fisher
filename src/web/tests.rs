@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::path::PathBuf;
+use std::time::Duration;
 use std::fs;
 
 use chan;
@@ -132,8 +133,10 @@ impl NextHealthCheck {
     pub fn check(&self) {
         let result_recv = &self.result_recv;
 
+        let timeout = chan::after(Duration::from_secs(5));
+
         chan_select! {
-            default => {
+            timeout.recv() => {
                 panic!("No ProcessorInput received!");
             },
             result_recv.recv() -> result => {
