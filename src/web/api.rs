@@ -253,6 +253,14 @@ mod tests {
             panic!("Wrong processor input received");
         }
 
+        // Call the example hook simulating a Ping
+        let res = inst.request(Method::Get, "/hook/example?request_type=ping")
+                      .send().unwrap();
+        assert_eq!(res.status, StatusCode::Ok);
+
+        // Even if the last request succeded, there shouldn't be any job
+        assert!(inst.processor_input().is_none());
+
         inst.close();
     }
 
