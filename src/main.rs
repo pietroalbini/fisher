@@ -24,6 +24,7 @@ extern crate rand;
 #[macro_use] extern crate nickel;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
+#[cfg(feature = "provider-github")] extern crate ring;
 
 mod utils;
 mod cli;

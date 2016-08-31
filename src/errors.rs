@@ -26,6 +26,7 @@ pub type FisherResult<T> = Result<T, FisherError>;
 
 pub enum ErrorKind {
     ProviderNotFound(String),
+    ProviderConfigError(String),
     HookExecutionFailed(Option<i32>, Option<i32>),
 
     // Derived errors
@@ -95,6 +96,8 @@ impl Error for FisherError {
                 "provider not found",
             ErrorKind::HookExecutionFailed(..) =>
                 "hook returned non-zero exit code",
+            ErrorKind::ProviderConfigError(..) =>
+                "provider configuration error",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -119,6 +122,9 @@ impl fmt::Display for FisherError {
 
             ErrorKind::ProviderNotFound(ref provider) =>
                 format!("Provider {} not found", provider),
+
+            ErrorKind::ProviderConfigError(ref error) =>
+                error.clone(),
 
             ErrorKind::HookExecutionFailed(exit_code_opt, signal_opt) =>
                 if let Some(exit_code) = exit_code_opt {

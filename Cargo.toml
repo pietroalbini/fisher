@@ -19,5 +19,13 @@ tempdir="^0.3"
 # TODO: use the release when >0.8.1 comes out
 nickel = { git="https://github.com/nickel-org/nickel.rs.git", rev="b77e4ca" }
 
+# Dependencies for the "provider-github" feature
+ring = { version="^0.4", optional=true }
+
+[features]
+default = ["provider-github"]
+
+provider-github = ["ring"]
+
 [profile.release]
 lto = true
