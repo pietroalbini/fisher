@@ -123,6 +123,7 @@ impl WebAPI {
 
             // This middleware processes incoming hooks
             app.add_route(method, "/hook/:hook", middleware! { |req, mut res|
+                let mut req = req;
                 let hook_name = req.param("hook").unwrap().to_string();
 
                 // Ignore requests without a valid hook
@@ -138,7 +139,7 @@ impl WebAPI {
                     return res.next_middleware();
                 }
 
-                let request = convert_request(&req);
+                let request = convert_request(&mut req);
 
                 if let Some(job_hook) = hook.validate(&request) {
                     // Do something different based on the request type

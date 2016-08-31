@@ -58,6 +58,7 @@ pub struct Request {
     pub source: SocketAddr,
     pub headers: HashMap<String, String>,
     pub params: HashMap<String, String>,
+    pub body: String,
 }
 
 

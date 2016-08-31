@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashMap;
+use std::io::Read;
 
 use nickel;
 use hyper::uri::RequestUri;
@@ -22,7 +23,7 @@ use url::form_urlencoded;
 use processor::Request;
 
 
-pub fn convert_request(req: &nickel::Request) -> Request {
+pub fn convert_request(req: &mut nickel::Request) -> Request {
     let source = req.origin.remote_addr.clone();
 
     // Convert headers from the hyper representation to strings
@@ -31,12 +32,17 @@ pub fn convert_request(req: &nickel::Request) -> Request {
         headers.insert(header.name().to_string(), header.value_string());
     }
 
+    // Get the body
+    let mut body = String::new();
+    let _ = req.origin.read_to_string(&mut body);
+
     let params = params_from_request(req);
 
     Request {
         source: source,
         headers: headers,
         params: params,
+        body: body,
     }
 }
 
@@ -58,12 +64,17 @@ fn params_from_request(req: &nickel::Request) -> HashMap<String, String> {
             }
             let path = path.unwrap();
 
-            let mut hashmap = HashMap::new();
-            for (a, b) in form_urlencoded::parse(path.as_bytes()).into_owned() {
-                hashmap.insert(a, b);
-            }
-            hashmap
+            params_from_query(path)
         },
         None => HashMap::new(),
     }
+}
+
+
+pub fn params_from_query(query: &str) -> HashMap<String, String> {
+    let mut hashmap = HashMap::new();
+    for (a, b) in form_urlencoded::parse(query.as_bytes()).into_owned() {
+        hashmap.insert(a, b);
+    }
+    hashmap
 }
