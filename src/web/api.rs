@@ -20,6 +20,7 @@ use chan;
 use nickel::{Nickel, HttpRouter, Options};
 use nickel::status::StatusCode;
 use hyper::method::Method;
+use hyper::header;
 use rustc_serialize::json::ToJson;
 
 use hooks::Hook;
@@ -114,6 +115,12 @@ impl WebAPI {
 
         // Disable the default message nickel prints on stdout
         app.options = Options::default().output_on_listen(false);
+
+        app.utilize(middleware! { |_req, mut res|
+            res.set(header::Server(
+                format!("Fisher/{}", env!("CARGO_PKG_VERSION"))
+            ));
+        });
 
         for method in &[Method::Get, Method::Post] {
             // Make the used things owned
