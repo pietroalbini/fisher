@@ -245,6 +245,7 @@ pub mod tests {
 
         pub fn get() -> Provider {
             Provider::new(
+                "Sample".to_string(),
                 check_config,
                 request_type,
                 validate,
