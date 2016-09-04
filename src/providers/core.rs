@@ -59,6 +59,7 @@ impl Providers {
 
 #[derive(Clone)]
 pub struct Provider {
+    name: String,
     check_config_func: CopyToClone<CheckConfigFunc>,
     request_type_func: CopyToClone<RequestTypeFunc>,
     validator_func: CopyToClone<ValidatorFunc>,
@@ -67,14 +68,20 @@ pub struct Provider {
 
 impl Provider {
 
-    pub fn new(check_config: CheckConfigFunc, request_type: RequestTypeFunc,
-               validator: ValidatorFunc, env: EnvFunc) -> Provider {
+    pub fn new(name: String, check_config: CheckConfigFunc,
+               request_type: RequestTypeFunc, validator: ValidatorFunc,
+               env: EnvFunc) -> Provider {
         Provider {
+            name: name,
             check_config_func: CopyToClone::new(check_config),
             request_type_func: CopyToClone::new(request_type),
             validator_func: CopyToClone::new(validator),
             env_func: CopyToClone::new(env),
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn check_config(&self, config: &str) -> FisherResult<()> {
@@ -119,6 +126,10 @@ impl HookProvider {
             provider: provider,
             config: config,
         })
+    }
+
+    pub fn name(&self) -> &str {
+        self.provider.name()
     }
 
     pub fn request_type(&self, req: &Request) -> RequestType {

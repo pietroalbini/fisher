@@ -152,6 +152,14 @@ impl JobHook {
             HashMap::new()
         }
     }
+
+    pub fn provider_name(&self) -> Option<&str> {
+        if let Some(ref provider) = self.provider {
+            Some(provider.name())
+        } else {
+            None
+        }
+    }
 }
 
 

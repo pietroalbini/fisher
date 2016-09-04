@@ -27,6 +27,7 @@ macro_rules! provider {
     ($providers:expr, $name:expr, $module:path) => {
         use $module as module;
         $providers.add($name, Provider::new(
+            $name.to_string(),
             module::check_config,
             module::request_type,
             module::validate,

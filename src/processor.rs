@@ -124,8 +124,13 @@ impl Job {
         }
 
         // Apply the hook-specific environment
-        for (key, value) in self.hook.env(&self.request) {
-            command.env(key, value);
+        if let Some(ref provider_name) = self.hook.provider_name() {
+            for (key, value) in self.hook.env(&self.request) {
+                let real_key = format!(
+                    "FISHER_{}_{}", provider_name.to_uppercase(), key
+                );
+                command.env(real_key, value);
+            }
         }
     }
 }
