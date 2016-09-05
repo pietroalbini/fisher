@@ -154,7 +154,8 @@ pub mod tests {
     use std::net::{IpAddr, SocketAddr};
 
     use web::requests::{Request, RequestType};
-    use super::{Providers, HookProvider};
+    use providers::testing;
+    use super::{Provider, Providers, HookProvider};
 
     #[test]
     fn test_providers() {
@@ -162,7 +163,7 @@ pub mod tests {
         let mut providers = Providers::new();
 
         // Add a dummy provider
-        providers.add("Sample", provider::get());
+        providers.add("Sample", get_provider());
 
         // You should be able to get a provider if it exists
         assert!(providers.by_name(&"Sample".to_string()).is_ok());
@@ -174,7 +175,7 @@ pub mod tests {
     #[test]
     fn test_provider() {
         // Create a dummy provider
-        let provider = provider::get();
+        let provider = get_provider();
 
         let request = dummy_request();
 
@@ -197,7 +198,7 @@ pub mod tests {
     #[test]
     fn test_hook_provider() {
         // Create a dummy provider
-        let provider = provider::get();
+        let provider = get_provider();
 
         let request = dummy_request();
 
@@ -234,72 +235,13 @@ pub mod tests {
     }
 
 
-    // This provider is used during tests
-    pub mod provider {
-        use std::collections::HashMap;
-
-        use super::super::Provider;
-        use errors::{FisherResult, FisherError, ErrorKind};
-        use web::requests::{Request, RequestType};
-
-
-        pub fn get() -> Provider {
-            Provider::new(
-                "Sample".to_string(),
-                check_config,
-                request_type,
-                validate,
-                env,
-            )
-        }
-
-
-        pub fn check_config(config: &str) -> FisherResult<()> {
-            // If the configuration is "yes", then it's correct
-            if config != "FAIL" {
-                Ok(())
-            } else {
-                // This error doesn't make any sense, but it's still an error
-                Err(FisherError::new(
-                    ErrorKind::ProviderNotFound(String::new())
-                ))
-            }
-        }
-
-
-        pub fn request_type(req: &Request, _config: &str) -> RequestType {
-            // Allow to override the result of this
-            if let Some(request_type) = req.params.get("request_type") {
-                match request_type.as_ref() {
-                    // "ping" will return RequestType::Ping
-                    "ping" => {
-                        return RequestType::Ping;
-                    },
-                    _ => {}
-                }
-            }
-
-            // Return ExecuteHook anywhere else
-            RequestType::ExecuteHook
-        }
-
-
-        pub fn validate(req: &Request, _config: &str) -> bool {
-            // If the secret param is provided, validate it
-            if let Some(secret) = req.params.get("secret") {
-                if secret == "testing" {
-                    return true;
-                } else {
-                    return false;
-                }
-            }
-
-           true
-        }
-
-
-        pub fn env(_req: &Request, _config: &str) -> HashMap<String, String> {
-            HashMap::new()
-        }
+    pub fn get_provider() -> Provider {
+        Provider::new(
+            "Testing".to_string(),
+            testing::check_config,
+            testing::request_type,
+            testing::validate,
+            testing::env,
+        )
     }
 }

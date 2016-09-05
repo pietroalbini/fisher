@@ -16,6 +16,7 @@
 pub mod core;
 mod standalone;
 #[cfg(feature = "provider-github")] mod github;
+#[cfg(test)] mod testing;
 
 use errors::FisherResult;
 use providers::core::Provider;
@@ -55,7 +56,7 @@ lazy_static! {
         provider!(p, "GitHub", self::github, feature="provider-github");
 
         // This is added only during unit tests
-        provider!(p, "Testing", self::core::tests::provider, test);
+        provider!(p, "Testing", self::testing, test);
 
         p
     };
