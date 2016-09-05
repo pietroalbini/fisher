@@ -119,7 +119,7 @@ impl WebAPI {
 
         app.utilize(middleware! { |_req, mut res|
             res.set(header::Server(
-                format!("Fisher/{}", env!("CARGO_PKG_VERSION"))
+                format!("Fisher/{}", crate_version!())
             ));
         });
 
