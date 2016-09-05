@@ -110,3 +110,41 @@ impl Job {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use hooks;
+    use web::requests;
+
+    use hooks::tests::create_sample_hooks;
+    use providers::core::tests::dummy_request;
+
+    use super::Job;
+
+
+    fn create_job(hook_name: &str, req: requests::Request) -> Job {
+        // Get the example hook
+        let hooks_dir = create_sample_hooks();
+        let hooks = hooks::collect(&hooks_dir.to_str().unwrap().to_string())
+                                  .unwrap();
+        let hook = hooks.get(&hook_name.to_string()).unwrap();
+
+        // Get the JobHook
+        let job_hook = hook.validate(&req).unwrap();
+
+        Job::new(job_hook, req)
+    }
+
+
+    #[test]
+    fn test_job_creation() {
+        let _ = create_job("example", dummy_request());
+    }
+
+
+    #[test]
+    fn test_job_hook_name() {
+        let job = create_job("example", dummy_request());
+        assert_eq!(job.hook_name(), "example".to_string());
+    }
+}
