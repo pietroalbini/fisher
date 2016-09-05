@@ -13,14 +13,29 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
 use std::io::Read;
+use std::net::SocketAddr;
+use std::collections::HashMap;
 
 use nickel;
 use hyper::uri::RequestUri;
 use url::form_urlencoded;
 
-use processor::Request;
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum RequestType {
+    ExecuteHook,
+    Ping,
+}
+
+
+#[derive(Clone)]
+pub struct Request {
+    pub source: SocketAddr,
+    pub headers: HashMap<String, String>,
+    pub params: HashMap<String, String>,
+    pub body: String,
+}
 
 
 pub fn convert_request(req: &mut nickel::Request) -> Request {

@@ -19,7 +19,7 @@ use rustc_serialize::json::{self, Json};
 use rustc_serialize::hex::FromHex;
 use ring;
 
-use processor::{Request, RequestType};
+use web::requests::{Request, RequestType};
 use errors::{FisherError, ErrorKind, FisherResult};
 
 
@@ -180,7 +180,7 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
 mod tests {
     use super::{GITHUB_EVENTS, check_config, request_type, env,
                 verify_signature};
-    use processor::RequestType;
+    use web::requests::RequestType;
     use providers::core::tests::dummy_request;
 
 

@@ -21,7 +21,7 @@ use std::io::{BufReader, BufRead};
 use regex::Regex;
 
 use providers;
-use processor::{Request, RequestType};
+use web::requests::{Request, RequestType};
 use errors::FisherResult;
 
 

@@ -15,7 +15,7 @@
 
 mod api;
 mod responses;
-mod utils;
+pub mod requests;
 
 #[cfg(test)]
 mod tests;

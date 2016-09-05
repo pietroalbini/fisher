@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use processor::{Request, RequestType};
+use web::requests::{Request, RequestType};
 use errors::{FisherResult, FisherError, ErrorKind};
 use utils::CopyToClone;
 
@@ -153,7 +153,7 @@ pub mod tests {
     use std::collections::HashMap;
     use std::net::{IpAddr, SocketAddr};
 
-    use processor::{Request, RequestType};
+    use web::requests::{Request, RequestType};
     use super::{Providers, HookProvider};
 
     #[test]
@@ -240,7 +240,7 @@ pub mod tests {
 
         use super::super::Provider;
         use errors::{FisherResult, FisherError, ErrorKind};
-        use processor::{Request, RequestType};
+        use web::requests::{Request, RequestType};
 
 
         pub fn get() -> Provider {

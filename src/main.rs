@@ -32,6 +32,7 @@ mod providers;
 mod hooks;
 mod errors;
 mod processor;
+mod jobs;
 mod web;
 
 use chan_signal::Signal;

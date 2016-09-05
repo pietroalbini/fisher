@@ -24,9 +24,10 @@ use hyper::header;
 use rustc_serialize::json::ToJson;
 
 use hooks::Hook;
-use processor::{RequestType, Job, ProcessorInput, SenderChan};
+use processor::{ProcessorInput, SenderChan};
+use jobs::Job;
 use web::responses::JsonResponse;
-use web::utils::convert_request;
+use web::requests::{RequestType, convert_request};
 
 
 pub struct WebAPI {

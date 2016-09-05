@@ -13,127 +13,16 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::net::SocketAddr;
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::process;
-use std::os::unix::process::ExitStatusExt;
-use std::fs;
-use std::env;
+use std::collections::{BTreeMap, VecDeque};
 
 use rustc_serialize::json::{Json, ToJson};
-
-use hooks::JobHook;
-use utils;
-use errors;
-use errors::{FisherError, ErrorKind, FisherResult};
-
 use chan;
 
-
-lazy_static! {
-    static ref DEFAULT_ENV: Vec<String> = vec![
-        "PATH".to_string(),
-        "USER".to_string(),
-        "SHELL".to_string(),
-
-        // Internationalization stuff
-        "LC_ALL".to_string(),
-        "LANG".to_string(),
-    ];
-}
+use jobs::Job;
+use errors;
 
 
 pub type SenderChan = chan::Sender<ProcessorInput>;
-
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum RequestType {
-    ExecuteHook,
-    Ping,
-}
-
-
-#[derive(Clone)]
-pub struct Request {
-    pub source: SocketAddr,
-    pub headers: HashMap<String, String>,
-    pub params: HashMap<String, String>,
-    pub body: String,
-}
-
-
-#[derive(Clone)]
-pub struct Job {
-    hook: JobHook,
-    request: Request,
-}
-
-impl Job {
-
-    pub fn new(hook: JobHook, request: Request) -> Job {
-        Job {
-            hook: hook,
-            request: request,
-        }
-    }
-
-    pub fn hook_name(&self) -> String {
-        self.hook.name()
-    }
-
-    pub fn process(&self) -> FisherResult<()> {
-        let mut command = process::Command::new(self.hook.exec());
-
-        // Prepare the command's environment variables
-        self.prepare_env(&mut command);
-
-        // Use a random working directory
-        let working_directory = try!(utils::create_temp_dir());
-        command.current_dir(working_directory.to_str().unwrap());
-        command.env("HOME".to_string(), working_directory.to_str().unwrap());
-
-        // Execute the hook
-        let output = try!(command.output());
-        if ! output.status.success() {
-            return Err(FisherError::new(ErrorKind::HookExecutionFailed(
-                output.status.code(),
-                output.status.signal(),
-            )));
-        }
-
-        // Remove the temp directory
-        try!(fs::remove_dir_all(&working_directory));
-
-        Ok(())
-    }
-
-    fn prepare_env(&self, command: &mut process::Command) {
-        // First of all clear the environment
-        command.env_clear();
-
-        // Apply the default environment
-        // This is done (instead of the automatic inheritage) to whitelist
-        // which environment variables we want
-        for (key, value) in env::vars() {
-            // Set only whitelisted keys
-            if ! DEFAULT_ENV.contains(&key) {
-                continue;
-            }
-
-            command.env(key, value);
-        }
-
-        // Apply the hook-specific environment
-        if let Some(ref provider_name) = self.hook.provider_name() {
-            for (key, value) in self.hook.env(&self.request) {
-                let real_key = format!(
-                    "FISHER_{}_{}", provider_name.to_uppercase(), key
-                );
-                command.env(real_key, value);
-            }
-        }
-    }
-}
 
 
 pub struct ProcessorManager {
