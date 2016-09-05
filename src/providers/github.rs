@@ -178,10 +178,11 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use utils::testing::*;
+    use web::requests::RequestType;
+
     use super::{GITHUB_EVENTS, check_config, request_type, env,
                 verify_signature};
-    use web::requests::RequestType;
-    use providers::core::tests::dummy_request;
 
 
     #[test]

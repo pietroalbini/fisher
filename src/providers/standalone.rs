@@ -93,9 +93,11 @@ pub fn env(_req: &Request, _config: &str) -> HashMap<String, String> {
 mod tests {
     use std::collections::HashMap;
 
-    use super::{check_config, request_type, validate, env};
+    use utils::testing::*;
     use web::requests::RequestType;
-    use providers::core::tests::dummy_request;
+
+    use super::{check_config, request_type, validate, env};
+
 
     #[test]
     fn test_check_config() {

@@ -191,38 +191,3 @@ pub fn collect<'a>(base: &String) -> FisherResult<Hooks> {
 
     Ok(result)
 }
-
-
-#[cfg(test)]
-pub mod tests {
-    use std::path::PathBuf;
-    use std::fs;
-    use std::os::unix::fs::OpenOptionsExt;
-    use std::io::Write;
-
-    use utils;
-
-
-    pub fn create_sample_hooks() -> PathBuf {
-        // Create a sample directory with some hooks
-        let tempdir = utils::create_temp_dir().unwrap();
-
-        let mut hook_path = tempdir.clone();
-        hook_path.push("example.sh");
-
-        // Create a new dummy hook
-        let mut hook = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .mode(0o755)
-            .open(&hook_path)
-            .unwrap();
-        write!(hook, "{}", concat!(
-            r#"#!/bin/bash"#, "\n",
-            r#"## Fisher-Testing: {}"#, "\n",
-            r#"echo "Hello world""#, "\n",
-        )).unwrap();
-
-        tempdir
-    }
-}

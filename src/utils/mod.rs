@@ -16,5 +16,8 @@
 mod tempdir;
 mod copy_to_clone;
 
+#[cfg(test)]
+pub mod testing;
+
 pub use utils::tempdir::create_temp_dir;
 pub use utils::copy_to_clone::CopyToClone;

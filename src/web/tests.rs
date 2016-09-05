@@ -21,10 +21,11 @@ use chan;
 use hyper::client as hyper;
 use hyper::method::Method;
 
-use super::WebAPI;
+use utils::testing::*;
 use hooks;
-use hooks::tests::create_sample_hooks;
 use processor::{HealthDetails, ProcessorInput};
+
+use super::WebAPI;
 
 
 pub struct TestInstance {
@@ -40,7 +41,7 @@ impl TestInstance {
 
     pub fn new(health: bool) -> Self {
         // Create a new instance of WebAPI
-        let tempdir = create_sample_hooks();
+        let tempdir = sample_hooks();
         let mut inst = WebAPI::new(hooks::collect(
             &tempdir.to_str().unwrap().to_string()
         ).unwrap());

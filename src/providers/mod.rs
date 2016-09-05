@@ -13,14 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-pub mod core;
+mod core;
 mod standalone;
 #[cfg(feature = "provider-github")] mod github;
-#[cfg(test)] mod testing;
+#[cfg(test)] pub mod testing;
 
 use errors::FisherResult;
-use providers::core::Provider;
-pub use providers::core::HookProvider;
+pub use providers::core::{Provider, HookProvider};
 
 
 // This macro simplifies adding new providers

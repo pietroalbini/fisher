@@ -148,14 +148,13 @@ impl HookProvider {
 
 
 #[cfg(test)]
-pub mod tests {
-    use std::str::FromStr;
+mod tests {
     use std::collections::HashMap;
-    use std::net::{IpAddr, SocketAddr};
 
-    use web::requests::{Request, RequestType};
-    use providers::testing;
-    use super::{Provider, Providers, HookProvider};
+    use utils::testing::*;
+    use web::requests::RequestType;
+
+    use super::{Providers, HookProvider};
 
     #[test]
     fn test_providers() {
@@ -163,7 +162,7 @@ pub mod tests {
         let mut providers = Providers::new();
 
         // Add a dummy provider
-        providers.add("Sample", get_provider());
+        providers.add("Sample", testing_provider());
 
         // You should be able to get a provider if it exists
         assert!(providers.by_name(&"Sample".to_string()).is_ok());
@@ -174,9 +173,7 @@ pub mod tests {
 
     #[test]
     fn test_provider() {
-        // Create a dummy provider
-        let provider = get_provider();
-
+        let provider = testing_provider();
         let request = dummy_request();
 
         // You should be able to call the configuration checker
@@ -197,9 +194,7 @@ pub mod tests {
 
     #[test]
     fn test_hook_provider() {
-        // Create a dummy provider
-        let provider = get_provider();
-
+        let provider = testing_provider();
         let request = dummy_request();
 
         // Try to ceate an hook provider with an invalid config
@@ -220,28 +215,5 @@ pub mod tests {
 
         // You should be able to call the environment creator
         assert!(provider.env(&request) == HashMap::new());
-    }
-
-
-    pub fn dummy_request() -> Request {
-        Request {
-            headers: HashMap::new(),
-            params: HashMap::new(),
-            source: SocketAddr::new(
-                IpAddr::from_str("127.0.0.1").unwrap(), 80
-            ),
-            body: String::new(),
-        }
-    }
-
-
-    pub fn get_provider() -> Provider {
-        Provider::new(
-            "Testing".to_string(),
-            testing::check_config,
-            testing::request_type,
-            testing::validate,
-            testing::env,
-        )
     }
 }

@@ -116,15 +116,14 @@ mod tests {
     use hooks;
     use web::requests;
 
-    use hooks::tests::create_sample_hooks;
-    use providers::core::tests::dummy_request;
+    use utils::testing::*;
 
     use super::Job;
 
 
     fn create_job(hook_name: &str, req: requests::Request) -> Job {
         // Get the example hook
-        let hooks_dir = create_sample_hooks();
+        let hooks_dir = sample_hooks();
         let hooks = hooks::collect(&hooks_dir.to_str().unwrap().to_string())
                                   .unwrap();
         let hook = hooks.get(&hook_name.to_string()).unwrap();
