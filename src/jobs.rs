@@ -17,6 +17,8 @@ use std::process;
 use std::os::unix::process::ExitStatusExt;
 use std::fs;
 use std::env;
+use std::path::PathBuf;
+use std::io::Write;
 
 use hooks::JobHook;
 use utils;
@@ -67,6 +69,13 @@ impl Job {
         command.current_dir(working_directory.to_str().unwrap());
         command.env("HOME".to_string(), working_directory.to_str().unwrap());
 
+        // Save the request body
+        let request_body = try!(self.save_request_body(&working_directory));
+        command.env(
+            "FISHER_REQUEST_BODY".to_string(),
+            request_body.to_str().unwrap().to_string()
+        );
+
         // Execute the hook
         let output = try!(command.output());
         if ! output.status.success() {
@@ -107,6 +116,17 @@ impl Job {
                 command.env(real_key, value);
             }
         }
+    }
+
+    fn save_request_body(&self, base: &PathBuf) -> FisherResult<PathBuf> {
+        let mut path = base.clone();
+        path.push("request_body");
+
+        // Write the request body on disk
+        let mut file = try!(fs::File::create(&path));
+        try!(write!(file, "{}\n", self.request.body));
+
+        Ok(path)
     }
 }
 
