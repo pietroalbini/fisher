@@ -133,6 +133,9 @@ impl Job {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::fs;
+
     use hooks;
     use web::requests;
 
@@ -141,29 +144,54 @@ mod tests {
     use super::Job;
 
 
-    fn create_job(hook_name: &str, req: requests::Request) -> Job {
-        // Get the example hook
-        let hooks_dir = sample_hooks();
-        let hooks = hooks::collect(&hooks_dir.to_str().unwrap().to_string())
-                                  .unwrap();
-        let hook = hooks.get(&hook_name.to_string()).unwrap();
+    struct TestEnv {
+        hooks_dir: String,
+        hooks: HashMap<String, hooks::Hook>,
+    }
 
-        // Get the JobHook
-        let job_hook = hook.validate(&req).unwrap();
+    impl TestEnv {
 
-        Job::new(job_hook, req)
+        fn new() -> Self {
+            let hooks_dir = sample_hooks().to_str().unwrap().to_string();
+            let hooks = hooks::collect(&hooks_dir).unwrap();
+
+            TestEnv {
+                hooks_dir: hooks_dir,
+                hooks: hooks,
+            }
+        }
+
+        fn create_job(&self, hook_name: &str, req: requests::Request) -> Job {
+            // Get the JobHook
+            let hook = self.hooks.get(&hook_name.to_string()).unwrap();
+            let job_hook = hook.validate(&req).unwrap();
+
+            Job::new(job_hook, req)
+        }
+
+        fn cleanup(&self) {
+            let _ = fs::remove_dir_all(&self.hooks_dir);
+        }
     }
 
 
     #[test]
     fn test_job_creation() {
-        let _ = create_job("example", dummy_request());
+        let env = TestEnv::new();
+
+        let _ = env.create_job("example", dummy_request());
+
+        env.cleanup();
     }
 
 
     #[test]
     fn test_job_hook_name() {
-        let job = create_job("example", dummy_request());
+        let env = TestEnv::new();
+
+        let job = env.create_job("example", dummy_request());
         assert_eq!(job.hook_name(), "example".to_string());
+
+        env.cleanup();
     }
 }
