@@ -63,8 +63,15 @@ pub fn validate(req: &Request, _config: &str) -> bool {
 }
 
 
-pub fn env(_req: &Request, _config: &str) -> HashMap<String, String> {
-    HashMap::new()
+pub fn env(req: &Request, _config: &str) -> HashMap<String, String> {
+    let mut res = HashMap::new();
+
+    // Return the provided env
+    if let Some(env) = req.params.get("env") {
+        res.insert("ENV".to_string(), env.clone());
+    }
+
+    res
 }
 
 
@@ -131,6 +138,16 @@ mod tests {
 
     #[test]
     fn test_env() {
+        // Without the env param
         assert_eq!(env(&dummy_request(), ""), HashMap::new());
+
+        // With the env param
+        let mut req = dummy_request();
+        req.params.insert("env".to_string(), "test".to_string());
+
+        let mut should_be = HashMap::new();
+        should_be.insert("ENV".to_string(), "test".to_string());
+
+        assert_eq!(env(&req, ""), should_be);
     }
 }
