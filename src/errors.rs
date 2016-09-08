@@ -27,6 +27,7 @@ pub type FisherResult<T> = Result<T, FisherError>;
 pub enum ErrorKind {
     ProviderNotFound(String),
     ProviderConfigError(String),
+    InvalidInput(String),
     HookExecutionFailed(Option<i32>, Option<i32>),
 
     // Derived errors
@@ -98,6 +99,8 @@ impl Error for FisherError {
                 "hook returned non-zero exit code",
             ErrorKind::ProviderConfigError(..) =>
                 "provider configuration error",
+            ErrorKind::InvalidInput(..) =>
+                "invalid input",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -137,6 +140,9 @@ impl fmt::Display for FisherError {
                     // This shouldn't happen...
                     "hook execution failed".to_string()
                 },
+
+            ErrorKind::InvalidInput(ref error) =>
+                format!("invalid input: {}", error),
 
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),
