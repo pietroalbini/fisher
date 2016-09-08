@@ -46,7 +46,7 @@ pub fn testing_provider() -> Provider {
 
 
 macro_rules! create_hook {
-    ($tempdir:expr, $name:expr, $( $line:expr ),* ) => {
+    ($tempdir:expr, $name:expr, $( $line:expr ),* ) => {{
         use std::fs;
         use std::os::unix::fs::OpenOptionsExt;
         use std::io::Write;
@@ -67,7 +67,7 @@ macro_rules! create_hook {
             )*
         ));
         res.unwrap();
-    };
+    }};
 }
 
 
@@ -79,6 +79,22 @@ pub fn sample_hooks() -> PathBuf {
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
         r#"echo "Hello world""#
+    );
+
+    create_hook!(tempdir, "failing.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"exit 1"#
+    );
+
+    create_hook!(tempdir, "jobs-details.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"b="${FISHER_TESTING_ENV}""#,
+        r#"echo "executed" > "${b}/executed""#,
+        r#"env > "${b}/env""#,
+        r#"pwd > "${b}/pwd""#,
+        r#"cat "${FISHER_REQUEST_BODY}" > "${b}/request_body""#
     );
 
     tempdir

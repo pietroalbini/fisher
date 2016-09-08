@@ -135,17 +135,19 @@ impl Job {
 mod tests {
     use std::collections::HashMap;
     use std::fs;
+    use std::env;
 
     use hooks;
     use web::requests;
 
     use utils::testing::*;
+    use utils;
 
-    use super::Job;
+    use super::{DEFAULT_ENV, Job};
 
 
     struct TestEnv {
-        hooks_dir: String,
+        to_delete: Vec<String>,
         hooks: HashMap<String, hooks::Hook>,
     }
 
@@ -156,7 +158,7 @@ mod tests {
             let hooks = hooks::collect(&hooks_dir).unwrap();
 
             TestEnv {
-                hooks_dir: hooks_dir,
+                to_delete: vec![hooks_dir],
                 hooks: hooks,
             }
         }
@@ -170,7 +172,13 @@ mod tests {
         }
 
         fn cleanup(&self) {
-            let _ = fs::remove_dir_all(&self.hooks_dir);
+            for dir in &self.to_delete {
+                let _ = fs::remove_dir_all(dir);
+            }
+        }
+
+        fn delete_also(&mut self, path: &str) {
+            self.to_delete.push(path.to_string());
         }
     }
 
@@ -191,6 +199,122 @@ mod tests {
 
         let job = env.create_job("example", dummy_request());
         assert_eq!(job.hook_name(), "example".to_string());
+
+        env.cleanup();
+    }
+
+    #[test]
+    fn test_job_execution() {
+        let env = TestEnv::new();
+
+        // The "example" hook should be processed without problems
+        let job = env.create_job("example", dummy_request());
+        assert!(job.process().is_ok());
+
+        let job = env.create_job("failing", dummy_request());
+        assert!(job.process().is_err());
+
+        env.cleanup();
+    }
+
+    #[test]
+    fn test_job_environment() {
+        macro_rules! read {
+            ($output:expr, $name:expr) => {{
+                use std::fs;
+                use std::io::Read;
+
+                let file_name = format!("{}/{}", $output, $name);
+                let mut file = fs::File::open(&file_name).unwrap();
+
+                let mut buf = String::new();
+                file.read_to_string(&mut buf).unwrap();
+
+                buf
+            }};
+        }
+
+        let mut env = TestEnv::new();
+
+        // Create a temp directory which will contain the build
+        let output_path = utils::create_temp_dir().unwrap();
+        let output = output_path.to_str().unwrap();
+        env.delete_also(&output);
+
+        // Create a new dummy request
+        let mut req = dummy_request();
+        req.body = "a body!".to_string();
+        req.params.insert("env".to_string(), output.to_string());
+
+        // Process the job
+        let job = env.create_job("jobs-details", req);
+        assert!(job.process().is_ok());
+
+        // The hook must be executed
+        assert_eq!(read!(output, "executed"), "executed\n".to_string());
+
+        // The request body must be present
+        assert_eq!(read!(output, "request_body"), "a body!\n".to_string());
+
+        // Get the used working directory
+        let pwd_raw = read!(output, "pwd");
+        let working_directory = pwd_raw.trim();
+
+        // Parse the environment file
+        let raw_env = read!(output, "env");
+        let job_env = utils::parse_env(&raw_env).unwrap();
+
+        // Get all the required environment variables
+        let mut required_env = {
+            let mut res: Vec<&str> = DEFAULT_ENV.iter().map(|i| {
+                i.as_str()
+            }).collect();
+
+            // Those are from the provider
+            res.push("FISHER_TESTING_ENV");
+
+            // Those are added by the processor
+            res.push("HOME");
+            res.push("FISHER_REQUEST_BODY");
+
+            // Those are extra variables added by bash
+            res.push("PWD");
+            res.push("SHLVL");
+            res.push("_");
+
+            res
+        };
+
+        // Check if the right environment variables are present
+        let mut found = vec![];
+        for (key, _) in &job_env {
+            if required_env.contains(key) {
+                found.push(key);
+            } else {
+                panic!("Extra env variable: {}", key);
+            }
+        }
+        assert_eq!(required_env.sort(), found.sort());
+
+        // The env var generated from the provider must be present
+        assert_eq!(
+            *job_env.get("FISHER_TESTING_ENV").unwrap(),
+            output.to_string()
+        );
+
+        // $HOME must be the current directory
+        assert_eq!(
+            *job_env.get("HOME").unwrap(),
+            working_directory
+        );
+
+        // The value of the environment variables forwarded from the current
+        // env must have the same content of the current env
+        for key in DEFAULT_ENV.iter() {
+            assert_eq!(
+                env::var(key).unwrap().as_str(),
+                *job_env.get(key.as_str()).unwrap());
+        }
 
         env.cleanup();
     }
