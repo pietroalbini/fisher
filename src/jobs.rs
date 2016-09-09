@@ -24,7 +24,7 @@ use hooks::Hook;
 use utils;
 use web::requests::Request;
 use providers::HookProvider;
-use errors::{FisherError, ErrorKind, FisherResult};
+use errors::{ErrorKind, FisherResult};
 
 
 lazy_static! {
@@ -83,10 +83,10 @@ impl Job {
         // Execute the hook
         let output = try!(command.output());
         if ! output.status.success() {
-            return Err(FisherError::new(ErrorKind::HookExecutionFailed(
+            return Err(ErrorKind::HookExecutionFailed(
                 output.status.code(),
                 output.status.signal(),
-            )));
+            ).into());
         }
 
         // Remove the temp directory

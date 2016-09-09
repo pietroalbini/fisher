@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use errors::{FisherResult, FisherError, ErrorKind};
+use errors::{FisherResult, ErrorKind};
 
 
 pub fn parse_env(content: &str) -> FisherResult<HashMap<&str, &str>> {
@@ -29,9 +29,9 @@ pub fn parse_env(content: &str) -> FisherResult<HashMap<&str, &str>> {
 
         let parts: Vec<&str> = line.splitn(2, "=").take(2).collect();
         if parts.len() != 2 {
-            return Err(FisherError::new(ErrorKind::InvalidInput(
+            return Err(ErrorKind::InvalidInput(
                 format!("Invalid env received: {}", line)
-            )));
+            ).into());
         }
 
         let key = parts.get(0).unwrap();

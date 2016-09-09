@@ -16,7 +16,6 @@
 use std::io;
 use std::fmt;
 use std::error::Error;
-use std::convert::From;
 
 use rustc_serialize::json;
 
@@ -185,6 +184,14 @@ impl fmt::Debug for FisherError {
 
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "<FisherError: {}>", self.description())
+    }
+}
+
+
+impl From<ErrorKind> for FisherError {
+
+    fn from(error: ErrorKind) -> Self {
+        FisherError::new(error)
     }
 }
 

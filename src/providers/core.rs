@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 
 use web::requests::{Request, RequestType};
-use errors::{FisherResult, FisherError, ErrorKind};
+use errors::{FisherResult, ErrorKind};
 use utils::CopyToClone;
 
 
@@ -49,7 +49,7 @@ impl Providers {
             },
             None => {
                 let kind = ErrorKind::ProviderNotFound(name.to_string());
-                Err(FisherError::new(kind))
+                Err(kind.into())
             },
         }
     }
