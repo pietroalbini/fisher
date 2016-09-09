@@ -56,8 +56,8 @@ pub fn check_config(input: &str) -> FisherResult<()> {
             if ! GITHUB_EVENTS.contains(&event.as_ref()) {
                 // Return an error if the event doesn't exist
                 return Err(FisherError::new(
-                    ErrorKind::ProviderConfigError(format!(
-                        "Invalid GitHub event: {}", event
+                    ErrorKind::InvalidInput(format!(
+                        r#""{}" is not a GitHub event"#, event
                     ))
                 ));
             }
