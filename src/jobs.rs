@@ -20,9 +20,10 @@ use std::env;
 use std::path::PathBuf;
 use std::io::Write;
 
-use hooks::JobHook;
+use hooks::Hook;
 use utils;
 use web::requests::Request;
+use providers::HookProvider;
 use errors::{FisherError, ErrorKind, FisherResult};
 
 
@@ -41,25 +42,28 @@ lazy_static! {
 
 #[derive(Clone)]
 pub struct Job {
-    hook: JobHook,
+    hook: Hook,
+    provider: Option<HookProvider>,
     request: Request,
 }
 
 impl Job {
 
-    pub fn new(hook: JobHook, request: Request) -> Job {
+    pub fn new(hook: Hook, provider: Option<HookProvider>, request: Request)
+               -> Job {
         Job {
             hook: hook,
+            provider: provider,
             request: request,
         }
     }
 
-    pub fn hook_name(&self) -> String {
+    pub fn hook_name(&self) -> &str {
         self.hook.name()
     }
 
     pub fn process(&self) -> FisherResult<()> {
-        let mut command = process::Command::new(self.hook.exec());
+        let mut command = process::Command::new(&self.hook.exec());
 
         // Prepare the command's environment variables
         self.prepare_env(&mut command);
@@ -108,10 +112,10 @@ impl Job {
         }
 
         // Apply the hook-specific environment
-        if let Some(ref provider_name) = self.hook.provider_name() {
-            for (key, value) in self.hook.env(&self.request) {
+        if let Some(ref provider) = self.provider {
+            for (key, value) in provider.env(&self.request) {
                 let real_key = format!(
-                    "FISHER_{}_{}", provider_name.to_uppercase(), key
+                    "FISHER_{}_{}", provider.name().to_uppercase(), key
                 );
                 command.env(real_key, value);
             }
@@ -166,9 +170,9 @@ mod tests {
         fn create_job(&self, hook_name: &str, req: requests::Request) -> Job {
             // Get the JobHook
             let hook = self.hooks.get(&hook_name.to_string()).unwrap();
-            let job_hook = hook.validate(&req).unwrap();
+            let (_, provider) = hook.validate(&req);
 
-            Job::new(job_hook, req)
+            Job::new(hook.clone(), provider, req)
         }
 
         fn cleanup(&self) {

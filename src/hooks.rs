@@ -20,8 +20,8 @@ use std::io::{BufReader, BufRead};
 
 use regex::Regex;
 
-use providers;
-use web::requests::{Request, RequestType};
+use providers::{self, HookProvider};
+use web::requests::Request;
 use errors::FisherResult;
 
 
@@ -92,73 +92,26 @@ impl Hook {
         Ok(result)
     }
 
-    pub fn validate(&self, req: &Request) -> Option<JobHook> {
+    pub fn validate(&self, req: &Request) -> (bool, Option<HookProvider>) {
         if self.providers.len() > 0 {
             // Check every provider if they're present
             for provider in &self.providers {
                 if provider.validate(&req) {
-                    return Some(JobHook::new(
-                        self.clone(), Some(provider.clone())
-                    ));
+                    return (true, Some(provider.clone()))
                 }
             }
-            None
+            (false, None)
         } else {
-            Some(JobHook::new(self.clone(), None))
-        }
-    }
-}
-
-
-#[derive(Clone)]
-pub struct JobHook {
-    hook: Hook,
-    provider: Option<providers::HookProvider>,
-}
-
-impl JobHook {
-
-    fn new(hook: Hook, provider: Option<providers::HookProvider>) -> Self {
-        JobHook {
-            hook: hook,
-            provider: provider,
+            (true, None)
         }
     }
 
-    pub fn name(&self) -> String {
-        self.hook.name.clone()
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
-    pub fn exec(&self) -> String {
-        self.hook.exec.clone()
-    }
-
-    pub fn request_type(&self, req: &Request) -> RequestType {
-        // If there is a provider return what it says, else assume the request
-        // type is RequestType::ExecuteHook
-        if let Some(ref provider) = self.provider {
-            provider.request_type(req)
-        } else {
-            RequestType::ExecuteHook
-        }
-    }
-
-    pub fn env(&self, req: &Request) -> HashMap<String, String> {
-        // If there is a provider return the derived environment, else an
-        // empty one
-        if let Some(ref provider) = self.provider {
-            provider.env(req)
-        } else {
-            HashMap::new()
-        }
-    }
-
-    pub fn provider_name(&self) -> Option<&str> {
-        if let Some(ref provider) = self.provider {
-            Some(provider.name())
-        } else {
-            None
-        }
+    pub fn exec(&self) -> &str {
+        &self.exec
     }
 }
 

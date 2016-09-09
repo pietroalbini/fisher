@@ -192,7 +192,7 @@ impl Processor {
 
             // Display the error if there is one
             if let Err(mut error) = result {
-                error.set_hook(job.hook_name());
+                error.set_hook(job.hook_name().to_string());
                 let _ = errors::print_err::<()>(Err(error));
             }
 

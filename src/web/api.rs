@@ -149,15 +149,24 @@ impl WebAPI {
 
                 let request = convert_request(&mut req);
 
-                if let Some(job_hook) = hook.validate(&request) {
+                let (validated, provider) = hook.validate(&request);
+                if validated {
+                    // Get the request type
+                    let request_type;
+                    if let Some(ref real_provider) = provider {
+                        request_type = real_provider.request_type(&request);
+                    } else {
+                        request_type = RequestType::ExecuteHook;
+                    }
+
                     // Do something different based on the request type
-                    match job_hook.request_type(&request) {
+                    match request_type {
                         // Don't do anything when it's only a ping
                         RequestType::Ping => {},
 
                         // Queue a job if the hook should be executed
                         RequestType::ExecuteHook => {
-                            let job = Job::new(job_hook, request);
+                            let job = Job::new(hook, provider, request);
                             sender.send(ProcessorInput::Job(job));
                         },
                     }
