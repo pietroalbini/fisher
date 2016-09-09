@@ -46,6 +46,7 @@ BIN_NAME="fisher"
 TARGETS=( "x86_64-unknown-linux-gnu" "i686-unknown-linux-gnu" )
 PACKAGES_INCLUDE_FILES=(
     "LICENSE"
+    "CHANGELOG.md"
     "README.md"
 )
 
