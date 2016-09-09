@@ -85,6 +85,7 @@ impl FisherError {
         self.hook.clone()
     }
 
+    #[cfg(test)]
     pub fn kind(&self) -> &ErrorKind {
         &self.kind
     }
