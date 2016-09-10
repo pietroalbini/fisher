@@ -23,9 +23,10 @@ nickel = { git="https://github.com/nickel-org/nickel.rs.git", rev="b77e4ca" }
 ring = { version="^0.4", optional=true }
 
 [features]
-default = ["provider-github"]
+default = ["provider-github", "provider-gitlab"]
 
 provider-github = ["ring"]
+provider-gitlab = []
 
 [profile.release]
 lto = true

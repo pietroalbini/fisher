@@ -6,6 +6,7 @@ This document contains what changed in each release of Fisher.
 
 *Not yet released.*
 
+* GH-1: Add support for receiving hooks from **GitLab**
 * Improve unit testing coverage of the project
 
 ### Fisher 1.0.0-beta.1
