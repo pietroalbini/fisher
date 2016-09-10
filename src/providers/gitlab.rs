@@ -99,11 +99,6 @@ pub fn validate(req: &Request, config: &str) -> bool {
         if ! events.contains(&event.to_string()) {
             return false;
         }
-    } else {
-        // The event exists
-        if ! GITLAB_EVENTS.contains(&event) {
-            return false;
-        }
     }
 
     // Check if the JSON body is valid
@@ -272,7 +267,7 @@ mod tests {
         // Without a list of allowed events
         assert!(validate(&with_event("Push Hook"), "{}"));
         assert!(validate(&with_event("Build Hook"), "{}"));
-        assert!(! validate(&with_event("Strange Hook"), "{}"));
+        assert!(validate(&with_event("Strange Hook"), "{}"));
     }
 
 
