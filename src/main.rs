@@ -36,16 +36,26 @@ mod jobs;
 mod web;
 
 use chan_signal::Signal;
-use ansi_term::Colour;
+use ansi_term::{Style, Colour};
 
 
 fn get_hooks(base: &String) -> hooks::Hooks {
     // Actually collect hooks
     let hooks = errors::unwrap(hooks::collect(base));
 
-    println!("Total hooks collected: {}", hooks.len());
+    println!("{} ({} total)",
+        Style::new().bold().paint("Collected hooks:"),
+        hooks.len()
+    );
 
-    hooks
+    // Show the sorted list of hooks
+    let mut keys: Vec<&String> = hooks.keys().collect();
+    keys.sort();
+    for name in &keys {
+        println!("- {}", name);
+    }
+
+    hooks.clone()
 }
 
 
