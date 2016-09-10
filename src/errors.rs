@@ -23,6 +23,7 @@ use rustc_serialize::json;
 pub type FisherResult<T> = Result<T, FisherError>;
 
 
+#[derive(Debug)]
 pub enum ErrorKind {
     ProviderNotFound(String),
     InvalidInput(String),
@@ -34,6 +35,7 @@ pub enum ErrorKind {
 }
 
 
+#[derive(Debug)]
 pub struct FisherError {
     kind: ErrorKind,
 
@@ -180,11 +182,16 @@ impl fmt::Display for FisherError {
     }
 }
 
-impl fmt::Debug for FisherError {
 
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<FisherError: {}>", self.description())
-    }
+macro_rules! derive_error {
+    ($from:path, $to:path) => {
+        impl From<$from> for FisherError {
+
+            fn from(error: $from) -> Self {
+                FisherError::new($to(error))
+            }
+        }
+    };
 }
 
 
@@ -196,20 +203,8 @@ impl From<ErrorKind> for FisherError {
 }
 
 
-impl From<io::Error> for FisherError {
-
-    fn from(error: io::Error) -> Self {
-        FisherError::new(ErrorKind::IoError(error))
-    }
-}
-
-
-impl From<json::DecoderError> for FisherError {
-
-    fn from(error: json::DecoderError) -> Self {
-        FisherError::new(ErrorKind::JsonError(error))
-    }
-}
+derive_error!(io::Error, ErrorKind::IoError);
+derive_error!(json::DecoderError, ErrorKind::JsonError);
 
 
 pub fn print_err<T>(result: Result<T, FisherError>) -> Result<T, FisherError> {
