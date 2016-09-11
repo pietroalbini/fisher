@@ -15,6 +15,7 @@
 
 use std::io;
 use std::fmt;
+use std::net;
 use std::error::Error;
 
 use rustc_serialize::json;
@@ -33,6 +34,7 @@ pub enum ErrorKind {
     // Derived errors
     IoError(io::Error),
     JsonError(json::DecoderError),
+    AddrParseError(net::AddrParseError),
 }
 
 
@@ -110,6 +112,8 @@ impl Error for FisherError {
                 error.description(),
             ErrorKind::JsonError(ref error) =>
                 error.description(),
+            ErrorKind::AddrParseError(ref error) =>
+                error.description(),
         }
     }
 
@@ -182,6 +186,9 @@ impl fmt::Display for FisherError {
 
                 format!("JSON error: {}", message)
             },
+
+            ErrorKind::AddrParseError(ref error) =>
+                format!("{}", error),
         };
 
         write!(f, "{}", description)
@@ -211,6 +218,7 @@ impl From<ErrorKind> for FisherError {
 
 derive_error!(io::Error, ErrorKind::IoError);
 derive_error!(json::DecoderError, ErrorKind::JsonError);
+derive_error!(net::AddrParseError, ErrorKind::AddrParseError);
 
 
 pub fn print_err<T>(result: Result<T, FisherError>) -> Result<T, FisherError> {

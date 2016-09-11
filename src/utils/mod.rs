@@ -15,6 +15,7 @@
 
 mod tempdir;
 mod copy_to_clone;
+mod net;
 
 #[cfg(test)]
 mod parse_env;
@@ -25,6 +26,7 @@ pub mod testing;
 
 pub use utils::tempdir::create_temp_dir;
 pub use utils::copy_to_clone::CopyToClone;
+pub use utils::net::parse_forwarded_for;
 
 #[cfg(test)]
 pub use utils::parse_env::parse_env;
