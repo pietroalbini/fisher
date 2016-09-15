@@ -34,74 +34,54 @@ mod errors;
 mod processor;
 mod jobs;
 mod web;
+mod app;
+mod requests;
 
 use chan_signal::Signal;
 use ansi_term::{Style, Colour};
 
 
-fn get_hooks(base: &String) -> hooks::Hooks {
-    // Actually collect hooks
-    let hooks = errors::unwrap(hooks::collect(base));
-
-    println!("{} ({} total)",
-        Style::new().bold().paint("Collected hooks:"),
-        hooks.len()
-    );
-
-    // Show the sorted list of hooks
-    let mut keys: Vec<&String> = hooks.keys().collect();
-    keys.sort();
-    for name in &keys {
-        println!("- {}", name);
-    }
-
-    hooks.clone()
-}
-
-
-fn web_listen(options: &cli::FisherSettings, webapi: &mut web::WebAPI,
-              processor: &processor::ProcessorManager) {
-    // Start the web listener
-    let result = webapi.listen(
-        &options.bind, options.enable_health,
-        processor.sender().unwrap(),
-    );
-
-    match result {
-        Ok(socket) => {
-            println!("{} on {}",
-                Colour::Green.bold().paint("Web API listening"), socket
-            );
-        },
-        Err(error) => {
-            println!("{} on {}: {}",
-                Colour::Red.bold().paint(
-                    "Failed to start the Web API"
-                ), options.bind, error
-            );
-            ::std::process::exit(1);
-        },
-    };
-}
-
-
 fn main() {
     let exit_signal = chan_signal::notify(&[Signal::INT, Signal::TERM]);
 
+    // Load the options from the CLI arguments
     let options = cli::parse();
-    let hooks = get_hooks(&options.hooks_dir);
 
-    let mut processor = processor::ProcessorManager::new();
-    let mut webapi = web::WebAPI::new(hooks.clone());
+    // Create a new Fisher instance
+    let mut factory = app::AppFactory::new(&options);
 
-    // Start everything
-    processor.start(options.max_threads);
-    web_listen(&options, &mut webapi, &processor);
+    // Collect all the hooks from the directory
+    let hooks = errors::unwrap(hooks::collect(&options.hooks_dir));
+    println!("{} ({} total)",
+        Style::new().bold().paint("Collected hooks:"), hooks.len(),
+    );
+
+    // Load all the hooks in the Fisher instance
+    let mut hooks_names: Vec<&String> = hooks.keys().collect();
+    hooks_names.sort();
+    for name in &hooks_names {
+        factory.add_hook(&name, hooks.get(*name).unwrap().clone());
+        println!("- {}", name);
+    }
+
+    // Start Fisher
+    let app_result = factory.start();
+    if let Err(error) = app_result {
+        println!("{} on {}: {}",
+            Colour::Red.bold().paint("Failed to start the Web API"),
+            options.bind, error,
+        );
+        ::std::process::exit(1);
+    }
+    let mut app = app_result.unwrap();
+
+    println!("{} on {}",
+        Colour::Green.bold().paint("Web API listening"), app.web_address(),
+    );
 
     // Wait until SIGINT or SIGTERM is received
     exit_signal.recv().unwrap();
 
-    // Stop everything
-    webapi.stop();
-    processor.stop();
+    // Stop Fisher
+    app.stop();
 }

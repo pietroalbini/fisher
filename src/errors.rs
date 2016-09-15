@@ -28,6 +28,7 @@ pub enum ErrorKind {
     ProviderNotFound(String),
     InvalidInput(String),
     HookExecutionFailed(Option<i32>, Option<i32>),
+    WebApiStartFailed(String),
 
     // Derived errors
     IoError(io::Error),
@@ -103,6 +104,8 @@ impl Error for FisherError {
                 "hook returned non-zero exit code",
             ErrorKind::InvalidInput(..) =>
                 "invalid input",
+            ErrorKind::WebApiStartFailed(..) =>
+                "failed to start the Web API",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -142,6 +145,9 @@ impl fmt::Display for FisherError {
 
             ErrorKind::InvalidInput(ref error) =>
                 format!("invalid input: {}", error),
+
+            ErrorKind::WebApiStartFailed(ref error) =>
+                format!("{}", error),
 
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),

@@ -14,10 +14,21 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashMap;
+use std::time::Duration;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::path::PathBuf;
+use std::fs;
 
-use web::requests::Request;
+use chan;
+use hyper::client as hyper;
+use hyper::method::Method;
+
+use app::FisherOptions;
+use hooks::{self, Hooks};
+use jobs::Job;
+use web::WebApi;
+use requests::Request;
+use processor::{ProcessorInput, HealthDetails};
 use providers::{Provider, testing};
 use utils;
 
@@ -98,4 +109,172 @@ pub fn sample_hooks() -> PathBuf {
     );
 
     tempdir
+}
+
+
+pub struct WebApiInstance<'a> {
+    inst: WebApi<'a>,
+
+    url: String,
+    client: hyper::Client,
+    input_recv: chan::Receiver<ProcessorInput>,
+}
+
+impl<'a> WebApiInstance<'a> {
+
+    pub fn new(hooks: &'a Hooks, health: bool) -> Self {
+        // Create a new instance of WebApi
+        let mut inst = WebApi::new(hooks);
+
+        // Create the input channel
+        let (input_send, input_recv) = chan::async();
+
+        // Set the options
+        let options = FisherOptions {
+            bind: "127.0.0.1:0".to_string(),
+            enable_health: health,
+
+            .. FisherOptions::defaults()
+        };
+
+        // Start the web server
+        let addr = inst.listen(&options, input_send).unwrap();
+
+        // Create the HTTP client
+        let url = format!("http://{}", addr);
+        let client = hyper::Client::new();
+
+        WebApiInstance {
+            inst: inst,
+
+            url: url,
+            client: client,
+            input_recv: input_recv,
+        }
+    }
+
+    pub fn request(&mut self, method: Method, url: &str)
+                   -> hyper::RequestBuilder {
+        // Create the HTTP request
+        self.client.request(method, &format!("{}{}", self.url, url))
+    }
+
+    pub fn processor_input(&self) -> Option<ProcessorInput> {
+        let input_recv = &self.input_recv;
+
+        // This returns Some only if there is something right now
+        chan_select! {
+            default => {
+                return None;
+            },
+            input_recv.recv() -> input => {
+                return Some(input.unwrap());
+            },
+        };
+    }
+
+    pub fn next_health(&self, details: HealthDetails) -> NextHealthCheck {
+        let input_chan = self.input_recv.clone();
+        let (result_send, result_recv) = chan::async();
+
+        ::std::thread::spawn(move || {
+            let input = input_chan.recv().unwrap();
+
+            if let ProcessorInput::HealthStatus(ref sender) = input {
+                // Send the HealthDetails we want
+                sender.send(details);
+
+                // Everything was OK
+                result_send.send(None);
+            } else {
+                result_send.send(Some(
+                    "Wrong kind of ProcessorInput received!".to_string()
+                ));
+            }
+        });
+
+        NextHealthCheck::new(result_recv)
+    }
+
+    pub fn stop(&mut self) -> bool {
+        self.inst.stop()
+    }
+}
+
+
+pub struct TestingEnv {
+    hooks: Hooks,
+    remove_dirs: Vec<String>,
+}
+
+impl TestingEnv {
+
+    pub fn new() -> Self {
+        let hooks_dir = sample_hooks().to_str().unwrap().to_string();
+
+        TestingEnv {
+            hooks: hooks::collect(&hooks_dir).unwrap(),
+            remove_dirs: vec![hooks_dir],
+        }
+    }
+
+    // CLEANUP
+
+    pub fn delete_also(&mut self, path: &str) {
+        self.remove_dirs.push(path.to_string());
+    }
+
+    pub fn cleanup(&self) {
+        // Remove all the directories
+        for dir in &self.remove_dirs {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
+    // JOBS UTILITIES
+
+    pub fn create_job(&self, hook_name: &str, req: Request) -> Job {
+        let hook = self.hooks.get(&hook_name.to_string()).unwrap();
+        let (_, provider) = hook.validate(&req);
+
+        Job::new(hook.clone(), provider, req)
+    }
+
+    // WEB TESTING
+
+    pub fn start_web(&self, health: bool) -> WebApiInstance {
+        WebApiInstance::new(&self.hooks, health)
+    }
+}
+
+
+pub struct NextHealthCheck {
+    result_recv: chan::Receiver<Option<String>>,
+}
+
+impl NextHealthCheck {
+
+    fn new(result_recv: chan::Receiver<Option<String>>) -> Self {
+        NextHealthCheck {
+            result_recv: result_recv,
+        }
+    }
+
+    pub fn check(&self) {
+        let result_recv = &self.result_recv;
+
+        let timeout = chan::after(Duration::from_secs(5));
+
+        chan_select! {
+            timeout.recv() => {
+                panic!("No ProcessorInput received!");
+            },
+            result_recv.recv() -> result => {
+                // Forward panics
+                if let Some(message) = result.unwrap() {
+                    panic!(message);
+                }
+            },
+        };
+    }
 }

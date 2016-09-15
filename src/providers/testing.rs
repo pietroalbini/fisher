@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 
 use errors::{FisherResult, FisherError, ErrorKind};
-use web::requests::{Request, RequestType};
+use requests::{Request, RequestType};
 
 
 pub fn check_config(config: &str) -> FisherResult<()> {
@@ -80,7 +80,7 @@ mod tests {
     use std::collections::HashMap;
 
     use utils::testing::*;
-    use web::requests::RequestType;
+    use requests::RequestType;
 
     use super::{check_config, request_type, validate, env};
 

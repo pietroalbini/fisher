@@ -21,7 +21,7 @@ use std::io::{BufReader, BufRead};
 use regex::Regex;
 
 use providers::{self, HookProvider};
-use web::requests::Request;
+use requests::Request;
 use errors::FisherResult;
 
 
@@ -116,7 +116,7 @@ impl Hook {
 }
 
 
-pub fn collect<'a>(base: &String) -> FisherResult<Hooks> {
+pub fn collect(base: &str) -> FisherResult<Hooks> {
     let mut result = HashMap::new();
 
     for entry in try!(fs::read_dir(&base)) {

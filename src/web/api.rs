@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use chan;
@@ -23,24 +22,25 @@ use hyper::method::Method;
 use hyper::header;
 use rustc_serialize::json::ToJson;
 
-use hooks::Hook;
+use app::FisherOptions;
+use hooks::{Hooks, Hook};
 use processor::{ProcessorInput, SenderChan};
 use jobs::Job;
 use web::responses::JsonResponse;
-use web::requests::{RequestType, convert_request};
+use requests::{RequestType, convert_request};
 
 
-pub struct WebAPI {
+pub struct WebApi<'a> {
     stop_chan: Option<chan::Sender<()>>,
     sender_chan: Option<SenderChan>,
     stop: bool,
-    hooks: HashMap<String, Hook>,
+    hooks: &'a Hooks,
 }
 
-impl WebAPI {
+impl<'a> WebApi<'a> {
 
-    pub fn new(hooks: HashMap<String, Hook>) -> WebAPI {
-        WebAPI {
+    pub fn new(hooks: &'a Hooks) -> Self {
+        WebApi {
             stop_chan: None,
             sender_chan: None,
             stop: false,
@@ -48,15 +48,15 @@ impl WebAPI {
         }
     }
 
-    pub fn listen(&mut self, bind: &str, enable_health: bool,
-                  sender: SenderChan) -> Result<SocketAddr, String> {
+    pub fn listen(&mut self, options: &FisherOptions, sender: SenderChan)
+                  -> Result<SocketAddr, String> {
         // Store the sender channel
         self.sender_chan = Some(sender);
 
         // This is to fix lifetime issues with the thread below
-        let bind = bind.to_string();
+        let bind = options.bind.to_string();
 
-        let app = self.configure_nickel(enable_health);
+        let app = self.configure_nickel(&options);
 
         // This channel is used so it's possible to stop the listener
         let (send_stop, recv_stop) = chan::sync(0);
@@ -111,7 +111,7 @@ impl WebAPI {
         }
     }
 
-    fn configure_nickel(&self, enable_health: bool) -> Nickel {
+    fn configure_nickel(&self, options: &FisherOptions) -> Nickel {
         let mut app = Nickel::new();
 
         // Disable the default message nickel prints on stdout
@@ -182,7 +182,7 @@ impl WebAPI {
 
 
         // Health reporting can be disabled by the user
-        if enable_health {
+        if options.enable_health {
             let sender = self.sender_chan.clone().unwrap();
 
             app.get("/health", middleware! {
@@ -224,24 +224,27 @@ mod tests {
     use hyper::method::Method;
     use rustc_serialize::json::Json;
 
+    use utils::testing::*;
     use processor::{HealthDetails, ProcessorInput};
-    use web::tests::TestInstance;
 
 
     #[test]
     fn test_startup() {
-        let mut inst = TestInstance::new(true);
+        let testing_env = TestingEnv::new();
+        let mut inst = testing_env.start_web(true);
 
         // Test if the Web API is working fine
         let res = inst.request(Method::Get, "/").send().unwrap();
         assert_eq!(res.status, StatusCode::NotFound);
 
-        inst.close();
+        inst.stop();
+        testing_env.cleanup();
     }
 
     #[test]
     fn test_hook_call() {
-        let mut inst = TestInstance::new(true);
+        let testing_env = TestingEnv::new();
+        let mut inst = testing_env.start_web(true);
 
         // It shouldn't be possible to call a non-existing hook
         let res = inst.request(Method::Get, "/hook/invalid")
@@ -279,25 +282,29 @@ mod tests {
         // Even if the last request succeded, there shouldn't be any job
         assert!(inst.processor_input().is_none());
 
-        inst.close();
+        inst.stop();
+        testing_env.cleanup();
     }
 
     #[test]
     fn test_health_disabled() {
         // Create the instance with disabled health status
-        let mut inst = TestInstance::new(false);
+        let testing_env = TestingEnv::new();
+        let mut inst = testing_env.start_web(false);
 
         // It shouldn't be possible to get the health status
         let res = inst.request(Method::Get, "/health").send().unwrap();
         assert_eq!(res.status, StatusCode::Forbidden);
 
-        inst.close();
+        inst.stop();
+        testing_env.cleanup();
     }
 
     #[test]
     fn test_health_enabled() {
         // Create the instance with enabled health status
-        let mut inst = TestInstance::new(true);
+        let testing_env = TestingEnv::new();
+        let mut inst = testing_env.start_web(true);
 
         let check_after = inst.next_health(HealthDetails {
             queue_size: 1,
@@ -328,6 +335,7 @@ mod tests {
         // Check if there were any problems into the next_health thread
         check_after.check();
 
-        inst.close();
+        inst.stop();
+        testing_env.cleanup();
     }
 }

@@ -15,9 +15,5 @@
 
 mod api;
 mod responses;
-pub mod requests;
 
-#[cfg(test)]
-mod tests;
-
-pub use self::api::WebAPI;
+pub use self::api::WebApi;

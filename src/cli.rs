@@ -16,14 +16,7 @@
 use clap::{App, Arg};
 use ansi_term::Colour;
 
-
-#[derive(Clone)]
-pub struct FisherSettings {
-    pub bind: String,
-    pub hooks_dir: String,
-    pub max_threads: u16,
-    pub enable_health: bool,
-}
+use app::FisherOptions;
 
 
 fn create_cli<'a, 'b>() -> App<'a, 'b> {
@@ -54,7 +47,7 @@ fn create_cli<'a, 'b>() -> App<'a, 'b> {
 }
 
 
-pub fn parse() -> FisherSettings {
+pub fn parse() -> FisherOptions {
     let matches = create_cli().get_matches();
 
     let max_threads;
@@ -69,7 +62,7 @@ pub fn parse() -> FisherSettings {
         }
     }
 
-    FisherSettings {
+    FisherOptions {
         bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").to_string(),
         hooks_dir: matches.value_of("hooks").unwrap().to_string(),
         max_threads: max_threads,

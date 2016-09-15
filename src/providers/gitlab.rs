@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use rustc_serialize::json::{self, Json};
 
-use web::requests::{Request, RequestType};
+use requests::{Request, RequestType};
 use errors::{FisherResult, ErrorKind};
 
 
@@ -140,7 +140,7 @@ mod tests {
     use std::collections::HashMap;
 
     use utils::testing::*;
-    use web::requests::{Request, RequestType};
+    use requests::{Request, RequestType};
 
     use super::{GITLAB_EVENTS, check_config, request_type, validate, env,
                 normalize_event_name};

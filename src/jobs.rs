@@ -22,7 +22,7 @@ use std::io::Write;
 
 use hooks::Hook;
 use utils;
-use web::requests::Request;
+use requests::Request;
 use providers::HookProvider;
 use errors::{ErrorKind, FisherResult};
 
@@ -137,59 +137,17 @@ impl Job {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::fs;
     use std::env;
-
-    use hooks;
-    use web::requests;
 
     use utils::testing::*;
     use utils;
 
-    use super::{DEFAULT_ENV, Job};
-
-
-    struct TestEnv {
-        to_delete: Vec<String>,
-        hooks: HashMap<String, hooks::Hook>,
-    }
-
-    impl TestEnv {
-
-        fn new() -> Self {
-            let hooks_dir = sample_hooks().to_str().unwrap().to_string();
-            let hooks = hooks::collect(&hooks_dir).unwrap();
-
-            TestEnv {
-                to_delete: vec![hooks_dir],
-                hooks: hooks,
-            }
-        }
-
-        fn create_job(&self, hook_name: &str, req: requests::Request) -> Job {
-            // Get the JobHook
-            let hook = self.hooks.get(&hook_name.to_string()).unwrap();
-            let (_, provider) = hook.validate(&req);
-
-            Job::new(hook.clone(), provider, req)
-        }
-
-        fn cleanup(&self) {
-            for dir in &self.to_delete {
-                let _ = fs::remove_dir_all(dir);
-            }
-        }
-
-        fn delete_also(&mut self, path: &str) {
-            self.to_delete.push(path.to_string());
-        }
-    }
+    use super::DEFAULT_ENV;
 
 
     #[test]
     fn test_job_creation() {
-        let env = TestEnv::new();
+        let env = TestingEnv::new();
 
         let _ = env.create_job("example", dummy_request());
 
@@ -199,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_job_hook_name() {
-        let env = TestEnv::new();
+        let env = TestingEnv::new();
 
         let job = env.create_job("example", dummy_request());
         assert_eq!(job.hook_name(), "example".to_string());
@@ -209,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_job_execution() {
-        let env = TestEnv::new();
+        let env = TestingEnv::new();
 
         // The "example" hook should be processed without problems
         let job = env.create_job("example", dummy_request());
@@ -238,7 +196,7 @@ mod tests {
             }};
         }
 
-        let mut env = TestEnv::new();
+        let mut env = TestingEnv::new();
 
         // Create a temp directory which will contain the build
         let output_path = utils::create_temp_dir().unwrap();

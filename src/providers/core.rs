@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use web::requests::{Request, RequestType};
+use requests::{Request, RequestType};
 use errors::{FisherResult, ErrorKind};
 use utils::CopyToClone;
 
@@ -152,7 +152,7 @@ mod tests {
     use std::collections::HashMap;
 
     use utils::testing::*;
-    use web::requests::RequestType;
+    use requests::RequestType;
 
     use super::{Providers, HookProvider};
 

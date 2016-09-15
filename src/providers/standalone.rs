@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use rustc_serialize::json;
 
-use web::requests::{Request, RequestType};
+use requests::{Request, RequestType};
 use errors::FisherResult;
 
 
@@ -94,7 +94,7 @@ mod tests {
     use std::collections::HashMap;
 
     use utils::testing::*;
-    use web::requests::RequestType;
+    use requests::RequestType;
 
     use super::{check_config, request_type, validate, env};
 
