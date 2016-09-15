@@ -31,7 +31,7 @@ pub type Hooks = HashMap<String, Hook>;
 
 lazy_static! {
     static ref HEADER_RE: Regex = Regex::new(
-        r"## Fisher-([a-zA-Z]+): (\{.*\})"
+        r"## Fisher-([a-zA-Z]+): (.*)"
     ).unwrap();
 }
 
