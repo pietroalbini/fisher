@@ -30,6 +30,7 @@ pub enum ErrorKind {
     InvalidInput(String),
     HookExecutionFailed(Option<i32>, Option<i32>),
     WebApiStartFailed(String),
+    NotBehindProxy,
 
     // Derived errors
     IoError(io::Error),
@@ -108,6 +109,8 @@ impl Error for FisherError {
                 "invalid input",
             ErrorKind::WebApiStartFailed(..) =>
                 "failed to start the Web API",
+            ErrorKind::NotBehindProxy =>
+                "not behind the proxies",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -152,6 +155,9 @@ impl fmt::Display for FisherError {
 
             ErrorKind::WebApiStartFailed(ref error) =>
                 format!("{}", error),
+
+            ErrorKind::NotBehindProxy =>
+                "not behind the proxies".into(),
 
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),

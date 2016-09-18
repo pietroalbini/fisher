@@ -41,6 +41,11 @@ fn create_cli<'a, 'b>() -> App<'a, 'b> {
         .arg(Arg::with_name("disable_health")
              .long("no-health")
              .help("Disable the /health endpoint"))
+
+        .arg(Arg::with_name("behind_proxies").takes_value(true)
+             .long("behind-proxies")
+             .value_name("PROXIES_COUNT")
+             .help("How much proxies are behind the app"))
     ;
 
     app
@@ -62,10 +67,25 @@ pub fn parse() -> FisherOptions {
         }
     }
 
+    let mut behind_proxies = None;
+    if let Some(count) = matches.value_of("behind_proxies") {
+        match count.parse::<u8>() {
+            Ok(value) => {
+                behind_proxies = Some(value);
+            },
+            Err(_) => {
+                println!("{} The proxies count you provided is not a number",
+                         Colour::Red.bold().paint("Error:"));
+                ::std::process::exit(1);
+            },
+        }
+    }
+
     FisherOptions {
         bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").to_string(),
         hooks_dir: matches.value_of("hooks").unwrap().to_string(),
         max_threads: max_threads,
         enable_health: ! matches.is_present("disable_health"),
+        behind_proxies: behind_proxies,
     }
 }

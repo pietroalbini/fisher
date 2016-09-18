@@ -14,7 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::io::Read;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::collections::HashMap;
 
 use nickel;
@@ -31,7 +31,7 @@ pub enum RequestType {
 
 #[derive(Clone)]
 pub struct Request {
-    pub source: SocketAddr,
+    pub source: IpAddr,
     pub headers: HashMap<String, String>,
     pub params: HashMap<String, String>,
     pub body: String,
@@ -39,7 +39,7 @@ pub struct Request {
 
 
 pub fn convert_request(req: &mut nickel::Request) -> Request {
-    let source = req.origin.remote_addr.clone();
+    let source = req.origin.remote_addr.clone().ip();
 
     // Convert headers from the hyper representation to strings
     let mut headers = HashMap::new();

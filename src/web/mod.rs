@@ -15,5 +15,6 @@
 
 mod api;
 mod responses;
+mod proxies;
 
 pub use self::api::WebApi;

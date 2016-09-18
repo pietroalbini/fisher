@@ -13,27 +13,25 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::collections::HashMap;
 use std::net::IpAddr;
 
-use hyper::header::Headers;
-
 use errors::FisherResult;
+
+
+pub type Headers = HashMap<String, String>;
 
 
 pub fn parse_forwarded_for(headers: &Headers) -> FisherResult<Vec<IpAddr>> {
     let mut result = vec![];
 
-    if let Some(ref header) = headers.get_raw("X-Forwarded-For") {
-        // Get only the first header of them
-        if let Some(ref content) = header.get(0) {
-            // Parse the header content
-            let data = String::from_utf8_lossy(content).to_string();
-            let splitted: Vec<&str> = data.split(",").collect();
+    if let Some(ref header) = headers.get("X-Forwarded-For".into()) {
+        // Parse the header content
+        let splitted: Vec<&str> = header.split(",").collect();
 
-            // Convert everything to instances of IpAddr
-            for address in &splitted {
-                result.push(try!(address.trim().parse::<IpAddr>()));
-            }
+        // Convert everything to instances of IpAddr
+        for address in &splitted {
+            result.push(try!(address.trim().parse::<IpAddr>()));
         }
     }
 
@@ -45,9 +43,7 @@ pub fn parse_forwarded_for(headers: &Headers) -> FisherResult<Vec<IpAddr>> {
 mod tests {
     use std::net::IpAddr;
 
-    use hyper::header::Headers;
-
-    use super::parse_forwarded_for;
+    use super::{Headers, parse_forwarded_for};
 
 
     #[test]
@@ -57,7 +53,7 @@ mod tests {
 
         // Test with a single IP address
         let mut headers = Headers::new();
-        headers.set_raw("X-Forwarded-For", vec![b"127.0.0.1".to_vec()]);
+        headers.insert("X-Forwarded-For".into(), "127.0.0.1".into());
         assert_eq!(
             parse_forwarded_for(&headers).unwrap(),
             vec!["127.0.0.1".parse::<IpAddr>().unwrap()]
@@ -65,9 +61,9 @@ mod tests {
 
         // Test with multiple IP addresses
         let mut headers = Headers::new();
-        headers.set_raw(
-            "X-Forwarded-For",
-            vec![b"127.0.0.1, 10.0.0.1".to_vec()]
+        headers.insert(
+            "X-Forwarded-For".into(),
+            "127.0.0.1, 10.0.0.1".into()
         );
         assert_eq!(
             parse_forwarded_for(&headers).unwrap(),
@@ -79,9 +75,9 @@ mod tests {
 
         // Test with a non-IP address
         let mut headers = Headers::new();
-        headers.set_raw(
-            "X-Forwarded-For",
-            vec![b"127.0.0.1, hey, 10.0.0.1".to_vec()]
+        headers.insert(
+            "X-Forwarded-For".into(),
+            "127.0.0.1, hey, 10.0.0.1".into()
         );
         assert!(parse_forwarded_for(&headers).is_err());
     }

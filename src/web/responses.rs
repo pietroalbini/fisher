@@ -17,12 +17,14 @@ use std::collections::{BTreeMap};
 
 use rustc_serialize::json::{Json, ToJson};
 
+use errors::FisherError;
 use processor::HealthDetails;
 
 
 pub enum JsonResponse {
     NotFound,
     Forbidden,
+    BadRequest(FisherError),
     Ok,
     HealthStatus(HealthDetails),
 }
@@ -35,12 +37,17 @@ impl ToJson for JsonResponse {
         map.insert("status".to_string(), match *self {
             JsonResponse::NotFound => "not_found",
             JsonResponse::Forbidden => "forbidden",
+            JsonResponse::BadRequest(..) => "bad_request",
             JsonResponse::Ok => "ok",
             JsonResponse::HealthStatus(..) => "ok"
         }.to_string().to_json());
 
         if let JsonResponse::HealthStatus(ref details) = *self {
             map.insert("result".to_string(), details.to_json());
+        }
+
+        if let JsonResponse::BadRequest(ref error) = *self {
+            map.insert("error_msg".into(), format!("{}", error).to_json());
         }
 
         Json::Object(map)
@@ -53,6 +60,7 @@ mod tests {
     use rustc_serialize::json::ToJson;
 
     use processor::HealthDetails;
+    use errors::{FisherError, ErrorKind};
     use super::JsonResponse;
 
 
@@ -82,6 +90,31 @@ mod tests {
         assert_eq!(
             obj.get("status").unwrap().as_string().unwrap(),
             "forbidden".to_string()
+        );
+    }
+
+
+    #[test]
+    fn test_bad_request() {
+        // This is just a dummy error
+        let error = FisherError::new(ErrorKind::NotBehindProxy);
+        let error_msg = format!("{}", error);
+
+        let response = JsonResponse::BadRequest(error).to_json();
+
+        // The result must be an object
+        let obj = response.as_object().unwrap();
+
+        // The status must be "forbidden"
+        assert_eq!(
+            obj.get("status").unwrap().as_string().unwrap(),
+            "bad_request".to_string()
+        );
+
+        // The error_msg must be the error's message
+        assert_eq!(
+            obj.get("error_msg").unwrap().as_string().unwrap(),
+            error_msg
         );
     }
 

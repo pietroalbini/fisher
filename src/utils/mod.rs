@@ -21,7 +21,7 @@ mod net;
 mod parse_env;
 
 #[cfg(test)]
-pub mod testing;
+#[macro_use] pub mod testing;
 
 
 pub use utils::tempdir::create_temp_dir;
