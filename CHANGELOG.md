@@ -7,7 +7,7 @@ This document contains what changed in each release of Fisher.
 *Not yet released.*
 
 * Add support for working behind proxies
-* GH-1: Add support for receiving hooks from **GitLab**
+* Add support for receiving hooks from **GitLab**
 * Show the current Fisher configuration at startup
 * Improve unit testing coverage of the project
 
