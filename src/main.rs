@@ -47,6 +47,24 @@ fn main() {
     // Load the options from the CLI arguments
     let options = cli::parse();
 
+    // Show the relevant options
+    println!("{} {}",
+        Style::new().bold().paint("Concurrent jobs:"),
+        options.max_threads
+    );
+    println!("{} {}",
+        Style::new().bold().paint("Health checks:  "),
+        if options.enable_health { "enabled" } else { "disabled" }
+    );
+    println!("{} {}",
+        Style::new().bold().paint("Proxy support:  "),
+        if let Some(proxies) = options.behind_proxies {
+            format!("enabled (behind {} proxies)", proxies)
+        } else { "disabled".to_string() }
+    );
+
+    println!("");
+
     // Create a new Fisher instance
     let mut factory = app::AppFactory::new(&options);
 
