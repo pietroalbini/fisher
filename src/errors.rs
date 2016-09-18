@@ -15,6 +15,7 @@
 
 use std::io;
 use std::fmt;
+use std::net;
 use std::error::Error;
 
 use rustc_serialize::json;
@@ -29,10 +30,12 @@ pub enum ErrorKind {
     InvalidInput(String),
     HookExecutionFailed(Option<i32>, Option<i32>),
     WebApiStartFailed(String),
+    NotBehindProxy,
 
     // Derived errors
     IoError(io::Error),
     JsonError(json::DecoderError),
+    AddrParseError(net::AddrParseError),
 }
 
 
@@ -106,9 +109,13 @@ impl Error for FisherError {
                 "invalid input",
             ErrorKind::WebApiStartFailed(..) =>
                 "failed to start the Web API",
+            ErrorKind::NotBehindProxy =>
+                "not behind the proxies",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
+                error.description(),
+            ErrorKind::AddrParseError(ref error) =>
                 error.description(),
         }
     }
@@ -149,6 +156,9 @@ impl fmt::Display for FisherError {
             ErrorKind::WebApiStartFailed(ref error) =>
                 format!("{}", error),
 
+            ErrorKind::NotBehindProxy =>
+                "not behind the proxies".into(),
+
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),
 
@@ -182,6 +192,9 @@ impl fmt::Display for FisherError {
 
                 format!("JSON error: {}", message)
             },
+
+            ErrorKind::AddrParseError(ref error) =>
+                format!("{}", error),
         };
 
         write!(f, "{}", description)
@@ -211,6 +224,7 @@ impl From<ErrorKind> for FisherError {
 
 derive_error!(io::Error, ErrorKind::IoError);
 derive_error!(json::DecoderError, ErrorKind::JsonError);
+derive_error!(net::AddrParseError, ErrorKind::AddrParseError);
 
 
 pub fn print_err<T>(result: Result<T, FisherError>) -> Result<T, FisherError> {

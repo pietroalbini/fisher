@@ -13,6 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::net::IpAddr;
+use std::str::FromStr;
 use std::collections::HashMap;
 
 use errors::{FisherResult, FisherError, ErrorKind};
@@ -52,14 +54,19 @@ pub fn request_type(req: &Request, _config: &str) -> RequestType {
 pub fn validate(req: &Request, _config: &str) -> bool {
     // If the secret param is provided, validate it
     if let Some(secret) = req.params.get("secret") {
-        if secret == "testing" {
-            return true;
-        } else {
+        if secret != "testing" {
             return false;
         }
     }
 
-   true
+    // If the ip param is provided, validate it
+    if let Some(ip) = req.params.get("ip") {
+        if req.source != IpAddr::from_str(ip).unwrap() {
+            return false;
+        }
+    }
+
+    true
 }
 
 
@@ -78,6 +85,8 @@ pub fn env(req: &Request, _config: &str) -> HashMap<String, String> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::net::IpAddr;
+    use std::str::FromStr;
 
     use utils::testing::*;
     use requests::RequestType;
@@ -132,6 +141,18 @@ mod tests {
         // With the correct secret
         let mut req = dummy_request();
         req.params.insert("secret".to_string(), "testing".to_string());
+        assert!(validate(&req, ""));
+
+        // With the wrong IP address
+        let mut req = dummy_request();
+        req.params.insert("ip".into(), "127.1.1.1".into());
+        req.source = IpAddr::from_str("127.2.2.2").unwrap();
+        assert!(! validate(&req, ""));
+
+        // With the right IP address
+        let mut req = dummy_request();
+        req.params.insert("ip".into(), "127.1.1.1".into());
+        req.source = IpAddr::from_str("127.1.1.1").unwrap();
         assert!(validate(&req, ""));
     }
 

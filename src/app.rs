@@ -27,6 +27,7 @@ pub struct FisherOptions {
     pub hooks_dir: String,
     pub max_threads: u16,
     pub enable_health: bool,
+    pub behind_proxies: Option<u8>,
 }
 
 impl FisherOptions {
@@ -38,6 +39,7 @@ impl FisherOptions {
             hooks_dir: "hooks/".to_string(),
             max_threads: 1,
             enable_health: true,
+            behind_proxies: None,
         }
     }
 }

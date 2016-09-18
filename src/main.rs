@@ -26,7 +26,7 @@ extern crate rand;
 #[macro_use] extern crate clap;
 #[cfg(feature = "provider-github")] extern crate ring;
 
-mod utils;
+#[macro_use] mod utils;
 mod cli;
 mod providers;
 mod hooks;

@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 use std::time::Duration;
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::fs;
 
@@ -33,13 +33,36 @@ use providers::{Provider, testing};
 use utils;
 
 
+#[macro_export]
+macro_rules! assert_err {
+    ($result:expr, $pattern:pat) => {{
+        match $result {
+            Ok(..) => {
+                panic!("{} didn't error out",
+                    stringify!($result)
+                );
+            },
+            Err(error) => {
+                match *error.kind() {
+                    $pattern => {},
+                    _ => {
+                        panic!("{} didn't error with {}",
+                            stringify!($result),
+                            stringify!($pattern)
+                        );
+                    },
+                }
+            },
+        }
+    }};
+}
+
+
 pub fn dummy_request() -> Request {
     Request {
         headers: HashMap::new(),
         params: HashMap::new(),
-        source: SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 80
-        ),
+        source: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
         body: String::new(),
     }
 }
@@ -122,7 +145,8 @@ pub struct WebApiInstance<'a> {
 
 impl<'a> WebApiInstance<'a> {
 
-    pub fn new(hooks: &'a Hooks, health: bool) -> Self {
+    pub fn new(hooks: &'a Hooks, health: bool, behind_proxies: Option<u8>)
+               -> Self {
         // Create a new instance of WebApi
         let mut inst = WebApi::new(hooks);
 
@@ -133,6 +157,7 @@ impl<'a> WebApiInstance<'a> {
         let options = FisherOptions {
             bind: "127.0.0.1:0".to_string(),
             enable_health: health,
+            behind_proxies: behind_proxies,
 
             .. FisherOptions::defaults()
         };
@@ -242,8 +267,9 @@ impl TestingEnv {
 
     // WEB TESTING
 
-    pub fn start_web(&self, health: bool) -> WebApiInstance {
-        WebApiInstance::new(&self.hooks, health)
+    pub fn start_web(&self, health: bool, behind_proxies: Option<u8>)
+                     -> WebApiInstance {
+        WebApiInstance::new(&self.hooks, health, behind_proxies)
     }
 }
 

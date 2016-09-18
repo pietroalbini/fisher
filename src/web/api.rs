@@ -27,6 +27,7 @@ use hooks::{Hooks, Hook};
 use processor::{ProcessorInput, SenderChan};
 use jobs::Job;
 use web::responses::JsonResponse;
+use web::proxies::ProxySupport;
 use requests::{RequestType, convert_request};
 
 
@@ -128,9 +129,12 @@ impl<'a> WebApi<'a> {
             let method = method.clone();
             let sender = self.sender_chan.clone().unwrap();
             let hooks = self.hooks.clone();
+            let proxy_support = ProxySupport::new(options);
 
             // This middleware processes incoming hooks
             app.add_route(method, "/hook/:hook", middleware! { |req, mut res|
+                let mut bad_request = None;
+
                 let mut req = req;
                 let hook_name = req.param("hook").unwrap().to_string();
 
@@ -147,10 +151,15 @@ impl<'a> WebApi<'a> {
                     return res.next_middleware();
                 }
 
-                let request = convert_request(&mut req);
+                let mut request = convert_request(&mut req);
+
+                // Set the correct source IP address
+                if let Err(error) = proxy_support.fix_request(&mut request) {
+                    bad_request = Some(error);
+                }
 
                 let (validated, provider) = hook.validate(&request);
-                if validated {
+                if bad_request.is_none() && validated {
                     // Get the request type
                     let request_type;
                     if let Some(ref real_provider) = provider {
@@ -172,6 +181,9 @@ impl<'a> WebApi<'a> {
                     }
 
                     JsonResponse::Ok.to_json()
+                } else if bad_request.is_some() {
+                    res.set(StatusCode::BadRequest);
+                    JsonResponse::BadRequest(bad_request.unwrap()).to_json()
                 } else {
                     // Else send a great 403 Forbidden
                     res.set(StatusCode::Forbidden);
@@ -222,6 +234,7 @@ mod tests {
 
     use hyper::status::StatusCode;
     use hyper::method::Method;
+    use hyper::header::Headers;
     use rustc_serialize::json::Json;
 
     use utils::testing::*;
@@ -231,7 +244,7 @@ mod tests {
     #[test]
     fn test_startup() {
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(true);
+        let mut inst = testing_env.start_web(true, None);
 
         // Test if the Web API is working fine
         let res = inst.request(Method::Get, "/").send().unwrap();
@@ -244,7 +257,7 @@ mod tests {
     #[test]
     fn test_hook_call() {
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(true);
+        let mut inst = testing_env.start_web(true, None);
 
         // It shouldn't be possible to call a non-existing hook
         let res = inst.request(Method::Get, "/hook/invalid")
@@ -290,7 +303,7 @@ mod tests {
     fn test_health_disabled() {
         // Create the instance with disabled health status
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(false);
+        let mut inst = testing_env.start_web(false, None);
 
         // It shouldn't be possible to get the health status
         let res = inst.request(Method::Get, "/health").send().unwrap();
@@ -304,7 +317,7 @@ mod tests {
     fn test_health_enabled() {
         // Create the instance with enabled health status
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(true);
+        let mut inst = testing_env.start_web(true, None);
 
         let check_after = inst.next_health(HealthDetails {
             queue_size: 1,
@@ -334,6 +347,34 @@ mod tests {
 
         // Check if there were any problems into the next_health thread
         check_after.check();
+
+        inst.stop();
+        testing_env.cleanup();
+    }
+
+    #[test]
+    fn test_behind_proxy() {
+        // Create a new instance behind a proxy
+        let testing_env = TestingEnv::new();
+        let mut inst = testing_env.start_web(true, Some(1));
+
+        // Call the example hook without a proxy
+        let res = inst.request(Method::Get, "/hook/example?ip=127.1.1.1")
+                      .send().unwrap();
+        assert_eq!(res.status, StatusCode::BadRequest);
+        assert!(inst.processor_input().is_none());
+
+        // Build the headers for a proxy
+        let mut headers = Headers::new();
+        headers.set_raw("X-Forwarded-For", vec![b"127.1.1.1".to_vec()]);
+
+        // Make an example request
+        let res = inst.request(Method::Get, "/hook/example?ip=127.1.1.1")
+                      .headers(headers).send().unwrap();
+
+        // The hook should be queued
+        assert_eq!(res.status, StatusCode::Ok);
+        assert!(inst.processor_input().is_some());
 
         inst.stop();
         testing_env.cleanup();
