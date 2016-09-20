@@ -16,6 +16,7 @@
 use std::io;
 use std::fmt;
 use std::net;
+use std::num;
 use std::error::Error;
 
 use rustc_serialize::json;
@@ -36,6 +37,7 @@ pub enum ErrorKind {
     IoError(io::Error),
     JsonError(json::DecoderError),
     AddrParseError(net::AddrParseError),
+    ParseIntError(num::ParseIntError),
 }
 
 
@@ -117,6 +119,8 @@ impl Error for FisherError {
                 error.description(),
             ErrorKind::AddrParseError(ref error) =>
                 error.description(),
+            ErrorKind::ParseIntError(..) =>
+                "invalid number",
         }
     }
 
@@ -195,6 +199,9 @@ impl fmt::Display for FisherError {
 
             ErrorKind::AddrParseError(ref error) =>
                 format!("{}", error),
+
+            ErrorKind::ParseIntError(..) =>
+                "you didn't provide a valid number".into(),
         };
 
         write!(f, "{}", description)
@@ -225,6 +232,7 @@ impl From<ErrorKind> for FisherError {
 derive_error!(io::Error, ErrorKind::IoError);
 derive_error!(json::DecoderError, ErrorKind::JsonError);
 derive_error!(net::AddrParseError, ErrorKind::AddrParseError);
+derive_error!(num::ParseIntError, ErrorKind::ParseIntError);
 
 
 pub fn print_err<T>(result: Result<T, FisherError>) -> Result<T, FisherError> {

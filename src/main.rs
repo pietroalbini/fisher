@@ -45,7 +45,7 @@ fn main() {
     let exit_signal = chan_signal::notify(&[Signal::INT, Signal::TERM]);
 
     // Load the options from the CLI arguments
-    let options = cli::parse();
+    let options = errors::unwrap(cli::parse());
 
     // Show the relevant options
     println!("{} {}",
