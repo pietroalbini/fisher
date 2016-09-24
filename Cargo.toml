@@ -1,7 +1,13 @@
 [package]
 name = "fisher"
 version = "1.0.0-beta.1"
+license = "GPL-3.0"
+
+description = "Webhooks catcher written in Rust"
 authors = ["Pietro Albini <pietro@pietroalbini.io>"]
+readme = "README.md"
+
+repository = "https://github.com/pietroalbini/fisher"
 
 [dependencies]
 url="^1.2"
