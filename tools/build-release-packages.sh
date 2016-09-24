@@ -43,7 +43,10 @@ PACKAGES_DIRECTORY="${BUILD_DIRECTORY}/packages"
 
 PROJECT_NAME="fisher"
 BIN_NAME="fisher"
-TARGETS=( "x86_64-unknown-linux-gnu" "i686-unknown-linux-gnu" )
+declare -A TARGETS=( \
+    [x86_64-unknown-linux-gnu]="linux-amd64" \
+    [i686-unknown-linux-gnu]="linux-i686" \
+)
 PACKAGES_INCLUDE_FILES=(
     "LICENSE"
     "CHANGELOG.md"
@@ -79,7 +82,7 @@ prepare_source() {
 build_binaries() {
     cd "${SOURCE_DIRECTORY}"
 
-    for target in "${TARGETS[@]}"; do
+    for target in "${!TARGETS[@]}"; do
         echo -e "${BOLD}Building target${RESET} ${target}..."
         cargo build --release --target "${target}"
         cp "${SOURCE_DIRECTORY}/target/${target}/release/${BIN_NAME}" \
@@ -106,7 +109,7 @@ make_packages() {
     package_building="${PACKAGES_DIRECTORY}/building"
 
     fname="${PROJECT_NAME}_${revision}"
-    subdir="${fname}"
+    subdir="${PROJECT_NAME}-${revision}"
 
     # Create source packages
     echo -e "${BOLD}Creating source package${RESET}..."
@@ -131,7 +134,7 @@ make_packages() {
 
         # Calculate the tar options
         mtime="`git log -1 --format=%cd "--date=format:%Y-%m-%d %H:%m:%S"`"
-        archive="${PACKAGES_DIRECTORY}/${fname}_${target}.tar.gz"
+        archive="${PACKAGES_DIRECTORY}/${fname}_${TARGETS[$target]}.tar.gz"
 
         find "${subdir}" -print0 \
             | LC_ALL=C sort -z \
