@@ -4,7 +4,7 @@ This document contains what changed in each release of Fisher.
 
 ### Fisher 1.0.0-beta.2
 
-*Not yet released.*
+*Released on September 24th, 2016.*
 
 * Add support for working behind proxies
 * Add support for receiving hooks from **GitLab**
