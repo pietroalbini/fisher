@@ -132,6 +132,11 @@ impl HookProvider {
         self.provider.name()
     }
 
+    #[cfg(test)]
+    pub fn config(&self) -> &str {
+        &self.config
+    }
+
     pub fn request_type(&self, req: &Request) -> RequestType {
         self.provider.request_type(req, &self.config)
     }

@@ -79,6 +79,7 @@ pub fn testing_provider() -> Provider {
 }
 
 
+#[macro_export]
 macro_rules! create_hook {
     ($tempdir:expr, $name:expr, $( $line:expr ),* ) => {{
         use std::fs;
