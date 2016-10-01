@@ -92,6 +92,7 @@ pub enum ProcessorInput {
     StopSignal,
     Job(Job),
     HealthStatus(chan::Sender<HealthDetails>),
+    JobEnded,
 }
 
 
@@ -102,8 +103,8 @@ struct Processor {
     threads_count: u16,
     max_threads: u16,
 
-    input: chan::Receiver<ProcessorInput>,
-    thread_end: Option<chan::Sender<()>>,
+    input_recv: chan::Receiver<ProcessorInput>,
+    input_send: chan::Sender<ProcessorInput>,
 }
 
 impl Processor {
@@ -119,8 +120,8 @@ impl Processor {
             threads_count: 0,
             max_threads: max_threads,
 
-            input: input_recv,
-            thread_end: None,
+            input_recv: input_recv,
+            input_send: input_send.clone(),
         };
 
         // Return both the processor and the input_send
@@ -128,43 +129,31 @@ impl Processor {
     }
 
     pub fn run(&mut self) {
-        // This channel will be notified when a thread ends
-        let (thread_end_send, thread_end_recv) = chan::async();
-        self.thread_end = Some(thread_end_send);
-
-        let input_chan = self.input.clone();
-
         loop {
-            chan_select! {
-                // This means a new job was received, or it's time to stop
-                input_chan.recv() -> input => {
-                    let input = input.unwrap();
+            let input = self.input_recv.recv().unwrap();
 
-                    match input {
-                        ProcessorInput::StopSignal => {
-                            // It's time to stop when no more jobs are left
-                            self.should_stop = true;
+            match input {
+                ProcessorInput::StopSignal => {
+                    // It's time to stop when no more jobs are left
+                    self.should_stop = true;
 
-                            // If no more jobs are left now, exit
-                            if self.jobs.is_empty() {
-                                break;
-                            }
-                        },
-                        ProcessorInput::Job(job) => {
-                            // Queue a new thread if there are too many threads
-                            if self.threads_count >= self.max_threads {
-                                self.jobs.push_back(job);
-                            } else {
-                                self.spawn_thread(job);
-                            }
-                        },
-                        ProcessorInput::HealthStatus(return_to) => {
-                            return_to.send(HealthDetails::of(&self));
-                        },
-                    };
+                    // If no more jobs are left now, exit
+                    if self.jobs.is_empty() {
+                        break;
+                    }
                 },
-                // This means a thread exited
-                thread_end_recv.recv() => {
+                ProcessorInput::Job(job) => {
+                    // Queue a new thread if there are too many threads
+                    if self.threads_count >= self.max_threads {
+                        self.jobs.push_back(job);
+                    } else {
+                        self.spawn_thread(job);
+                    }
+                },
+                ProcessorInput::HealthStatus(return_to) => {
+                    return_to.send(HealthDetails::of(&self));
+                },
+                ProcessorInput::JobEnded => {
                     self.threads_count -= 1;
 
                     match self.jobs.pop_front() {
@@ -177,13 +166,13 @@ impl Processor {
                             }
                         },
                     };
-                },
+                }
             }
         }
     }
 
     fn spawn_thread(&mut self, job: Job) {
-        let thread_end = self.thread_end.clone().unwrap();
+        let input_send = self.input_send.clone();
 
         self.threads_count += 1;
 
@@ -197,7 +186,7 @@ impl Processor {
             }
 
             // Notify the end of this thread
-            thread_end.send(());
+            input_send.send(ProcessorInput::JobEnded);
         });
     }
 
