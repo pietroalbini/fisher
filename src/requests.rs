@@ -26,6 +26,7 @@ use url::form_urlencoded;
 pub enum RequestType {
     ExecuteHook,
     Ping,
+    Internal,
 }
 
 

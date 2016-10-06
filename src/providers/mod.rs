@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 mod core;
+mod status;
 mod standalone;
 #[cfg(feature = "provider-github")] mod github;
 #[cfg(feature = "provider-gitlab")] mod gitlab;
@@ -25,7 +26,7 @@ pub use providers::core::{Provider, HookProvider};
 
 // This macro simplifies adding new providers
 macro_rules! provider {
-    ($providers:expr, $name:expr, $module:path) => {
+    ($providers:expr, $name:expr, $module:path) => {{
         use $module as module;
         $providers.add($name, Provider::new(
             $name.to_string(),
@@ -34,7 +35,7 @@ macro_rules! provider {
             module::validate,
             module::env,
         ));
-    };
+    }};
     ($providers:expr, $name:expr, $module:path, $cfg:meta) => {{
         #[cfg($cfg)]
         fn inner(providers: &mut core::Providers) {
@@ -53,6 +54,7 @@ lazy_static! {
         let mut p = core::Providers::new();
 
         provider!(p, "Standalone", self::standalone);
+        provider!(p, "Status", self::status);
         provider!(p, "GitHub", self::github, feature="provider-github");
         provider!(p, "GitLab", self::gitlab, feature="provider-gitlab");
 

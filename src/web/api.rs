@@ -178,6 +178,10 @@ impl<'a> WebApi<'a> {
                             let job = Job::new(hook, provider, request);
                             sender.send(ProcessorInput::Job(job));
                         },
+
+                        // Just discard internal requests
+                        // TODO: return a BadRequest instead
+                        RequestType::Internal => {},
                     }
 
                     JsonResponse::Ok.to_json()
