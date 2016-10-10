@@ -101,12 +101,12 @@ pub fn validate(req: &Request, config: &str) -> bool {
     }
 
     // The hook name must be allowed
-    if config.hook_allowed(req.params.get("hook_name").unwrap()) {
+    if ! config.hook_allowed(req.params.get("hook_name").unwrap()) {
         return false;
     }
 
     // The event must be allowed
-    if config.event_allowed(req.params.get("event").unwrap()) {
+    if ! config.event_allowed(req.params.get("event").unwrap()) {
         return false;
     }
 
@@ -131,7 +131,6 @@ mod tests {
     use utils::testing::*;
     use requests::RequestType;
 
-    use super::{EVENTS, REQUIRED_ARGS};
     use super::{Config, check_config, request_type, validate, env};
 
 
@@ -216,5 +215,49 @@ mod tests {
             request_type(&dummy_request(), "{}"),
             RequestType::Internal
         );
+    }
+
+    #[test]
+    fn test_validate() {
+        let mut req = dummy_request();
+
+        // Test without any of the required params
+        assert!(! validate(&req, r#"{}"#));
+
+        // Test with the required params
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
+        req.params.insert("exit_code".into(), "0".into());
+        req.params.insert("signal".into(), "".into());
+        assert!(validate(&req, r#"{}"#));
+
+        // Test with some extra params
+        req.params.insert("test".into(), "invalid".into());
+        assert!(! validate(&req, r#"{}"#));
+        req.params.remove("test".into());
+
+        // Test with a wrong allowed event
+        assert!(! validate(&req, r#"{"events": ["job_failed"]}"#));
+
+        // Test with a right allowed event
+        assert!(validate(&req, r#"{"events": ["job_completed"]}"#));
+
+        // Test with a wrong allowed hook
+        assert!(! validate(&req, r#"{"hooks": ["invalid"]}"#));
+
+        // Test with a right allowed hook
+        assert!(validate(&req, r#"{"hooks": ["test"]}"#));
+    }
+
+    #[test]
+    fn test_env() {
+        let mut req = dummy_request();
+        req.params.insert("test1".into(), "a".into());
+        req.params.insert("test2".into(), "b".into());
+
+        let env = env(&req, r#"{}"#);
+        assert_eq!(env.len(), 2);
+        assert_eq!(env.get("TEST1").unwrap(), &"a".to_string());
+        assert_eq!(env.get("TEST2").unwrap(), &"b".to_string());
     }
 }
