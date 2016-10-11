@@ -31,17 +31,17 @@ use web::proxies::ProxySupport;
 use requests::{RequestType, convert_request};
 
 
-pub struct WebApi<'a> {
+pub struct WebApp<'a> {
     stop_chan: Option<chan::Sender<()>>,
     sender_chan: Option<SenderChan>,
     stop: bool,
     hooks: &'a Hooks,
 }
 
-impl<'a> WebApi<'a> {
+impl<'a> WebApp<'a> {
 
     pub fn new(hooks: &'a Hooks) -> Self {
-        WebApi {
+        WebApp {
             stop_chan: None,
             sender_chan: None,
             stop: false,

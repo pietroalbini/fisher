@@ -30,7 +30,7 @@ pub enum ErrorKind {
     ProviderNotFound(String),
     InvalidInput(String),
     HookExecutionFailed(Option<i32>, Option<i32>),
-    WebApiStartFailed(String),
+    WebAppStartFailed(String),
     NotBehindProxy,
 
     // Derived errors
@@ -109,7 +109,7 @@ impl Error for FisherError {
                 "hook returned non-zero exit code",
             ErrorKind::InvalidInput(..) =>
                 "invalid input",
-            ErrorKind::WebApiStartFailed(..) =>
+            ErrorKind::WebAppStartFailed(..) =>
                 "failed to start the Web API",
             ErrorKind::NotBehindProxy =>
                 "not behind the proxies",
@@ -157,7 +157,7 @@ impl fmt::Display for FisherError {
             ErrorKind::InvalidInput(ref error) =>
                 format!("invalid input: {}", error),
 
-            ErrorKind::WebApiStartFailed(ref error) =>
+            ErrorKind::WebAppStartFailed(ref error) =>
                 format!("{}", error),
 
             ErrorKind::NotBehindProxy =>

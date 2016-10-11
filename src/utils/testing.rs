@@ -26,7 +26,7 @@ use hyper::method::Method;
 use app::FisherOptions;
 use hooks::{self, Hooks};
 use jobs::Job;
-use web::WebApi;
+use web::WebApp;
 use requests::Request;
 use processor::{ProcessorInput, HealthDetails};
 use providers::{Provider, testing};
@@ -136,20 +136,20 @@ pub fn sample_hooks() -> PathBuf {
 }
 
 
-pub struct WebApiInstance<'a> {
-    inst: WebApi<'a>,
+pub struct WebAppInstance<'a> {
+    inst: WebApp<'a>,
 
     url: String,
     client: hyper::Client,
     input_recv: chan::Receiver<ProcessorInput>,
 }
 
-impl<'a> WebApiInstance<'a> {
+impl<'a> WebAppInstance<'a> {
 
     pub fn new(hooks: &'a Hooks, health: bool, behind_proxies: Option<u8>)
                -> Self {
-        // Create a new instance of WebApi
-        let mut inst = WebApi::new(hooks);
+        // Create a new instance of WebApp
+        let mut inst = WebApp::new(hooks);
 
         // Create the input channel
         let (input_send, input_recv) = chan::async();
@@ -170,7 +170,7 @@ impl<'a> WebApiInstance<'a> {
         let url = format!("http://{}", addr);
         let client = hyper::Client::new();
 
-        WebApiInstance {
+        WebAppInstance {
             inst: inst,
 
             url: url,
@@ -269,8 +269,8 @@ impl TestingEnv {
     // WEB TESTING
 
     pub fn start_web(&self, health: bool, behind_proxies: Option<u8>)
-                     -> WebApiInstance {
-        WebApiInstance::new(&self.hooks, health, behind_proxies)
+                     -> WebAppInstance {
+        WebAppInstance::new(&self.hooks, health, behind_proxies)
     }
 }
 

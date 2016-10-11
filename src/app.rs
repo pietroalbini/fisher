@@ -17,7 +17,7 @@ use std::net;
 
 use hooks::{Hooks, Hook};
 use processor::ProcessorManager;
-use web::WebApi;
+use web::WebApp;
 use errors::{ErrorKind, FisherResult};
 
 
@@ -66,7 +66,7 @@ impl<'a> AppFactory<'a> {
     pub fn start(&'a mut self) -> FisherResult<RunningApp> {
         // Initialize the state
         let mut processor = ProcessorManager::new();
-        let mut web_api = WebApi::new(&self.hooks);
+        let mut web_api = WebApp::new(&self.hooks);
 
         // Start the processor
         processor.start(self.options.max_threads);
@@ -83,7 +83,7 @@ impl<'a> AppFactory<'a> {
                 processor.stop();
 
                 return Err(
-                    ErrorKind::WebApiStartFailed(error.clone()).into()
+                    ErrorKind::WebAppStartFailed(error.clone()).into()
                 );
             },
         }
@@ -99,13 +99,13 @@ impl<'a> AppFactory<'a> {
 
 pub struct RunningApp<'a> {
     processor: ProcessorManager,
-    web_api: WebApi<'a>,
+    web_api: WebApp<'a>,
     web_address: net::SocketAddr,
 }
 
 impl<'a> RunningApp<'a> {
 
-    fn new(processor: ProcessorManager, web_api: WebApi<'a>,
+    fn new(processor: ProcessorManager, web_api: WebApp<'a>,
            web_address: net::SocketAddr) -> Self {
         RunningApp {
             processor: processor,
