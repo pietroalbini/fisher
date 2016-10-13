@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::fs;
 
 use chan;
@@ -132,21 +133,33 @@ pub fn sample_hooks() -> PathBuf {
         r#"cat "${FISHER_REQUEST_BODY}" > "${b}/request_body""#
     );
 
+    create_hook!(tempdir, "trigger-status.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"echo "triggering...";"#
+    );
+
+    create_hook!(tempdir, "status-example.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Status: {"hooks": ["trigger-status"]}"#,
+        r#"echo "triggered!""#
+    );
+
     tempdir
 }
 
 
-pub struct WebAppInstance<'a> {
-    inst: WebApp<'a>,
+pub struct WebAppInstance {
+    inst: WebApp,
 
     url: String,
     client: hyper::Client,
     input_recv: chan::Receiver<ProcessorInput>,
 }
 
-impl<'a> WebAppInstance<'a> {
+impl WebAppInstance {
 
-    pub fn new(hooks: &'a Hooks, health: bool, behind_proxies: Option<u8>)
+    pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: Option<u8>)
                -> Self {
         // Create a new instance of WebApp
         let mut inst = WebApp::new(hooks);
@@ -229,7 +242,7 @@ impl<'a> WebAppInstance<'a> {
 
 
 pub struct TestingEnv {
-    hooks: Hooks,
+    hooks: Arc<Hooks>,
     remove_dirs: Vec<String>,
 }
 
@@ -239,7 +252,7 @@ impl TestingEnv {
         let hooks_dir = sample_hooks().to_str().unwrap().to_string();
 
         TestingEnv {
-            hooks: hooks::collect(&hooks_dir).unwrap(),
+            hooks: Arc::new(hooks::collect(&hooks_dir).unwrap()),
             remove_dirs: vec![hooks_dir],
         }
     }
@@ -270,7 +283,7 @@ impl TestingEnv {
 
     pub fn start_web(&self, health: bool, behind_proxies: Option<u8>)
                      -> WebAppInstance {
-        WebAppInstance::new(&self.hooks, health, behind_proxies)
+        WebAppInstance::new(self.hooks.clone(), health, behind_proxies)
     }
 }
 

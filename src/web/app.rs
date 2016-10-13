@@ -14,38 +14,75 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use chan;
 use nickel::{Nickel, HttpRouter, Options};
-use nickel::status::StatusCode;
-use hyper::method::Method;
 use hyper::header;
 use rustc_serialize::json::ToJson;
 
 use app::FisherOptions;
-use hooks::{Hooks, Hook};
-use processor::{ProcessorInput, SenderChan};
-use jobs::Job;
-use web::responses::JsonResponse;
+use hooks::Hooks;
+use processor::SenderChan;
+use web::responses::Response as FisherResponse;
 use web::proxies::ProxySupport;
-use requests::{RequestType, convert_request};
+use requests::convert_request;
+use web::api::WebApi;
 
 
-pub struct WebApp<'a> {
+macro_rules! handler {
+    ( $app:expr, $handler:path $(, $param:expr )* ) => {{
+        let web_api = $app.web_api.clone().unwrap();
+        let proxy_support = $app.proxy_support.clone().unwrap();
+
+        middleware! { |req, mut res|
+            // Make the req object mutable
+            let mut req = req;
+
+            let response;
+            let mut request = convert_request(&mut req);
+
+            // Call the handler if the request is OK, else return a
+            // BadRequest response
+            if let Err(error) = proxy_support.fix_request(&mut request) {
+                response = FisherResponse::BadRequest(error);
+            } else {
+                response = $handler(
+                    &*web_api, request,
+                    $(
+                        req.param($param).unwrap().into()
+                    )*
+                );
+            }
+
+            res.set(response.status());
+            response.to_json()
+        }
+    }};
+}
+
+
+pub struct WebApp {
     stop_chan: Option<chan::Sender<()>>,
     sender_chan: Option<SenderChan>,
     stop: bool,
-    hooks: &'a Hooks,
+    hooks: Arc<Hooks>,
+
+    proxy_support: Option<Arc<ProxySupport>>,
+    web_api: Option<Arc<WebApi>>,
 }
 
-impl<'a> WebApp<'a> {
+impl WebApp {
 
-    pub fn new(hooks: &'a Hooks) -> Self {
+    pub fn new(hooks: Arc<Hooks>) -> Self {
         WebApp {
             stop_chan: None,
             sender_chan: None,
             stop: false,
             hooks: hooks,
+
+            proxy_support: None,
+            web_api: None,
         }
     }
 
@@ -57,7 +94,19 @@ impl<'a> WebApp<'a> {
         // This is to fix lifetime issues with the thread below
         let bind = options.bind.to_string();
 
-        let app = self.configure_nickel(&options);
+        // Configure the proxy support
+        self.proxy_support = Some(Arc::new(
+            ProxySupport::new(&options)
+        ));
+
+        // Create a new instance of the API
+        self.web_api = Some(Arc::new(WebApi::new(
+            self.sender_chan.clone().unwrap(),
+            self.hooks.clone(),
+            options.enable_health,
+        )));
+
+        let app = self.configure_nickel();
 
         // This channel is used so it's possible to stop the listener
         let (send_stop, recv_stop) = chan::sync(0);
@@ -112,7 +161,7 @@ impl<'a> WebApp<'a> {
         }
     }
 
-    fn configure_nickel(&self, options: &FisherOptions) -> Nickel {
+    fn configure_nickel(&self) -> Nickel {
         let mut app = Nickel::new();
 
         // Disable the default message nickel prints on stdout
@@ -124,107 +173,13 @@ impl<'a> WebApp<'a> {
             ));
         });
 
-        for method in &[Method::Get, Method::Post] {
-            // Make the used things owned
-            let method = method.clone();
-            let sender = self.sender_chan.clone().unwrap();
-            let hooks = self.hooks.clone();
-            let proxy_support = ProxySupport::new(options);
+        app.get("/hook/:hook", handler!(self, WebApi::process_hook, "hook"));
+        app.post("/hook/:hook", handler!(self, WebApi::process_hook, "hook"));
 
-            // This middleware processes incoming hooks
-            app.add_route(method, "/hook/:hook", middleware! { |req, mut res|
-                let mut bad_request = None;
+        app.get("/health", handler!(self, WebApi::get_health));
 
-                let mut req = req;
-                let hook_name = req.param("hook").unwrap().to_string();
-
-                // Ignore requests without a valid hook
-                if hook_name == "".to_string() {
-                    return res.next_middleware();
-                }
-
-                // Ignore requests with non-existent hooks
-                let hook: Hook;
-                if let Some(found) = hooks.get(&hook_name) {
-                    hook = found.clone();
-                } else {
-                    return res.next_middleware();
-                }
-
-                let mut request = convert_request(&mut req);
-
-                // Set the correct source IP address
-                if let Err(error) = proxy_support.fix_request(&mut request) {
-                    bad_request = Some(error);
-                }
-
-                let (validated, provider) = hook.validate(&request);
-                if bad_request.is_none() && validated {
-                    // Get the request type
-                    let request_type;
-                    if let Some(ref real_provider) = provider {
-                        request_type = real_provider.request_type(&request);
-                    } else {
-                        request_type = RequestType::ExecuteHook;
-                    }
-
-                    // Do something different based on the request type
-                    match request_type {
-                        // Don't do anything when it's only a ping
-                        RequestType::Ping => {},
-
-                        // Queue a job if the hook should be executed
-                        RequestType::ExecuteHook => {
-                            let job = Job::new(hook, provider, request);
-                            sender.send(ProcessorInput::Job(job));
-                        },
-
-                        // Just discard internal requests
-                        // TODO: return a BadRequest instead
-                        RequestType::Internal => {},
-                    }
-
-                    JsonResponse::Ok.to_json()
-                } else if bad_request.is_some() {
-                    res.set(StatusCode::BadRequest);
-                    JsonResponse::BadRequest(bad_request.unwrap()).to_json()
-                } else {
-                    // Else send a great 403 Forbidden
-                    res.set(StatusCode::Forbidden);
-                    JsonResponse::Forbidden.to_json()
-                }
-            });
-        }
-
-
-        // Health reporting can be disabled by the user
-        if options.enable_health {
-            let sender = self.sender_chan.clone().unwrap();
-
-            app.get("/health", middleware! {
-                let (details_send, details_recv) = chan::async();
-
-                // Get the details from the processor
-                sender.send(ProcessorInput::HealthStatus(details_send));
-                let details = details_recv.recv().unwrap();
-
-                JsonResponse::HealthStatus(details).to_json()
-            });
-        } else {
-            app.get("/health", middleware! { |_req, mut res|
-                res.set(StatusCode::Forbidden);
-
-                JsonResponse::Forbidden.to_json()
-            });
-        }
-
-
-        // This middleware provides a basic Not found page
-        app.utilize(middleware! { |_req, mut res|
-            res.set(StatusCode::NotFound);
-
-            JsonResponse::NotFound.to_json()
-        });
+        // This is the not found handler
+        app.utilize(handler!(self, WebApi::not_found));
 
         app
     }
@@ -295,6 +250,19 @@ mod tests {
         let res = inst.request(Method::Get, "/hook/example?request_type=ping")
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::Ok);
+
+        // Even if the last request succeded, there shouldn't be any job
+        assert!(inst.processor_input().is_none());
+
+        // Try to call an internal hook (in this case with the Status provider)
+        let res = inst.request(Method::Get, concat!(
+            "/hook/status-example",
+            "?event=job_completed",
+            "&hook_name=trigger-status",
+            "&exit_code=0",
+            "&signal=0",
+        )).send().unwrap();
+        assert_eq!(res.status, StatusCode::Forbidden);
 
         // Even if the last request succeded, there shouldn't be any job
         assert!(inst.processor_input().is_none());

@@ -17,4 +17,7 @@ mod app;
 mod responses;
 mod proxies;
 
+// Parts of the webapp
+mod api;
+
 pub use self::app::WebApp;

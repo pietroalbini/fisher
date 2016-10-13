@@ -15,13 +15,14 @@
 
 use std::collections::{BTreeMap};
 
+use nickel::status::StatusCode;
 use rustc_serialize::json::{Json, ToJson};
 
 use errors::FisherError;
 use processor::HealthDetails;
 
 
-pub enum JsonResponse {
+pub enum Response {
     NotFound,
     Forbidden,
     BadRequest(FisherError),
@@ -29,24 +30,36 @@ pub enum JsonResponse {
     HealthStatus(HealthDetails),
 }
 
-impl ToJson for JsonResponse {
+impl Response {
+
+    pub fn status(&self) -> StatusCode {
+        match *self {
+            Response::NotFound => StatusCode::NotFound,
+            Response::Forbidden => StatusCode::Forbidden,
+            Response::BadRequest(..) => StatusCode::BadRequest,
+            _ => StatusCode::Ok,
+        }
+    }
+}
+
+impl ToJson for Response {
 
     fn to_json(&self) -> Json {
         let mut map = BTreeMap::new();
 
         map.insert("status".to_string(), match *self {
-            JsonResponse::NotFound => "not_found",
-            JsonResponse::Forbidden => "forbidden",
-            JsonResponse::BadRequest(..) => "bad_request",
-            JsonResponse::Ok => "ok",
-            JsonResponse::HealthStatus(..) => "ok"
+            Response::NotFound => "not_found",
+            Response::Forbidden => "forbidden",
+            Response::BadRequest(..) => "bad_request",
+            Response::Ok => "ok",
+            Response::HealthStatus(..) => "ok"
         }.to_string().to_json());
 
-        if let JsonResponse::HealthStatus(ref details) = *self {
+        if let Response::HealthStatus(ref details) = *self {
             map.insert("result".to_string(), details.to_json());
         }
 
-        if let JsonResponse::BadRequest(ref error) = *self {
+        if let Response::BadRequest(ref error) = *self {
             map.insert("error_msg".into(), format!("{}", error).to_json());
         }
 
@@ -58,18 +71,21 @@ impl ToJson for JsonResponse {
 #[cfg(test)]
 mod tests {
     use rustc_serialize::json::ToJson;
+    use nickel::status::StatusCode;
 
     use processor::HealthDetails;
     use errors::{FisherError, ErrorKind};
-    use super::JsonResponse;
+    use super::Response;
 
 
     #[test]
     fn test_not_found() {
-        let response = JsonResponse::NotFound.to_json();
+        let response = Response::NotFound;
+        assert_eq!(response.status(), StatusCode::NotFound);
 
         // The result must be an object
-        let obj = response.as_object().unwrap();
+        let json = response.to_json();
+        let obj = json.as_object().unwrap();
 
         // The status must be "not_found"
         assert_eq!(
@@ -81,10 +97,12 @@ mod tests {
 
     #[test]
     fn test_forbidden() {
-        let response = JsonResponse::Forbidden.to_json();
+        let response = Response::Forbidden;
+        assert_eq!(response.status(), StatusCode::Forbidden);
 
         // The result must be an object
-        let obj = response.as_object().unwrap();
+        let json = response.to_json();
+        let obj = json.as_object().unwrap();
 
         // The status must be "forbidden"
         assert_eq!(
@@ -100,10 +118,12 @@ mod tests {
         let error = FisherError::new(ErrorKind::NotBehindProxy);
         let error_msg = format!("{}", error);
 
-        let response = JsonResponse::BadRequest(error).to_json();
+        let response = Response::BadRequest(error);
+        assert_eq!(response.status(), StatusCode::BadRequest);
 
         // The result must be an object
-        let obj = response.as_object().unwrap();
+        let json = response.to_json();
+        let obj = json.as_object().unwrap();
 
         // The status must be "forbidden"
         assert_eq!(
@@ -121,10 +141,12 @@ mod tests {
 
     #[test]
     fn test_ok() {
-        let response = JsonResponse::Ok.to_json();
+        let response = Response::Ok;
+        assert_eq!(response.status(), StatusCode::Ok);
 
         // The result must be an object
-        let obj = response.as_object().unwrap();
+        let json = response.to_json();
+        let obj = json.as_object().unwrap();
 
         // The status must be "ok"
         assert_eq!(
@@ -136,13 +158,16 @@ mod tests {
 
     #[test]
     fn test_health_status() {
-        let response = JsonResponse::HealthStatus(HealthDetails {
+        let response = Response::HealthStatus(HealthDetails {
             active_jobs: 1,
             queue_size: 2,
-        }).to_json();
+        });
 
         // The result must be an object
-        let obj = response.as_object().unwrap();
+        let json = response.to_json();
+        let obj = json.as_object().unwrap();
+        assert_eq!(response.status(), StatusCode::Ok);
+
 
         // The status must be "ok"
         assert_eq!(

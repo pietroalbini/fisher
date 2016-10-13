@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::net;
+use std::sync::Arc;
 
 use hooks::{Hooks, Hook};
 use processor::ProcessorManager;
@@ -45,9 +46,46 @@ impl FisherOptions {
 }
 
 
+enum HooksContainer {
+    Mutable(Hooks),
+    Immutable(Arc<Hooks>),
+}
+
+impl HooksContainer {
+
+    fn new() -> HooksContainer {
+        HooksContainer::Mutable(Hooks::new())
+    }
+
+    fn insert(&mut self, name: String, value: Hook) {
+        if let HooksContainer::Mutable(ref mut hooks) = *self {
+            hooks.insert(name, value);
+        } else {
+            panic!("You can't add hooks at runtime");
+        }
+    }
+
+    fn finalize(&self) -> HooksContainer {
+        if let HooksContainer::Mutable(ref hooks) = *self {
+            HooksContainer::Immutable(Arc::new(hooks.clone()))
+        } else {
+            panic!("Already finalized!")
+        }
+    }
+
+    fn reference(&self) -> Arc<Hooks> {
+        if let HooksContainer::Immutable(ref hooks) = *self {
+            hooks.clone()
+        } else {
+            panic!("You can't get a reference before finalizing");
+        }
+    }
+}
+
+
 pub struct AppFactory<'a> {
     options: &'a FisherOptions,
-    hooks: Hooks,
+    hooks: HooksContainer,
 }
 
 impl<'a> AppFactory<'a> {
@@ -55,7 +93,7 @@ impl<'a> AppFactory<'a> {
     pub fn new(options: &'a FisherOptions) -> Self {
         AppFactory {
             options: options,
-            hooks: Hooks::new(),
+            hooks: HooksContainer::new(),
         }
     }
 
@@ -64,9 +102,12 @@ impl<'a> AppFactory<'a> {
     }
 
     pub fn start(&'a mut self) -> FisherResult<RunningApp> {
+        // Finalize the hooks
+        self.hooks = self.hooks.finalize();
+
         // Initialize the state
         let mut processor = ProcessorManager::new();
-        let mut web_api = WebApp::new(&self.hooks);
+        let mut web_api = WebApp::new(self.hooks.reference());
 
         // Start the processor
         processor.start(self.options.max_threads);
@@ -97,15 +138,15 @@ impl<'a> AppFactory<'a> {
 }
 
 
-pub struct RunningApp<'a> {
+pub struct RunningApp {
     processor: ProcessorManager,
-    web_api: WebApp<'a>,
+    web_api: WebApp,
     web_address: net::SocketAddr,
 }
 
-impl<'a> RunningApp<'a> {
+impl RunningApp {
 
-    fn new(processor: ProcessorManager, web_api: WebApp<'a>,
+    fn new(processor: ProcessorManager, web_api: WebApp,
            web_address: net::SocketAddr) -> Self {
         RunningApp {
             processor: processor,
