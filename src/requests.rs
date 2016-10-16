@@ -20,6 +20,9 @@ use std::collections::HashMap;
 use nickel;
 use hyper::uri::RequestUri;
 use url::form_urlencoded;
+use rustc_serialize::json;
+
+use jobs::JobOutput;
 
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -36,6 +39,25 @@ pub struct Request {
     pub headers: HashMap<String, String>,
     pub params: HashMap<String, String>,
     pub body: String,
+}
+
+impl From<JobOutput> for Request {
+
+    fn from(output: JobOutput) -> Request {
+        let mut params = HashMap::new();
+        params.insert("hook_name".into(), output.hook_name.clone());
+        params.insert(
+            "event".into(),
+            if output.success { "job_completed" } else { "job_failed" }.into()
+        );
+
+        Request {
+            source: "127.0.0.1".parse().unwrap(),
+            headers: HashMap::new(),
+            params: params,
+            body: json::encode(&output).unwrap(),
+        }
+    }
 }
 
 

@@ -110,7 +110,7 @@ impl<'a> AppFactory<'a> {
         let mut web_api = WebApp::new(self.hooks.reference());
 
         // Start the processor
-        processor.start(self.options.max_threads);
+        processor.start(self.options.max_threads, self.hooks.reference());
         let processor_input = processor.sender().unwrap();
 
         // Start the Web API

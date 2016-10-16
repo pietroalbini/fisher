@@ -14,11 +14,14 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::sync::Arc;
 
 use rustc_serialize::json::{Json, ToJson};
 use chan;
 
 use jobs::Job;
+use hooks::Hooks;
+use requests::Request;
 use errors;
 
 
@@ -39,7 +42,7 @@ impl ProcessorManager {
         }
     }
 
-    pub fn start(&mut self, max_threads: u16) {
+    pub fn start(&mut self, max_threads: u16, hooks: Arc<Hooks>) {
         // This is used to retrieve the sender we want from the child thread
         let (sender_send, sender_recv) = chan::sync(0);
 
@@ -48,7 +51,7 @@ impl ProcessorManager {
         let (stop_wait_send, stop_wait_recv) = chan::sync(0);
 
         ::std::thread::spawn(move || {
-            let (mut processor, input) = Processor::new(max_threads);
+            let (mut processor, input) = Processor::new(max_threads, hooks);
 
             // Send the sender back to the parent thread
             sender_send.send(input);
@@ -98,6 +101,7 @@ pub enum ProcessorInput {
 
 struct Processor {
     jobs: VecDeque<Job>,
+    hooks: Arc<Hooks>,
 
     should_stop: bool,
     threads_count: u16,
@@ -109,12 +113,14 @@ struct Processor {
 
 impl Processor {
 
-    pub fn new(max_threads: u16) -> (Processor, SenderChan) {
+    pub fn new(max_threads: u16, hooks: Arc<Hooks>)
+               -> (Processor, SenderChan) {
         // Create the channel for the input
         let (input_send, input_recv) = chan::async();
 
         let processor = Processor {
             jobs: VecDeque::new(),
+            hooks: hooks,
 
             should_stop: false,
             threads_count: 0,
@@ -173,6 +179,7 @@ impl Processor {
 
     fn spawn_thread(&mut self, job: Job) {
         let input_send = self.input_send.clone();
+        let hooks = self.hooks.clone();
 
         self.threads_count += 1;
 
@@ -183,6 +190,27 @@ impl Processor {
             if let Err(mut error) = result {
                 error.set_hook(job.hook_name().to_string());
                 let _ = errors::print_err::<()>(Err(error));
+            } else {
+                let output = result.unwrap();
+                let req: Request = output.into();
+
+                for (hook_name, hook) in hooks.iter() {
+                    // Validate the request only on the Status providers
+                    let opt_provider = hook.validate_provider("Status", &req);
+
+                    if let Some(provider) = opt_provider {
+                        let status_job = Job::new(
+                            hook.clone(), Some(provider), req.clone()
+                        );
+
+                        // Process the new status job
+                        let result = status_job.process();
+                        if let Err(mut error) = result {
+                            error.set_hook(hook_name.to_string());
+                            let _ = errors::print_err::<()>(Err(error));
+                        }
+                    }
+                }
             }
 
             // Notify the end of this thread

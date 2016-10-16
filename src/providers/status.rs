@@ -19,6 +19,7 @@ use rustc_serialize::json;
 
 use requests::{Request, RequestType};
 use errors::{FisherResult, ErrorKind};
+use jobs::JobOutput;
 
 
 lazy_static! {
@@ -26,7 +27,7 @@ lazy_static! {
         "job_completed", "job_failed",
     ];
     static ref REQUIRED_ARGS: Vec<&'static str> = vec![
-        "event", "hook_name", "exit_code", "signal",
+        "event", "hook_name",
     ];
 }
 
@@ -100,6 +101,23 @@ pub fn validate(req: &Request, config: &str) -> bool {
         return false;
     }
 
+    // Events must exist
+    let event = req.params.get("event").unwrap().as_str();
+    if ! EVENTS.contains(&event) {
+        return false;
+    }
+
+    // Event-specific validation
+    match event {
+        "job_completed" | "job_failed" => {
+            // The request body must be a serialized JobOutput
+            if json::decode::<JobOutput>(&req.body).is_err() {
+                return false;
+            }
+        }
+        _ => unreachable!(),
+    }
+
     // The hook name must be allowed
     if ! config.hook_allowed(req.params.get("hook_name").unwrap()) {
         return false;
@@ -122,16 +140,57 @@ pub fn env(req: &Request, _config: &str) -> HashMap<String, String> {
         env.insert(key.to_uppercase(), value.clone());
     }
 
+    // Event-specific env
+    match req.params.get("event").unwrap().as_str() {
+        "job_completed" | "job_failed" => {
+            let data = json::decode::<JobOutput>(&req.body).unwrap();
+
+            env.insert(
+                "SUCCESS".into(), if data.success { "1" } else { "0" }.into()
+            );
+            env.insert(
+                "EXIT_CODE".into(),
+                if let Some(code) = data.exit_code {
+                    format!("{}", code)
+                } else { "".into() }
+            );
+            env.insert(
+                "SIGNAL".into(),
+                if let Some(signal) = data.signal {
+                    format!("{}", signal)
+                } else { "".into() }
+            );
+        },
+        _ => unreachable!(),
+    }
+
     env
 }
 
 
 #[cfg(test)]
 mod tests {
+    use rustc_serialize::json;
+
     use utils::testing::*;
     use requests::RequestType;
+    use jobs::JobOutput;
 
-    use super::{Config, check_config, request_type, validate, env};
+    use super::{Config, check_config, request_type, validate};
+
+
+    fn dummy_job_output() -> JobOutput {
+        JobOutput {
+            stdout: "hello world".into(),
+            stderr: "something went wrong".into(),
+
+            success: true,
+            exit_code: Some(0),
+            signal: None,
+
+            hook_name: "example".into(),
+        }
+    }
 
 
     #[test]
@@ -217,6 +276,7 @@ mod tests {
         );
     }
 
+
     #[test]
     fn test_validate() {
         let mut req = dummy_request();
@@ -224,11 +284,14 @@ mod tests {
         // Test without any of the required params
         assert!(! validate(&req, r#"{}"#));
 
-        // Test with the required params
+        // Test without the right request body
         req.params.insert("event".into(), "job_completed".into());
         req.params.insert("hook_name".into(), "test".into());
-        req.params.insert("exit_code".into(), "0".into());
-        req.params.insert("signal".into(), "".into());
+        req.body = "{}".into();
+        assert!(! validate(&req, r#"{}"#));
+
+        // Test with the right request body for the event
+        req.body = json::encode(&dummy_job_output()).unwrap();
         assert!(validate(&req, r#"{}"#));
 
         // Test with some extra params
@@ -247,17 +310,44 @@ mod tests {
 
         // Test with a right allowed hook
         assert!(validate(&req, r#"{"hooks": ["test"]}"#));
+
+        // Test with a wrong event name
+        req.params.insert("event".into(), "__invalid__".into());
+        assert!(! validate(&req, r#"{}"#));
     }
+
 
     #[test]
     fn test_env() {
         let mut req = dummy_request();
-        req.params.insert("test1".into(), "a".into());
-        req.params.insert("test2".into(), "b".into());
 
-        let env = env(&req, r#"{}"#);
-        assert_eq!(env.len(), 2);
-        assert_eq!(env.get("TEST1").unwrap(), &"a".to_string());
-        assert_eq!(env.get("TEST2").unwrap(), &"b".to_string());
+        // Try with a job_completed event
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
+        req.body = json::encode(&dummy_job_output()).unwrap();
+
+        let env = super::env(&req, r#"{}"#);
+        assert_eq!(env.len(), 5);
+        assert_eq!(env.get("EVENT").unwrap(), &"job_completed".to_string());
+        assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
+        assert_eq!(env.get("SUCCESS").unwrap(), &"1".to_string());
+        assert_eq!(env.get("EXIT_CODE").unwrap(), &"0".to_string());
+        assert_eq!(env.get("SIGNAL").unwrap(), &"".to_string());
+
+        // Try with a job_failed event
+        let mut output = dummy_job_output();
+        output.success = false;
+        output.exit_code = None;
+        output.signal = Some(9);
+        req.params.insert("event".into(), "job_failed".into());
+        req.body = json::encode(&output).unwrap();
+
+        let env = super::env(&req, r#"{}"#);
+        assert_eq!(env.len(), 5);
+        assert_eq!(env.get("EVENT").unwrap(), &"job_failed".to_string());
+        assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
+        assert_eq!(env.get("SUCCESS").unwrap(), &"0".to_string());
+        assert_eq!(env.get("EXIT_CODE").unwrap(), &"".to_string());
+        assert_eq!(env.get("SIGNAL").unwrap(), &"9".to_string());
     }
 }

@@ -24,7 +24,7 @@ use hooks::Hook;
 use utils;
 use requests::Request;
 use providers::HookProvider;
-use errors::{ErrorKind, FisherResult};
+use errors::FisherResult;
 
 
 lazy_static! {
@@ -62,7 +62,7 @@ impl Job {
         self.hook.name()
     }
 
-    pub fn process(&self) -> FisherResult<()> {
+    pub fn process(&self) -> FisherResult<JobOutput> {
         let mut command = process::Command::new(&self.hook.exec());
 
         // Prepare the command's environment variables
@@ -82,17 +82,12 @@ impl Job {
 
         // Execute the hook
         let output = try!(command.output());
-        if ! output.status.success() {
-            return Err(ErrorKind::HookExecutionFailed(
-                output.status.code(),
-                output.status.signal(),
-            ).into());
-        }
 
         // Remove the temp directory
         try!(fs::remove_dir_all(&working_directory));
 
-        Ok(())
+        // Return the job output
+        Ok((self, output).into())
     }
 
     fn prepare_env(&self, command: &mut process::Command) {
@@ -135,6 +130,35 @@ impl Job {
 }
 
 
+#[derive(Clone, RustcEncodable, RustcDecodable)]
+pub struct JobOutput {
+    pub stdout: String,
+    pub stderr: String,
+
+    pub success: bool,
+    pub exit_code: Option<i32>,
+    pub signal: Option<i32>,
+
+    pub hook_name: String,
+}
+
+impl<'a> From<(&'a Job, process::Output)> for JobOutput {
+
+    fn from(data: (&'a Job, process::Output)) -> JobOutput {
+        JobOutput {
+            stdout: String::from_utf8_lossy(&data.1.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&data.1.stderr).into_owned(),
+
+            success: data.1.status.success(),
+            exit_code: data.1.status.code(),
+            signal: data.1.status.signal(),
+
+            hook_name: data.0.hook_name().into(),
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use std::env;
@@ -171,10 +195,14 @@ mod tests {
 
         // The "example" hook should be processed without problems
         let job = env.create_job("example", dummy_request());
-        assert!(job.process().is_ok());
+        let result = job.process().unwrap();
+        assert!(result.success);
+        assert_eq!(result.exit_code, Some(0));
 
         let job = env.create_job("failing", dummy_request());
-        assert!(job.process().is_err());
+        let result = job.process().unwrap();
+        assert!(! result.success);
+        assert_eq!(result.exit_code, Some(1));
 
         env.cleanup();
     }

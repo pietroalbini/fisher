@@ -107,6 +107,22 @@ impl Hook {
         }
     }
 
+    pub fn validate_provider(&self, name: &str, req: &Request)
+                             -> Option<HookProvider> {
+        for provider in &self.providers {
+            // Skip providers with different names
+            if provider.name() != name {
+                continue;
+            }
+
+            if provider.validate(&req) {
+                return Some(provider.clone());
+            }
+        }
+
+        None
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
