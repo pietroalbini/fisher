@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 pub use std::collections::HashMap;
+pub use std::path::PathBuf;
 
 pub use providers::Provider;
 pub use requests::{Request, RequestType};

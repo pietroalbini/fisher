@@ -130,7 +130,8 @@ pub fn sample_hooks() -> PathBuf {
         r#"echo "executed" > "${b}/executed""#,
         r#"env > "${b}/env""#,
         r#"pwd > "${b}/pwd""#,
-        r#"cat "${FISHER_REQUEST_BODY}" > "${b}/request_body""#
+        r#"cat "${FISHER_REQUEST_BODY}" > "${b}/request_body""#,
+        r#"cat "prepared" > "${b}/prepared""#
     );
 
     create_hook!(tempdir, "trigger-status.sh",

@@ -80,6 +80,13 @@ impl Job {
             request_body.to_str().unwrap().to_string()
         );
 
+        // Tell the provider to prepare the directory
+        if let Some(ref provider) = self.provider {
+            try!(provider.prepare_directory(
+                &self.request, &working_directory
+            ));
+        }
+
         // Execute the hook
         let output = try!(command.output());
 
@@ -245,6 +252,9 @@ mod tests {
 
         // The request body must be present
         assert_eq!(read!(output, "request_body"), "a body!\n".to_string());
+
+        // The file from prepare_directory must be present
+        assert_eq!(read!(output, "prepared"), "prepared\n".to_string());
 
         // Get the used working directory
         let pwd_raw = read!(output, "pwd");

@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use requests::{Request, RequestType};
 use errors::{FisherResult, ErrorKind};
@@ -38,6 +39,14 @@ pub trait Provider: ProviderClone {
     /// This method should provide the environment variables of the provided
     /// request. Those variables will be passed to the process
     fn env(&self, &Request) -> HashMap<String, String>;
+
+    /// This method should prepare the directory in which the hook will be run.
+    /// This means, if you want to add extra files in there you should use
+    /// this. You're not required to implement this method
+    fn prepare_directory(&self, _req: &Request, _path: &PathBuf)
+                         -> FisherResult<()> {
+        Ok(())
+    }
 }
 
 
@@ -119,14 +128,21 @@ impl HookProvider {
     pub fn env(&self, req: &Request) -> HashMap<String, String> {
         self.provider.env(req)
     }
+
+    pub fn prepare_directory(&self, req: &Request, path: &PathBuf)
+                             -> FisherResult<()> {
+        self.provider.prepare_directory(req, path)
+    }
 }
 
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::fs;
 
     use utils::testing::*;
+    use utils;
     use requests::RequestType;
 
     use super::Factories;
@@ -165,5 +181,10 @@ mod tests {
 
         // You should be able to call the environment creator
         assert_eq!(provider.env(&request), HashMap::new());
+
+        // You should be able to call the directory preparator
+        let directory = utils::create_temp_dir().unwrap();
+        provider.prepare_directory(&request, &directory).unwrap();
+        fs::remove_dir_all(&directory).unwrap();
     }
 }

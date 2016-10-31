@@ -15,6 +15,8 @@
 
 use std::net::IpAddr;
 use std::str::FromStr;
+use std::fs::File;
+use std::io::Write;
 
 use providers::prelude::*;
 use errors::ErrorKind;
@@ -77,6 +79,18 @@ impl Provider for TestingProvider {
         }
 
         res
+    }
+
+    fn prepare_directory(&self, _req: &Request, path: &PathBuf)
+                         -> FisherResult<()> {
+        // Create a test file
+        let mut dest = path.clone();
+        dest.push("prepared");
+        try!(writeln!(try!(File::create(&dest)), "prepared"));
+
+        println!("Called");
+
+        Ok(())
     }
 }
 
