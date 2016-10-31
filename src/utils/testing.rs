@@ -141,7 +141,10 @@ pub fn sample_hooks() -> PathBuf {
 
     create_hook!(tempdir, "status-example.sh",
         r#"#!/bin/bash"#,
-        r#"## Fisher-Status: {"hooks": ["trigger-status"]}"#,
+        concat!(
+            r#"## Fisher-Status: {"events": ["job_completed", "job_failed"], "#,
+            r#""hooks": ["trigger-status"]}"#,
+        ),
         r#"echo "triggered!""#
     );
 

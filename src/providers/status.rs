@@ -32,12 +32,13 @@ lazy_static! {
 
 #[derive(Clone, RustcDecodable)]
 pub struct StatusProvider {
-    events: Option<Vec<String>>,
+    events: Vec<String>,
     hooks: Option<Vec<String>>,
 }
 
 impl StatusProvider {
 
+    #[inline]
     pub fn hook_allowed(&self, name: &String) -> bool {
         // Check if it's allowed only if a whitelist was provided
         if let Some(ref hooks) = self.hooks {
@@ -49,15 +50,9 @@ impl StatusProvider {
         true
     }
 
+    #[inline]
     pub fn event_allowed(&self, name: &String) -> bool {
-        // Check if it's allowed only if a whitelist was provided
-        if let Some(ref events) = self.events {
-            if ! events.contains(name) {
-                return false;
-            }
-        }
-
-        true
+        self.events.contains(name)
     }
 }
 
@@ -66,14 +61,12 @@ impl Provider for StatusProvider {
     fn new(config: &str) -> FisherResult<Self> {
         let inst: Self = try!(json::decode(config));
 
-        if let Some(ref events) = inst.events {
-            for event in events {
-                if ! EVENTS.contains(&event.as_ref()) {
-                    // Return an error if the event doesn't exist
-                    return Err(ErrorKind::InvalidInput(format!(
-                        r#""{}" is not a FIsher status event"#, event
-                    )).into());
-                }
+        for event in &inst.events {
+            if ! EVENTS.contains(&event.as_ref()) {
+                // Return an error if the event doesn't exist
+                return Err(ErrorKind::InvalidInput(format!(
+                    r#""{}" is not a FIsher status event"#, event
+                )).into());
             }
         }
 
@@ -193,7 +186,7 @@ mod tests {
             ($hooks:expr, $check:expr, $expected:expr) => {{
                 let provider = StatusProvider {
                     hooks: $hooks,
-                    events: None,
+                    events: vec![],
                 };
                 assert_eq!(
                     provider.hook_allowed(&$check.to_string()),
@@ -224,22 +217,20 @@ mod tests {
             }};
         };
 
-        assert_custom!(None, "test", true);
-        assert_custom!(Some(vec![]), "test", false);
-        assert_custom!(Some(vec!["something".to_string()]), "test", false);
-        assert_custom!(Some(vec!["test".to_string()]), "test", true);
+        assert_custom!(vec![], "test", false);
+        assert_custom!(vec!["something".to_string()], "test", false);
+        assert_custom!(vec!["test".to_string()], "test", true);
     }
 
 
     #[test]
     fn test_new() {
         for right in &[
-            r#"{}"#,
-            r#"{"hooks": []}"#,
-            r#"{"hooks": ["abc"]}"#,
             r#"{"events": []}"#,
             r#"{"events": ["job_completed"]}"#,
             r#"{"events": ["job_completed", "job_failed"]}"#,
+            r#"{"events": [], "hooks": []}"#,
+            r#"{"events": [], "hooks": ["abc"]}"#,
         ] {
             assert!(StatusProvider::new(&right).is_ok());
         }
@@ -251,6 +242,8 @@ mod tests {
             r#"{"hooks": {}}"#,
             r#"{"hooks": [1]}"#,
             r#"{"hooks": [true]}"#,
+            r#"{"hooks": []}"#,
+            r#"{"hooks": ["abc"]}"#,
             r#"{"events": {}}"#,
             r#"{"events": [12345]}"#,
             r#"{"events": [true]}"#,
@@ -273,21 +266,33 @@ mod tests {
         let mut req = dummy_request();
 
         // Test without any of the required params
-        assert_validate!(&req, r#"{}"#, RequestType::Invalid);
+        assert_validate!(&req,
+            r#"{"events": ["job_completed"]}"#,
+            RequestType::Invalid
+        );
 
         // Test without the right request body
         req.params.insert("event".into(), "job_completed".into());
         req.params.insert("hook_name".into(), "test".into());
-        req.body = "{}".into();
-        assert_validate!(&req, r#"{}"#, RequestType::Invalid);
+        req.body = r#"{}"#.into();
+        assert_validate!(&req,
+            r#"{"events": ["job_completed"]}"#,
+            RequestType::Invalid
+        );
 
         // Test with the right request body for the event
         req.body = json::encode(&dummy_job_output()).unwrap();
-        assert_validate!(&req, r#"{}"#, RequestType::Internal);
+        assert_validate!(&req,
+            r#"{"events": ["job_completed"]}"#,
+            RequestType::Internal
+        );
 
         // Test with some extra params
         req.params.insert("test".into(), "invalid".into());
-        assert_validate!(&req, r#"{}"#, RequestType::Invalid);
+        assert_validate!(&req,
+            r#"{"events": ["job_completed"]}"#,
+            RequestType::Invalid
+        );
         req.params.remove("test".into());
 
         // Test with a wrong allowed event
@@ -304,26 +309,31 @@ mod tests {
 
         // Test with a wrong allowed hook
         assert_validate!(&req,
-            r#"{"hooks": ["invalid"]}"#,
+            r#"{"events": ["job_completed"], "hooks": ["invalid"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed hook
         assert_validate!(&req,
-            r#"{"hooks": ["test"]}"#,
+            r#"{"events": ["job_completed"], "hooks": ["test"]}"#,
             RequestType::Internal
         );
 
         // Test with a wrong event name
         req.params.insert("event".into(), "__invalid__".into());
-        assert_validate!(&req, r#"{}"#, RequestType::Invalid);
+        assert_validate!(&req,
+            r#"{"events": ["job_completed"]}"#,
+            RequestType::Invalid
+        );
     }
 
 
     #[test]
     fn test_env() {
         let mut req = dummy_request();
-        let provider = StatusProvider::new("{}").unwrap();
+        let provider = StatusProvider::new(
+            r#"{"events": ["job_completed", "job_failed"]}"#
+        ).unwrap();
 
         // Try with a job_completed event
         req.params.insert("event".into(), "job_completed".into());
