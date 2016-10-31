@@ -30,7 +30,8 @@ use jobs::Job;
 use web::WebApp;
 use requests::Request;
 use processor::{ProcessorInput, HealthDetails};
-use providers::{Provider, testing};
+use providers::{Provider, ProviderFactory, BoxedProvider, testing};
+use errors::FisherResult;
 use utils;
 
 
@@ -69,14 +70,13 @@ pub fn dummy_request() -> Request {
 }
 
 
-pub fn testing_provider() -> Provider {
-    Provider::new(
-        "Testing".to_string(),
-        testing::check_config,
-        testing::request_type,
-        testing::validate,
-        testing::env,
-    )
+pub fn testing_provider_factory() -> ProviderFactory {
+    fn factory(config: &str) -> FisherResult<BoxedProvider> {
+        let prov = try!(testing::TestingProvider::new(config));
+        Ok(Box::new(prov) as BoxedProvider)
+    }
+
+    factory
 }
 
 

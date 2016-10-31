@@ -13,12 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
-
 use rustc_serialize::json;
 
-use requests::{Request, RequestType};
-use errors::{FisherResult, ErrorKind};
+use providers::prelude::*;
+use errors::ErrorKind;
 use jobs::JobOutput;
 
 
@@ -32,13 +30,13 @@ lazy_static! {
 }
 
 
-#[derive(RustcDecodable)]
-struct Config {
+#[derive(Clone, RustcDecodable)]
+pub struct StatusProvider {
     events: Option<Vec<String>>,
     hooks: Option<Vec<String>>,
 }
 
-impl Config {
+impl StatusProvider {
 
     pub fn hook_allowed(&self, name: &String) -> bool {
         // Check if it's allowed only if a whitelist was provided
@@ -63,108 +61,103 @@ impl Config {
     }
 }
 
+impl Provider for StatusProvider {
 
-pub fn check_config(input: &str) -> FisherResult<()> {
-    let config: Config = try!(json::decode(input));
+    fn new(config: &str) -> FisherResult<Self> {
+        let inst: Self = try!(json::decode(config));
 
-    if let Some(ref events) = config.events {
-        for event in events {
-            if ! EVENTS.contains(&event.as_ref()) {
-                // Return an error if the event doesn't exist
-                return Err(ErrorKind::InvalidInput(format!(
-                    r#""{}" is not a Fisher status event"#, event
-                )).into());
+        if let Some(ref events) = inst.events {
+            for event in events {
+                if ! EVENTS.contains(&event.as_ref()) {
+                    // Return an error if the event doesn't exist
+                    return Err(ErrorKind::InvalidInput(format!(
+                        r#""{}" is not a FIsher status event"#, event
+                    )).into());
+                }
             }
         }
+
+        Ok(inst)
     }
 
-    Ok(())
-}
-
-
-pub fn request_type(_req: &Request, _config: &str) -> RequestType {
-    // This provider only accepts internal requests
-    RequestType::Internal
-}
-
-
-pub fn validate(req: &Request, config: &str) -> bool {
-    let config: Config = json::decode(config).unwrap();
-
-    // There must be all (and only) the required parameters
-    for param in req.params.keys() {
-        if ! REQUIRED_ARGS.contains(&param.as_ref()) {
-            return false;
-        }
-    }
-    if req.params.len() != REQUIRED_ARGS.len() {
-        return false;
-    }
-
-    // Events must exist
-    let event = req.params.get("event").unwrap().as_str();
-    if ! EVENTS.contains(&event) {
-        return false;
-    }
-
-    // Event-specific validation
-    match event {
-        "job_completed" | "job_failed" => {
-            // The request body must be a serialized JobOutput
-            if json::decode::<JobOutput>(&req.body).is_err() {
-                return false;
+    fn validate(&self, req: &Request) -> RequestType {
+        // There must be all (and only) the required parameters
+        for param in req.params.keys() {
+            if ! REQUIRED_ARGS.contains(&param.as_ref()) {
+                return RequestType::Invalid;
             }
         }
-        _ => unreachable!(),
+        if req.params.len() != REQUIRED_ARGS.len() {
+            return RequestType::Invalid;
+        }
+
+        // Events must exist
+        let event = req.params.get("event").unwrap().as_str();
+        if ! EVENTS.contains(&event) {
+            return RequestType::Invalid;
+        }
+
+        // Event-specific validation
+        match event {
+            "job_completed" | "job_failed" => {
+                // The request body must be a serialized JobOutput
+                if json::decode::<JobOutput>(&req.body).is_err() {
+                    return RequestType::Invalid;
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        // The hook name must be allowed
+        if ! self.hook_allowed(req.params.get("hook_name").unwrap()) {
+            return RequestType::Invalid;
+        }
+
+        // The event must be allowed
+        if ! self.event_allowed(req.params.get("event").unwrap()) {
+            return RequestType::Invalid;
+        }
+
+        // Requests for this provider are internal
+        RequestType::Internal
     }
 
-    // The hook name must be allowed
-    if ! config.hook_allowed(req.params.get("hook_name").unwrap()) {
-        return false;
+    fn env(&self, req: &Request) -> HashMap<String, String> {
+        let mut env = HashMap::new();
+
+        // Move all the params to the env
+        for (key, value) in req.params.iter() {
+            env.insert(key.to_uppercase(), value.clone());
+        }
+
+        // Event-specific env
+        match req.params.get("event").unwrap().as_str() {
+            "job_completed" | "job_failed" => {
+                let data = json::decode::<JobOutput>(&req.body).unwrap();
+
+                env.insert(
+                    "SUCCESS".into(), if data.success {
+                        "1"
+                    } else { "0" }.into()
+                );
+                env.insert(
+                    "EXIT_CODE".into(),
+                    if let Some(code) = data.exit_code {
+                        format!("{}", code)
+                    } else { "".into() }
+                );
+                env.insert(
+                    "SIGNAL".into(),
+                    if let Some(signal) = data.signal {
+                        format!("{}", signal)
+                    } else { "".into() }
+                );
+            },
+            _ => unreachable!(),
+        }
+
+        env
     }
-
-    // The event must be allowed
-    if ! config.event_allowed(req.params.get("event").unwrap()) {
-        return false;
-    }
-
-    true
-}
-
-
-pub fn env(req: &Request, _config: &str) -> HashMap<String, String> {
-    let mut env = HashMap::new();
-
-    // Move all the params to the env
-    for (key, value) in req.params.iter() {
-        env.insert(key.to_uppercase(), value.clone());
-    }
-
-    // Event-specific env
-    match req.params.get("event").unwrap().as_str() {
-        "job_completed" | "job_failed" => {
-            let data = json::decode::<JobOutput>(&req.body).unwrap();
-
-            env.insert(
-                "SUCCESS".into(), if data.success { "1" } else { "0" }.into()
-            );
-            env.insert(
-                "EXIT_CODE".into(),
-                if let Some(code) = data.exit_code {
-                    format!("{}", code)
-                } else { "".into() }
-            );
-            env.insert(
-                "SIGNAL".into(),
-                if let Some(signal) = data.signal {
-                    format!("{}", signal)
-                } else { "".into() }
-            );
-        },
-        _ => unreachable!(),
-    }
-
-    env
 }
 
 
@@ -175,8 +168,9 @@ mod tests {
     use utils::testing::*;
     use requests::RequestType;
     use jobs::JobOutput;
+    use providers::Provider;
 
-    use super::{Config, check_config, request_type, validate};
+    use super::StatusProvider;
 
 
     fn dummy_job_output() -> JobOutput {
@@ -197,12 +191,12 @@ mod tests {
     fn config_hook_allowed() {
         macro_rules! assert_custom {
             ($hooks:expr, $check:expr, $expected:expr) => {{
-                let config = Config {
+                let provider = StatusProvider {
                     hooks: $hooks,
                     events: None,
                 };
                 assert_eq!(
-                    config.hook_allowed(&$check.to_string()),
+                    provider.hook_allowed(&$check.to_string()),
                     $expected
                 );
             }};
@@ -219,12 +213,12 @@ mod tests {
     fn config_event_allowed() {
         macro_rules! assert_custom {
             ($events:expr, $check:expr, $expected:expr) => {{
-                let config = Config {
+                let provider = StatusProvider {
                     hooks: None,
                     events: $events,
                 };
                 assert_eq!(
-                    config.event_allowed(&$check.to_string()),
+                    provider.event_allowed(&$check.to_string()),
                     $expected
                 );
             }};
@@ -238,7 +232,7 @@ mod tests {
 
 
     #[test]
-    fn test_check_config() {
+    fn test_new() {
         for right in &[
             r#"{}"#,
             r#"{"hooks": []}"#,
@@ -247,7 +241,7 @@ mod tests {
             r#"{"events": ["job_completed"]}"#,
             r#"{"events": ["job_completed", "job_failed"]}"#,
         ] {
-            assert!(check_config(&right).is_ok());
+            assert!(StatusProvider::new(&right).is_ok());
         }
 
         for wrong in &[
@@ -263,70 +257,80 @@ mod tests {
             r#"{"events": ["invalid_event"]}"#,
             r#"{"events": ["job_completed", "invalid_event"]}"#,
         ] {
-            assert!(check_config(&wrong).is_err());
+            assert!(StatusProvider::new(&wrong).is_err());
         }
     }
 
 
     #[test]
-    fn test_request_type() {
-        assert_eq!(
-            request_type(&dummy_request(), "{}"),
-            RequestType::Internal
-        );
-    }
-
-
-    #[test]
     fn test_validate() {
+        macro_rules! assert_validate {
+            ($req:expr, $config:expr, $expect:expr) => {{
+                let provider = StatusProvider::new($config).unwrap();
+                assert_eq!(provider.validate($req), $expect)
+            }};
+        }
         let mut req = dummy_request();
 
         // Test without any of the required params
-        assert!(! validate(&req, r#"{}"#));
+        assert_validate!(&req, r#"{}"#, RequestType::Invalid);
 
         // Test without the right request body
         req.params.insert("event".into(), "job_completed".into());
         req.params.insert("hook_name".into(), "test".into());
         req.body = "{}".into();
-        assert!(! validate(&req, r#"{}"#));
+        assert_validate!(&req, r#"{}"#, RequestType::Invalid);
 
         // Test with the right request body for the event
         req.body = json::encode(&dummy_job_output()).unwrap();
-        assert!(validate(&req, r#"{}"#));
+        assert_validate!(&req, r#"{}"#, RequestType::Internal);
 
         // Test with some extra params
         req.params.insert("test".into(), "invalid".into());
-        assert!(! validate(&req, r#"{}"#));
+        assert_validate!(&req, r#"{}"#, RequestType::Invalid);
         req.params.remove("test".into());
 
         // Test with a wrong allowed event
-        assert!(! validate(&req, r#"{"events": ["job_failed"]}"#));
+        assert_validate!(&req,
+            r#"{"events": ["job_failed"]}"#,
+            RequestType::Invalid
+        );
 
         // Test with a right allowed event
-        assert!(validate(&req, r#"{"events": ["job_completed"]}"#));
+        assert_validate!(&req,
+            r#"{"events": ["job_completed"]}"#,
+            RequestType::Internal
+        );
 
         // Test with a wrong allowed hook
-        assert!(! validate(&req, r#"{"hooks": ["invalid"]}"#));
+        assert_validate!(&req,
+            r#"{"hooks": ["invalid"]}"#,
+            RequestType::Invalid
+        );
 
         // Test with a right allowed hook
-        assert!(validate(&req, r#"{"hooks": ["test"]}"#));
+        assert_validate!(&req,
+            r#"{"hooks": ["test"]}"#,
+            RequestType::Internal
+        );
 
         // Test with a wrong event name
         req.params.insert("event".into(), "__invalid__".into());
-        assert!(! validate(&req, r#"{}"#));
+        assert_validate!(&req, r#"{}"#, RequestType::Invalid);
     }
 
 
     #[test]
     fn test_env() {
         let mut req = dummy_request();
+        let provider = StatusProvider::new("{}").unwrap();
 
         // Try with a job_completed event
         req.params.insert("event".into(), "job_completed".into());
         req.params.insert("hook_name".into(), "test".into());
         req.body = json::encode(&dummy_job_output()).unwrap();
 
-        let env = super::env(&req, r#"{}"#);
+        let env = provider.env(&req);
         assert_eq!(env.len(), 5);
         assert_eq!(env.get("EVENT").unwrap(), &"job_completed".to_string());
         assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
@@ -342,7 +346,7 @@ mod tests {
         req.params.insert("event".into(), "job_failed".into());
         req.body = json::encode(&output).unwrap();
 
-        let env = super::env(&req, r#"{}"#);
+        let env = provider.env(&req);
         assert_eq!(env.len(), 5);
         assert_eq!(env.get("EVENT").unwrap(), &"job_failed".to_string());
         assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());

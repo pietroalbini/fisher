@@ -17,35 +17,72 @@ use std::collections::HashMap;
 
 use requests::{Request, RequestType};
 use errors::{FisherResult, ErrorKind};
-use utils::CopyToClone;
 
 
-pub type CheckConfigFunc = fn(&str) -> FisherResult<()>;
-pub type RequestTypeFunc = fn(&Request, &str) -> RequestType;
-pub type ValidatorFunc = fn(&Request, &str) -> bool;
-pub type EnvFunc = fn(&Request, &str) -> HashMap<String, String>;
+pub type BoxedProvider = Box<Provider + Sync + Send>;
+pub type ProviderFactory = fn(&str) -> FisherResult<BoxedProvider>;
 
 
-pub struct Providers {
-    providers: HashMap<String, Provider>,
+/// This trait should be implemented by every Fisher provider
+/// The objects implementing this trait must also implement Clone
+pub trait Provider: ProviderClone {
+
+    /// This method should create a new instance of the provider, from a
+    /// given configuration string
+    fn new(&str) -> FisherResult<Self> where Self: Sized;
+
+    /// This method should validate an incoming request, returning its
+    /// type if the request is valid
+    fn validate(&self, &Request) -> RequestType;
+
+    /// This method should provide the environment variables of the provided
+    /// request. Those variables will be passed to the process
+    fn env(&self, &Request) -> HashMap<String, String>;
 }
 
-impl Providers {
 
-    pub fn new() -> Providers {
-        Providers {
-            providers: HashMap::new(),
+// This trick allows to clone Box<Provider>
+// Thanks to DK. and Chris Morgan on StackOverflow:
+// @ http://stackoverflow.com/a/30353928/2204144
+pub trait ProviderClone {
+    fn box_clone(&self) -> BoxedProvider;
+}
+
+impl<T> ProviderClone for T where T: 'static + Provider + Sync + Send + Clone {
+
+    fn box_clone(&self) -> BoxedProvider {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for BoxedProvider {
+
+    fn clone(&self) -> BoxedProvider {
+        self.box_clone()
+    }
+}
+
+
+pub struct Factories {
+    factories: HashMap<String, ProviderFactory>,
+}
+
+impl Factories {
+
+    pub fn new() -> Factories {
+        Factories {
+            factories: HashMap::new(),
         }
     }
 
-    pub fn add(&mut self, name: &str, provider: Provider) {
-        self.providers.insert(name.to_string(), provider);
+    pub fn add(&mut self, name: &str, factory: ProviderFactory) {
+        self.factories.insert(name.to_string(), factory);
     }
 
-    pub fn by_name(&self, name: &str) -> FisherResult<Provider> {
-        match self.providers.get(&name.to_string()) {
-            Some(provider) => {
-                Ok(provider.clone())
+    pub fn by_name(&self, name: &str) -> FisherResult<&ProviderFactory> {
+        match self.factories.get(&name.to_string()) {
+            Some(ref factory) => {
+                Ok(factory)
             },
             None => {
                 let kind = ErrorKind::ProviderNotFound(name.to_string());
@@ -53,30 +90,21 @@ impl Providers {
             },
         }
     }
-
 }
 
 
 #[derive(Clone)]
-pub struct Provider {
+pub struct HookProvider {
+    provider: BoxedProvider,
     name: String,
-    check_config_func: CopyToClone<CheckConfigFunc>,
-    request_type_func: CopyToClone<RequestTypeFunc>,
-    validator_func: CopyToClone<ValidatorFunc>,
-    env_func: CopyToClone<EnvFunc>,
 }
 
-impl Provider {
+impl HookProvider {
 
-    pub fn new(name: String, check_config: CheckConfigFunc,
-               request_type: RequestTypeFunc, validator: ValidatorFunc,
-               env: EnvFunc) -> Provider {
-        Provider {
+    pub fn new(provider: BoxedProvider, name: String) -> HookProvider {
+        HookProvider {
+            provider: provider,
             name: name,
-            check_config_func: CopyToClone::new(check_config),
-            request_type_func: CopyToClone::new(request_type),
-            validator_func: CopyToClone::new(validator),
-            env_func: CopyToClone::new(env),
         }
     }
 
@@ -84,71 +112,13 @@ impl Provider {
         &self.name
     }
 
-    pub fn check_config(&self, config: &str) -> FisherResult<()> {
-        // The func must be dereferenced, since it's wrapped in CopyToClone
-        (*self.check_config_func)(config)
-    }
-
-    pub fn request_type(&self, req: &Request, config: &str) -> RequestType {
-        // The func must be dereferenced, since it's wrapped in CopyToClone
-        (*self.request_type_func)(req, config)
-    }
-
-    pub fn validate(&self, req: &Request, config: &str) -> bool {
-        // The func must be dereferenced, since it's wrapped in CopyToClone
-        (*self.validator_func)(req, config)
-    }
-
-    pub fn env(&self, req: &Request, config: &str)
-               -> HashMap<String, String> {
-        // The func must be dereferenced, since it's wrapped in CopyToClone
-        (*self.env_func)(req, config)
-    }
-
-}
-
-
-#[derive(Clone)]
-pub struct HookProvider {
-    provider: Provider,
-    config: String,
-}
-
-impl HookProvider {
-
-    pub fn new(provider: Provider, config: String)
-               -> FisherResult<HookProvider> {
-        // First of all, check if the config is correct
-        try!(provider.check_config(&config));
-
-        // Then return the new provider
-        Ok(HookProvider {
-            provider: provider,
-            config: config,
-        })
-    }
-
-    pub fn name(&self) -> &str {
-        self.provider.name()
-    }
-
-    #[cfg(test)]
-    pub fn config(&self) -> &str {
-        &self.config
-    }
-
-    pub fn request_type(&self, req: &Request) -> RequestType {
-        self.provider.request_type(req, &self.config)
-    }
-
-    pub fn validate(&self, req: &Request) -> bool {
-        self.provider.validate(req, &self.config)
+    pub fn validate(&self, req: &Request) -> RequestType {
+        self.provider.validate(req)
     }
 
     pub fn env(&self, req: &Request) -> HashMap<String, String> {
-        self.provider.env(req, &self.config)
+        self.provider.env(req)
     }
-
 }
 
 
@@ -159,66 +129,41 @@ mod tests {
     use utils::testing::*;
     use requests::RequestType;
 
-    use super::{Providers, HookProvider};
+    use super::Factories;
 
     #[test]
-    fn test_providers() {
-        // Create a new instance of Providers
-        let mut providers = Providers::new();
+    fn test_factories() {
+        // Create a new instance of Factories
+        let mut factories = Factories::new();
 
-        // Add a dummy provider
-        providers.add("Sample", testing_provider());
+        // Add a dummy factory
+        factories.add("Sample", testing_provider_factory());
 
-        // You should be able to get a provider if it exists
-        assert!(providers.by_name(&"Sample".to_string()).is_ok());
+        // You should be able to get a factory if it exists
+        assert!(factories.by_name(&"Sample".to_string()).is_ok());
 
         // But if it doesn't exists you should get an error
-        assert!(providers.by_name(&"Not-Exists".to_string()).is_err());
-    }
-
-    #[test]
-    fn test_provider() {
-        let provider = testing_provider();
-        let request = dummy_request();
-
-        // You should be able to call the configuration checker
-        assert!(provider.check_config("yes").is_ok());
-
-        // You should be able to call the request type checker
-        assert_eq!(
-            provider.request_type(&request, "yes"),
-            RequestType::ExecuteHook
-        );
-
-        // You should be able to call the request validator
-        assert!(provider.validate(&request, "yes"));
-
-        // You should be able to call the environment creator
-        assert!(provider.env(&request, "") == HashMap::new());
+        assert!(factories.by_name(&"Not-Exists".to_string()).is_err());
     }
 
     #[test]
     fn test_hook_provider() {
-        let provider = testing_provider();
+        let provider_factory = testing_provider_factory();
         let request = dummy_request();
 
-        // Try to ceate an hook provider with an invalid config
-        let provider_res = HookProvider::new(provider.clone(), "FAIL".to_string());
-        assert!(provider_res.is_err());
+        // Try to create an hook provider with an invalid config
+        assert!(provider_factory("FAIL").is_err());
 
         // Create an hook provider with a valid config
-        let provider_res = HookProvider::new(provider.clone(), "yes".to_string());
+        let provider_res = provider_factory("yes");
         assert!(provider_res.is_ok());
 
         let provider = provider_res.unwrap();
 
-        // You should be able to call the request type checker
-        assert_eq!(provider.request_type(&request), RequestType::ExecuteHook);
-
         // You should be able to call the request validator
-        assert!(provider.validate(&request));
+        assert_eq!(provider.validate(&request), RequestType::ExecuteHook);
 
         // You should be able to call the environment creator
-        assert!(provider.env(&request) == HashMap::new());
+        assert_eq!(provider.env(&request), HashMap::new());
     }
 }

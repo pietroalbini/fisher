@@ -22,7 +22,7 @@ use std::io::{BufReader, BufRead};
 use regex::Regex;
 
 use providers::{self, HookProvider};
-use requests::Request;
+use requests::{Request, RequestType};
 use errors::FisherResult;
 
 
@@ -93,17 +93,16 @@ impl Hook {
         Ok(result)
     }
 
-    pub fn validate(&self, req: &Request) -> (bool, Option<HookProvider>) {
+    pub fn validate(&self, req: &Request)
+                    -> (RequestType, Option<HookProvider>) {
         if self.providers.len() > 0 {
             // Check every provider if they're present
             for provider in &self.providers {
-                if provider.validate(&req) {
-                    return (true, Some(provider.clone()))
-                }
+                return (provider.validate(&req), Some(provider.clone()))
             }
-            (false, None)
+            (RequestType::Invalid, None)
         } else {
-            (true, None)
+            (RequestType::ExecuteHook, None)
         }
     }
 
@@ -115,7 +114,7 @@ impl Hook {
                 continue;
             }
 
-            if provider.validate(&req) {
+            if provider.validate(&req).valid() {
                 return Some(provider.clone());
             }
         }
@@ -250,10 +249,9 @@ mod tests {
         };
 
         macro_rules! assert_provider {
-            ($providers:expr, $index:expr, $name:expr, $config:expr) => {{
+            ($providers:expr, $index:expr, $name:expr) => {{
                 let provider = $providers.get($index).unwrap();
                 assert_eq!(provider.name(), $name);
-                assert_eq!(provider.config(), $config);
             }};
         };
 
@@ -301,7 +299,7 @@ mod tests {
             r#"echo "hi";"#
         );
         let providers = load_providers!(base, "single-provider.sh").unwrap();
-        assert_provider!(providers, 0, "Testing", "something");
+        assert_provider!(providers, 0, "Testing");
 
         // This hook contains multiple valid providers
         create_hook!(base, "two-providers.sh",
@@ -312,8 +310,8 @@ mod tests {
             r#"echo "hi";"#
         );
         let providers = load_providers!(base, "two-providers.sh").unwrap();
-        assert_provider!(providers, 0, "Testing", "something");
-        assert_provider!(providers, 1, "Standalone", r#"{"secret": "12345"}"#);
+        assert_provider!(providers, 0, "Testing");
+        assert_provider!(providers, 1, "Standalone");
 
         fs::remove_dir_all(base).unwrap();
     }

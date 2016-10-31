@@ -30,6 +30,17 @@ pub enum RequestType {
     ExecuteHook,
     Ping,
     Internal,
+    Invalid,
+}
+
+impl RequestType {
+
+    pub fn valid(&self) -> bool {
+        match *self {
+            RequestType::Invalid => false,
+            _ => true,
+        }
+    }
 }
 
 

@@ -53,33 +53,25 @@ impl WebApi {
         }
 
         // Validate the hook
-        let (validated, provider) = hook.validate(&req);
-        if validated {
-            // Get the request type
-            let request_type = if let Some(ref real_provider) = provider {
-                real_provider.request_type(&req)
-            } else {
-                RequestType::ExecuteHook
-            };
+        let (request_type, provider) = hook.validate(&req);
 
-            // Change behavior based on the request type
-            match request_type {
-                // Don't do anything if it's only a ping
-                RequestType::Ping => Response::Ok,
+        // Change behavior based on the request type
+        match request_type {
+            // Don't do anything if it's only a ping
+            RequestType::Ping => Response::Ok,
 
-                // Queue a job if the hook should be executed
-                RequestType::ExecuteHook => {
-                    let job = Job::new(hook.clone(), provider, req);
-                    self.processor_input.send(ProcessorInput::Job(job));
+            // Queue a job if the hook should be executed
+            RequestType::ExecuteHook => {
+                let job = Job::new(hook.clone(), provider, req);
+                self.processor_input.send(ProcessorInput::Job(job));
 
-                    Response::Ok
-                },
+                Response::Ok
+            },
 
-                // Return a "forbidden" if the request is meant to be internal
-                RequestType::Internal => Response::Forbidden,
-            }
-        } else {
-            Response::Forbidden
+            // Return a "forbidden" if the request is meant to be internal
+            RequestType::Internal => Response::Forbidden,
+
+            RequestType::Invalid => Response::Forbidden,
         }
     }
 
