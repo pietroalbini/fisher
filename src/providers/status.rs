@@ -13,6 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::fs;
+use std::io::Write;
+
 use rustc_serialize::json;
 
 use providers::prelude::*;
@@ -151,14 +154,40 @@ impl Provider for StatusProvider {
 
         env
     }
+
+    fn prepare_directory(&self, req: &Request, path: &PathBuf)
+                         -> FisherResult<()> {
+        match req.params.get("event").unwrap().as_str() {
+            "job_completed" | "job_failed" => {
+                macro_rules! new_file {
+                    ($base:expr, $name:expr, $content:expr) => {{
+                        let mut path = $base.clone();
+                        path.push($name);
+
+                        let mut file = try!(fs::File::create(&path));
+                        try!(write!(file, "{}", $content));
+                    }};
+                }
+                let data: JobOutput = json::decode(&req.body).unwrap();
+
+                new_file!(path, "stdout", data.stdout);
+                new_file!(path, "stderr", data.stderr);
+            },
+            _ => unreachable!(),
+        }
+
+        Ok(())
+    }
 }
 
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use rustc_serialize::json;
 
     use utils::testing::*;
+    use utils;
     use requests::RequestType;
     use jobs::JobOutput;
     use providers::Provider;
@@ -169,7 +198,7 @@ mod tests {
     fn dummy_job_output() -> JobOutput {
         JobOutput {
             stdout: "hello world".into(),
-            stderr: "something went wrong".into(),
+            stderr: "something happened".into(),
 
             success: true,
             exit_code: Some(0),
@@ -363,5 +392,41 @@ mod tests {
         assert_eq!(env.get("SUCCESS").unwrap(), &"0".to_string());
         assert_eq!(env.get("EXIT_CODE").unwrap(), &"".to_string());
         assert_eq!(env.get("SIGNAL").unwrap(), &"9".to_string());
+    }
+
+    #[test]
+    fn test_prepare_directory() {
+        macro_rules! read {
+            ($base:expr, $name:expr) => {{
+                use std::fs;
+                use std::io::Read;
+
+                let base = $base.as_path().to_str().unwrap().to_string();
+                let file_name = format!("{}/{}", base, $name);
+                let mut file = fs::File::open(&file_name).unwrap();
+
+                let mut buf = String::new();
+                file.read_to_string(&mut buf).unwrap();
+
+                buf
+            }};
+        }
+
+        let mut req = dummy_request();
+        let provider = StatusProvider::new(
+            r#"{"events": ["job_completed"]}"#,
+        ).unwrap();
+
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
+        req.body = json::encode(&dummy_job_output()).unwrap();
+
+        let tempdir = utils::create_temp_dir().unwrap();
+        provider.prepare_directory(&req, &tempdir).unwrap();
+
+        assert_eq!(read!(tempdir, "stdout"), "hello world".to_string());
+        assert_eq!(read!(tempdir, "stderr"), "something happened".to_string());
+
+        fs::remove_dir_all(&tempdir).unwrap();
     }
 }
