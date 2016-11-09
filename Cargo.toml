@@ -21,7 +21,6 @@ chan-signal="^0.1"
 rustc-serialize="^0.3"
 lazy_static="^0.2"
 rand="^0.3"
-tempdir="^0.3"
 
 # Dependencies for the "provider-github" feature
 ring = { version=">=0.4, <=0.5", optional=true }
