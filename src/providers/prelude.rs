@@ -13,11 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-mod app;
-mod responses;
-mod proxies;
+pub use std::collections::HashMap;
+pub use std::path::PathBuf;
 
-// Parts of the webapp
-mod api;
-
-pub use self::app::WebApp;
+pub use providers::Provider;
+pub use requests::{Request, RequestType};
+pub use errors::FisherResult;

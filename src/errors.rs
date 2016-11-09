@@ -29,8 +29,7 @@ pub type FisherResult<T> = Result<T, FisherError>;
 pub enum ErrorKind {
     ProviderNotFound(String),
     InvalidInput(String),
-    HookExecutionFailed(Option<i32>, Option<i32>),
-    WebApiStartFailed(String),
+    WebAppStartFailed(String),
     NotBehindProxy,
 
     // Derived errors
@@ -105,11 +104,9 @@ impl Error for FisherError {
         match self.kind {
             ErrorKind::ProviderNotFound(..) =>
                 "provider not found",
-            ErrorKind::HookExecutionFailed(..) =>
-                "hook returned non-zero exit code",
             ErrorKind::InvalidInput(..) =>
                 "invalid input",
-            ErrorKind::WebApiStartFailed(..) =>
+            ErrorKind::WebAppStartFailed(..) =>
                 "failed to start the Web API",
             ErrorKind::NotBehindProxy =>
                 "not behind the proxies",
@@ -142,22 +139,10 @@ impl fmt::Display for FisherError {
             ErrorKind::ProviderNotFound(ref provider) =>
                 format!("Provider {} not found", provider),
 
-            ErrorKind::HookExecutionFailed(exit_code_opt, signal_opt) =>
-                if let Some(exit_code) = exit_code_opt {
-                    // The hook returned an exit code
-                    format!("hook returned non-zero exit code: {}", exit_code)
-                } else if let Some(signal) = signal_opt {
-                    // The hook was killed
-                    format!("hook stopped with signal {}", signal)
-                } else {
-                    // This shouldn't happen...
-                    "hook execution failed".to_string()
-                },
-
             ErrorKind::InvalidInput(ref error) =>
                 format!("invalid input: {}", error),
 
-            ErrorKind::WebApiStartFailed(ref error) =>
+            ErrorKind::WebAppStartFailed(ref error) =>
                 format!("{}", error),
 
             ErrorKind::NotBehindProxy =>

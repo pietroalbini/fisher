@@ -15,70 +15,83 @@
 
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 
-use errors::{FisherResult, FisherError, ErrorKind};
-use requests::{Request, RequestType};
+use providers::prelude::*;
+use errors::ErrorKind;
 
 
-pub fn check_config(config: &str) -> FisherResult<()> {
-    // If the configuration is "yes", then it's correct
-    if config != "FAIL" {
+#[derive(Clone)]
+pub struct TestingProvider {
+    config: String,
+}
+
+impl Provider for TestingProvider {
+
+    fn new(config: &str) -> FisherResult<Self> {
+        // If the configuration is "yes", then it's correct
+        if config != "FAIL" {
+            Ok(TestingProvider {
+                config: config.into(),
+            })
+        } else {
+            // This error doesn't make any sense, but it's still an error
+            Err(ErrorKind::ProviderNotFound(String::new()).into())
+        }
+    }
+
+    fn validate(&self, req: &Request) -> RequestType {
+        // If the secret param is provided, validate it
+        if let Some(secret) = req.params.get("secret") {
+            if secret != "testing" {
+                return RequestType::Invalid;
+            }
+        }
+
+        // If the ip param is provided, validate it
+        if let Some(ip) = req.params.get("ip") {
+            if req.source != IpAddr::from_str(ip).unwrap() {
+                return RequestType::Invalid;
+            }
+        }
+
+        // Allow to override the result of this
+        if let Some(request_type) = req.params.get("request_type") {
+            match request_type.as_ref() {
+                // "ping" will return RequestType::Ping
+                "ping" => {
+                    return RequestType::Ping;
+                },
+                _ => {}
+            }
+        }
+
+        RequestType::ExecuteHook
+    }
+
+    fn env(&self, req: &Request) -> HashMap<String, String> {
+        let mut res = HashMap::new();
+
+        // Return the provided env
+        if let Some(env) = req.params.get("env") {
+            res.insert("ENV".to_string(), env.clone());
+        }
+
+        res
+    }
+
+    fn prepare_directory(&self, _req: &Request, path: &PathBuf)
+                         -> FisherResult<()> {
+        // Create a test file
+        let mut dest = path.clone();
+        dest.push("prepared");
+        try!(writeln!(try!(File::create(&dest)), "prepared"));
+
+        println!("Called");
+
         Ok(())
-    } else {
-        // This error doesn't make any sense, but it's still an error
-        Err(FisherError::new(
-            ErrorKind::ProviderNotFound(String::new())
-        ))
     }
-}
-
-
-pub fn request_type(req: &Request, _config: &str) -> RequestType {
-    // Allow to override the result of this
-    if let Some(request_type) = req.params.get("request_type") {
-        match request_type.as_ref() {
-            // "ping" will return RequestType::Ping
-            "ping" => {
-                return RequestType::Ping;
-            },
-            _ => {}
-        }
-    }
-
-    // Return ExecuteHook anywhere else
-    RequestType::ExecuteHook
-}
-
-
-pub fn validate(req: &Request, _config: &str) -> bool {
-    // If the secret param is provided, validate it
-    if let Some(secret) = req.params.get("secret") {
-        if secret != "testing" {
-            return false;
-        }
-    }
-
-    // If the ip param is provided, validate it
-    if let Some(ip) = req.params.get("ip") {
-        if req.source != IpAddr::from_str(ip).unwrap() {
-            return false;
-        }
-    }
-
-    true
-}
-
-
-pub fn env(req: &Request, _config: &str) -> HashMap<String, String> {
-    let mut res = HashMap::new();
-
-    // Return the provided env
-    if let Some(env) = req.params.get("env") {
-        res.insert("ENV".to_string(), env.clone());
-    }
-
-    res
 }
 
 
@@ -90,77 +103,66 @@ mod tests {
 
     use utils::testing::*;
     use requests::RequestType;
+    use providers::Provider;
 
-    use super::{check_config, request_type, validate, env};
-
-
-    #[test]
-    fn test_check_config() {
-        assert!(check_config("").is_ok());
-        assert!(check_config("SOMETHING").is_ok());
-        assert!(check_config("FAIL").is_err());
-    }
+    use super::TestingProvider;
 
 
     #[test]
-    fn test_request_type() {
-        // Without any special parameter return an ExecuteHook
-        assert_eq!(
-            request_type(&dummy_request(), ""),
-            RequestType::ExecuteHook
-        );
-
-        // With the parameter but with no meaningful value
-        let mut req = dummy_request();
-        req.params.insert("request_type".to_string(), "something".to_string());
-        assert_eq!(
-            request_type(&req, ""),
-            RequestType::ExecuteHook
-        );
-
-        // With the parameter and the "ping" value
-        let mut req = dummy_request();
-        req.params.insert("request_type".to_string(), "ping".to_string());
-        assert_eq!(
-            request_type(&req, ""),
-            RequestType::Ping
-        );
+    fn test_new() {
+        assert!(TestingProvider::new("").is_ok());
+        assert!(TestingProvider::new("SOMETHING").is_ok());
+        assert!(TestingProvider::new("FAIL").is_err());
     }
 
 
     #[test]
     fn test_validate() {
+        let p = TestingProvider::new("").unwrap();
+
         // Without any secret
-        assert!(validate(&dummy_request(), ""));
+        assert_eq!(p.validate(&dummy_request()), RequestType::ExecuteHook);
 
         // With the wrong secret
         let mut req = dummy_request();
         req.params.insert("secret".to_string(), "wrong!!!".to_string());
-        assert!(! validate(&req, ""));
+        assert_eq!(p.validate(&req), RequestType::Invalid);
 
         // With the correct secret
         let mut req = dummy_request();
         req.params.insert("secret".to_string(), "testing".to_string());
-        assert!(validate(&req, ""));
+        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
 
         // With the wrong IP address
         let mut req = dummy_request();
         req.params.insert("ip".into(), "127.1.1.1".into());
         req.source = IpAddr::from_str("127.2.2.2").unwrap();
-        assert!(! validate(&req, ""));
+        assert_eq!(p.validate(&req), RequestType::Invalid);
 
         // With the right IP address
         let mut req = dummy_request();
         req.params.insert("ip".into(), "127.1.1.1".into());
         req.source = IpAddr::from_str("127.1.1.1").unwrap();
-        assert!(validate(&req, ""));
+        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
+
+        // With the request_type param but with no meaningful value
+        let mut req = dummy_request();
+        req.params.insert("request_type".to_string(), "something".to_string());
+        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
+
+        // With the request_type param and the "ping" value
+        let mut req = dummy_request();
+        req.params.insert("request_type".to_string(), "ping".to_string());
+        assert_eq!(p.validate(&req), RequestType::Ping);
     }
 
 
     #[test]
     fn test_env() {
+        let p = TestingProvider::new("").unwrap();
+
         // Without the env param
-        assert_eq!(env(&dummy_request(), ""), HashMap::new());
+        assert_eq!(p.env(&dummy_request()), HashMap::new());
 
         // With the env param
         let mut req = dummy_request();
@@ -169,6 +171,6 @@ mod tests {
         let mut should_be = HashMap::new();
         should_be.insert("ENV".to_string(), "test".to_string());
 
-        assert_eq!(env(&req, ""), should_be);
+        assert_eq!(p.env(&req), should_be);
     }
 }

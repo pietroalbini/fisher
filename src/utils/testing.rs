@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::fs;
 
 use chan;
@@ -26,10 +27,11 @@ use hyper::method::Method;
 use app::FisherOptions;
 use hooks::{self, Hooks};
 use jobs::Job;
-use web::WebApi;
+use web::WebApp;
 use requests::Request;
 use processor::{ProcessorInput, HealthDetails};
-use providers::{Provider, testing};
+use providers::{Provider, ProviderFactory, BoxedProvider, testing};
+use errors::FisherResult;
 use utils;
 
 
@@ -68,14 +70,13 @@ pub fn dummy_request() -> Request {
 }
 
 
-pub fn testing_provider() -> Provider {
-    Provider::new(
-        "Testing".to_string(),
-        testing::check_config,
-        testing::request_type,
-        testing::validate,
-        testing::env,
-    )
+pub fn testing_provider_factory() -> ProviderFactory {
+    fn factory(config: &str) -> FisherResult<BoxedProvider> {
+        let prov = try!(testing::TestingProvider::new(config));
+        Ok(Box::new(prov) as BoxedProvider)
+    }
+
+    factory
 }
 
 
@@ -129,27 +130,43 @@ pub fn sample_hooks() -> PathBuf {
         r#"echo "executed" > "${b}/executed""#,
         r#"env > "${b}/env""#,
         r#"pwd > "${b}/pwd""#,
-        r#"cat "${FISHER_REQUEST_BODY}" > "${b}/request_body""#
+        r#"cat "${FISHER_REQUEST_BODY}" > "${b}/request_body""#,
+        r#"cat "prepared" > "${b}/prepared""#
+    );
+
+    create_hook!(tempdir, "trigger-status.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"echo "triggering...";"#
+    );
+
+    create_hook!(tempdir, "status-example.sh",
+        r#"#!/bin/bash"#,
+        concat!(
+            r#"## Fisher-Status: {"events": ["job_completed", "job_failed"], "#,
+            r#""hooks": ["trigger-status"]}"#,
+        ),
+        r#"echo "triggered!""#
     );
 
     tempdir
 }
 
 
-pub struct WebApiInstance<'a> {
-    inst: WebApi<'a>,
+pub struct WebAppInstance {
+    inst: WebApp,
 
     url: String,
     client: hyper::Client,
     input_recv: chan::Receiver<ProcessorInput>,
 }
 
-impl<'a> WebApiInstance<'a> {
+impl WebAppInstance {
 
-    pub fn new(hooks: &'a Hooks, health: bool, behind_proxies: Option<u8>)
+    pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: Option<u8>)
                -> Self {
-        // Create a new instance of WebApi
-        let mut inst = WebApi::new(hooks);
+        // Create a new instance of WebApp
+        let mut inst = WebApp::new(hooks);
 
         // Create the input channel
         let (input_send, input_recv) = chan::async();
@@ -170,7 +187,7 @@ impl<'a> WebApiInstance<'a> {
         let url = format!("http://{}", addr);
         let client = hyper::Client::new();
 
-        WebApiInstance {
+        WebAppInstance {
             inst: inst,
 
             url: url,
@@ -229,7 +246,7 @@ impl<'a> WebApiInstance<'a> {
 
 
 pub struct TestingEnv {
-    hooks: Hooks,
+    hooks: Arc<Hooks>,
     remove_dirs: Vec<String>,
 }
 
@@ -239,7 +256,7 @@ impl TestingEnv {
         let hooks_dir = sample_hooks().to_str().unwrap().to_string();
 
         TestingEnv {
-            hooks: hooks::collect(&hooks_dir).unwrap(),
+            hooks: Arc::new(hooks::collect(&hooks_dir).unwrap()),
             remove_dirs: vec![hooks_dir],
         }
     }
@@ -269,8 +286,8 @@ impl TestingEnv {
     // WEB TESTING
 
     pub fn start_web(&self, health: bool, behind_proxies: Option<u8>)
-                     -> WebApiInstance {
-        WebApiInstance::new(&self.hooks, health, behind_proxies)
+                     -> WebAppInstance {
+        WebAppInstance::new(self.hooks.clone(), health, behind_proxies)
     }
 }
 

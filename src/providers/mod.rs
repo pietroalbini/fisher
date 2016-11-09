@@ -14,61 +14,86 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 mod core;
+mod prelude;
+
+mod status;
 mod standalone;
 #[cfg(feature = "provider-github")] mod github;
 #[cfg(feature = "provider-gitlab")] mod gitlab;
 #[cfg(test)] pub mod testing;
 
 use errors::FisherResult;
-pub use providers::core::{Provider, HookProvider};
+pub use providers::core::{Factories, ProviderFactory, Provider, HookProvider};
+pub use providers::core::BoxedProvider;
 
 
 // This macro simplifies adding new providers
 macro_rules! provider {
-    ($providers:expr, $name:expr, $module:path) => {
-        use $module as module;
-        $providers.add($name, Provider::new(
-            $name.to_string(),
-            module::check_config,
-            module::request_type,
-            module::validate,
-            module::env,
-        ));
-    };
-    ($providers:expr, $name:expr, $module:path, $cfg:meta) => {{
+    ($factories:expr, $name:expr, $provider:path) => {{
+        use $provider as provider;
+
+        fn factory(config: &str) -> FisherResult<BoxedProvider> {
+            let prov = try!(provider::new(config));
+            Ok(Box::new(prov) as BoxedProvider)
+        }
+
+        $factories.add($name, factory);
+    }};
+    ($factories:expr, $name:expr, $provider:path, on $cfg:meta) => {{
         #[cfg($cfg)]
-        fn inner(providers: &mut core::Providers) {
-            provider!(providers, $name, $module);
+        fn inner(factories: &mut Factories) {
+            provider!(factories, $name, $provider);
         }
         #[cfg(not($cfg))]
-        fn inner(_providers: &mut core::Providers) {}
+        fn inner(_factories: &mut Factories) {}
 
-        inner(&mut $providers);
+        inner(&mut $factories);
     }};
 }
 
 
 lazy_static! {
-    static ref PROVIDERS: core::Providers = {
-        let mut p = core::Providers::new();
+    static ref FACTORIES: Factories = {
+        let mut f = Factories::new();
 
-        provider!(p, "Standalone", self::standalone);
-        provider!(p, "GitHub", self::github, feature="provider-github");
-        provider!(p, "GitLab", self::gitlab, feature="provider-gitlab");
+        provider!(f,
+            "Standalone",
+            self::standalone::StandaloneProvider
+        );
+        provider!(f,
+            "Status",
+            self::status::StatusProvider
+        );
+        provider!(f,
+            "GitHub",
+            self::github::GitHubProvider,
+            on feature="provider-github"
+        );
+        provider!(f,
+            "GitLab",
+            self::gitlab::GitLabProvider,
+            on feature="provider-gitlab"
+        );
 
         // This is added only during unit tests
-        provider!(p, "Testing", self::testing, test);
+        provider!(f,
+            "Testing",
+            self::testing::TestingProvider,
+            on test
+        );
 
-        p
+        f
     };
 }
 
 
-pub fn get(name: &str, raw_config: &str) -> FisherResult<HookProvider> {
-    // Use an owned string
-    let config = raw_config.to_string();
+pub fn get(name: &str, config: &str) -> FisherResult<HookProvider> {
+    let name = name.to_string();
 
-    // Get the associated provider
-    let provider = try!(PROVIDERS.by_name(&name.to_string()));
-    HookProvider::new(provider, config)
+    // Get the related factory
+    let factory = try!(FACTORIES.by_name(&name));
+
+    // Create a new provider
+    let provider = try!(factory(&config));
+    Ok(HookProvider::new(provider, name))
 }

@@ -13,79 +13,69 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
-
 use rustc_serialize::json;
 
-use requests::{Request, RequestType};
-use errors::FisherResult;
+use providers::prelude::*;
 
 
-#[derive(RustcDecodable)]
-struct Config {
+#[derive(Clone, RustcDecodable)]
+pub struct StandaloneProvider {
     secret: String,
 
     param_name: Option<String>,
     header_name: Option<String>,
 }
 
-impl Config {
+impl StandaloneProvider {
 
-    fn param_name(&self) -> &str {
+    fn param_name(&self) -> String {
         match self.param_name {
-            Some(ref name) => name,
-            None => "secret",
+            Some(ref name) => name.clone(),
+            None => "secret".into(),
         }
     }
 
-    fn header_name(&self) -> &str {
+    fn header_name(&self) -> String {
         match self.header_name {
-            Some(ref name) => name,
-            None => "X-Fisher-Secret",
+            Some(ref name) => name.clone(),
+            None => "X-Fisher-Secret".into(),
         }
     }
 }
 
+impl Provider for StandaloneProvider {
 
-pub fn check_config(input: &str) -> FisherResult<()> {
-    try!(json::decode::<Config>(input));
-
-    Ok(())
-}
-
-
-pub fn request_type(_req: &Request, _config: &str) -> RequestType {
-    // This provider supports only RequestType::ExecuteHook
-    RequestType::ExecuteHook
-}
-
-
-pub fn validate(req: &Request, config: &str) -> bool {
-    let config: Config = json::decode(config).unwrap();
-
-    let secret;
-    if let Some(found) = req.params.get(config.param_name()) {
-        // Secret in the request parameters
-        secret = found;
-    } else if let Some(found) = req.headers.get(config.header_name()) {
-        // Secret in the HTTP headers
-        secret = found;
-    } else {
-        // No secret present, abort!
-        return false;
+    fn new(config: &str) -> FisherResult<Self> {
+        // Check if it's possible to create a new instance and return it
+        let inst = try!(json::decode(config));
+        Ok(inst)
     }
 
-    // Abort if the secret doesn't match
-    if secret != &config.secret {
-        return false;
+    fn validate(&self, req: &Request) -> RequestType {
+        // First of all check the secret code
+        let secret;
+        if let Some(found) = req.params.get(&self.param_name()) {
+            // Secret in the request parameters
+            secret = found;
+        } else if let Some(found) = req.headers.get(&self.header_name()) {
+            // Secret in the HTTP headers
+            secret = found;
+        } else {
+            // No secret present, abort!
+            return RequestType::Invalid;
+        }
+
+        // Abort if the secret doesn't match
+        if *secret != self.secret {
+            return RequestType::Invalid;
+        }
+
+        RequestType::ExecuteHook
     }
 
-    true
-}
-
-
-pub fn env(_req: &Request, _config: &str) -> HashMap<String, String> {
-    HashMap::new()
+    fn env(&self, _req: &Request) -> HashMap<String, String> {
+        HashMap::new()
+    }
 }
 
 
@@ -95,14 +85,23 @@ mod tests {
 
     use utils::testing::*;
     use requests::RequestType;
+    use providers::Provider;
 
-    use super::{check_config, request_type, validate, env};
+    use super::StandaloneProvider;
 
 
     #[test]
-    fn test_check_config() {
+    fn test_new() {
         // Check if valid config is accepted
-        assert!(check_config(r#"{"secret":"abcde"}"#).is_ok());
+        let right = vec![
+            r#"{"secret": "abcde"}"#,
+            r#"{"secret": "abcde", "param_name": "a"}"#,
+            r#"{"secret": "abcde", "header_name": "X-b"}"#,
+            r#"{"secret": "abcde", "param_name": "a", "header_name": "b"}"#,
+        ];
+        for one in &right {
+            assert!(StandaloneProvider::new(one).is_ok());
+        }
 
         let wrong = vec![
             // Empty configuration
@@ -118,18 +117,8 @@ mod tests {
             r#"{"secret": {"a": "b"}}"#,
         ];
         for one in &wrong {
-            assert!(check_config(one).is_err());
+            assert!(StandaloneProvider::new(one).is_err());
         }
-    }
-
-    #[test]
-    fn test_request_type() {
-        let config = r#"{"secret": "abcde"}"#;
-
-        assert_eq!(
-            request_type(&dummy_request(), &config),
-            RequestType::ExecuteHook
-        );
     }
 
     #[test]
@@ -145,41 +134,43 @@ mod tests {
     }
 
     fn test_validate_inner(config: &str, param_name: &str, header_name: &str) {
+        let p = StandaloneProvider::new(config).unwrap();
+
         // Test a request with no headers or params
         // It should not be validate
-        assert!(! validate(&dummy_request(), config));
+        assert_eq!(p.validate(&dummy_request()), RequestType::Invalid);
 
         // Test a request with the secret param, but the wrong secret key
         // It should not be validated
         let mut req = dummy_request();
         req.params.insert(param_name.to_string(), "12345".to_string());
-        assert!(! validate(&req, config));
+        assert_eq!(p.validate(&req), RequestType::Invalid);
 
         // Test a request with the secret param and the correct secret key
         // It should be validated
         let mut req = dummy_request();
         req.params.insert(param_name.to_string(), "abcde".to_string());
-        assert!(validate(&req, config));
+        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
 
         // Test a request with the secret header, but the wrong secret key
         // It should not be validated
         let mut req = dummy_request();
         req.headers.insert(header_name.to_string(), "12345".to_string());
-        assert!(! validate(&req, config));
+        assert_eq!(p.validate(&req), RequestType::Invalid);
 
         // Test a request with the secret header and the correct secret key
         // It should be validated
         let mut req = dummy_request();
         req.headers.insert(header_name.to_string(), "abcde".to_string());
-        assert!(validate(&req, config));
+        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
     }
 
     #[test]
     fn test_env() {
-        let config = r#"{"secret": "abcde"}"#;
+        let p = StandaloneProvider::new(r#"{"secret": "abcde"}"#).unwrap();
 
         // The environment must always be empty
-        assert!(env(&dummy_request(), config) == HashMap::new());
+        assert!(p.env(&dummy_request()) == HashMap::new());
     }
 
 }

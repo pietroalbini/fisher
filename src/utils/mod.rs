@@ -14,7 +14,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 mod tempdir;
-mod copy_to_clone;
 mod net;
 
 #[cfg(test)]
@@ -25,7 +24,6 @@ mod parse_env;
 
 
 pub use utils::tempdir::create_temp_dir;
-pub use utils::copy_to_clone::CopyToClone;
 pub use utils::net::parse_forwarded_for;
 
 #[cfg(test)]

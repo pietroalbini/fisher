@@ -13,14 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
-
 use rustc_serialize::json::{self, Json};
 use rustc_serialize::hex::FromHex;
 use ring;
 
-use requests::{Request, RequestType};
-use errors::{FisherError, ErrorKind, FisherResult};
+use providers::prelude::*;
+use errors::ErrorKind;
 
 
 lazy_static! {
@@ -40,103 +38,94 @@ lazy_static! {
 }
 
 
-#[derive(RustcDecodable)]
-struct Config {
+#[derive(Clone, RustcDecodable)]
+pub struct GitHubProvider {
     secret: Option<String>,
     events: Option<Vec<String>>,
 }
 
+impl Provider for GitHubProvider {
 
-pub fn check_config(input: &str) -> FisherResult<()> {
-    let config: Config = try!(json::decode(input));
+    fn new(input: &str) -> FisherResult<GitHubProvider> {
+        let inst: GitHubProvider = try!(json::decode(input));
 
-    if let Some(events) = config.events {
-        // Check if the events exists
-        for event in &events {
-            if ! GITHUB_EVENTS.contains(&event.as_ref()) {
-                // Return an error if the event doesn't exist
-                return Err(FisherError::new(
-                    ErrorKind::InvalidInput(format!(
+        if let Some(ref events) = inst.events {
+            // Check if the events exists
+            for event in events {
+                if ! GITHUB_EVENTS.contains(&event.as_ref()) {
+                    // Return an error if the event doesn't exist
+                    return Err(ErrorKind::InvalidInput(format!(
                         r#""{}" is not a GitHub event"#, event
-                    ))
-                ));
+                    )).into());
+                }
             }
         }
+
+        Ok(inst)
     }
 
-    Ok(())
-}
+    fn validate(&self, req: &Request) -> RequestType {
+        // Check if the correct headers are present
+        for header in GITHUB_HEADERS.iter() {
+            if ! req.headers.contains_key(*header) {
+                return RequestType::Invalid;
+            }
+        }
 
+        // Check the signature only if a secret key was provided
+        if let Some(ref secret) = self.secret {
+            // Check if the signature is valid
+            let signature = req.headers.get("X-Hub-Signature").unwrap();
+            if ! verify_signature(secret, &req.body, &signature) {
+                return RequestType::Invalid;
+            }
+        }
 
-pub fn request_type(req: &Request, _config: &str) -> RequestType {
-    // The X-GitHub-Event contains the event type
-    if let Some(event) = req.headers.get(&"X-GitHub-Event".to_string()) {
+        // Check if the event is valid
+        let event = req.headers.get("X-GitHub-Event").unwrap();
+        if !(
+            GITHUB_EVENTS.contains(&event.as_ref())
+            || *event == "ping".to_string()
+        ) {
+            return RequestType::Invalid;
+        }
+
+        // Check if the event should be accepted
+        if let Some(ref events) = self.events {
+            if ! events.contains(&event) {
+                return RequestType::Invalid;
+            }
+        }
+
+        // Check if the JSON in the body is valid
+        if ! Json::from_str(&req.body).is_ok() {
+            return RequestType::Invalid;
+        }
+
         // The "ping" event is a ping (doh!)
         if event == "ping" {
             return RequestType::Ping;
         }
+
+        // Process the hook in the other cases
+        RequestType::ExecuteHook
     }
 
-    // Process the hook in the other cases
-    RequestType::ExecuteHook
-}
+    fn env(&self, req: &Request) -> HashMap<String, String> {
+        let mut res = HashMap::new();
 
+        res.insert(
+            "EVENT".to_string(),
+            req.headers.get("X-GitHub-Event").unwrap().clone()
+        );
 
-pub fn validate(req: &Request, config: &str) -> bool {
-    let config: Config = json::decode(config).unwrap();
+        res.insert(
+            "DELIVERY_ID".to_string(),
+            req.headers.get("X-GitHub-Delivery").unwrap().clone()
+        );
 
-    // Check if the correct headers are present
-    for header in GITHUB_HEADERS.iter() {
-        if ! req.headers.contains_key(*header) {
-            return false;
-        }
+        res
     }
-
-    // Check the signature only if a secret key was provided
-    if let Some(ref secret) = config.secret {
-        // Check if the signature is valid
-        let signature = req.headers.get("X-Hub-Signature").unwrap();
-        if ! verify_signature(secret, &req.body, &signature) {
-            return false;
-        }
-    }
-
-    // Check if the event is valid
-    let event = req.headers.get("X-GitHub-Event").unwrap();
-    if ! GITHUB_EVENTS.contains(&event.as_ref()) {
-        return false;
-    }
-
-    // Check if the event should be accepted
-    if let Some(ref events) = config.events {
-        if ! events.contains(&event) {
-            return false;
-        }
-    }
-
-    // Check if the JSON in the body is valid
-    if ! Json::from_str(&req.body).is_ok() {
-        return false;
-    }
-
-    true
-}
-
-
-pub fn env(req: &Request, _config: &str) -> HashMap<String, String> {
-    let mut res = HashMap::new();
-
-    res.insert(
-        "EVENT".to_string(),
-        req.headers.get("X-GitHub-Event").unwrap().clone()
-    );
-
-    res.insert(
-        "DELIVERY_ID".to_string(),
-        req.headers.get("X-GitHub-Delivery").unwrap().clone()
-    );
-
-    res
 }
 
 
@@ -180,13 +169,13 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
 mod tests {
     use utils::testing::*;
     use requests::RequestType;
+    use providers::Provider;
 
-    use super::{GITHUB_EVENTS, check_config, request_type, env,
-                verify_signature};
+    use super::{GITHUB_EVENTS, GitHubProvider, verify_signature};
 
 
     #[test]
-    fn test_check_config() {
+    fn test_new() {
         // Check for right configurations
         for right in &[
             r#"{}"#,
@@ -194,7 +183,7 @@ mod tests {
             r#"{"events": ["push", "fork"]}"#,
             r#"{"secret": "abcde", "events": ["push", "fork"]}"#,
         ] {
-            assert!(check_config(right).is_ok(), right.to_string());
+            assert!(GitHubProvider::new(right).is_ok(), right.to_string());
         }
 
         // Checks for wrong configurations
@@ -209,33 +198,48 @@ mod tests {
             r#"{"events": [true]}"#,
             r#"{"events": ["invalid_event"]}"#,
         ] {
-            assert!(check_config(wrong).is_err(), wrong.to_string());
+            assert!(GitHubProvider::new(wrong).is_err(), wrong.to_string());
         }
     }
 
 
     #[test]
     fn test_request_type() {
-        // This helper gets the request type of an event
-        fn get_request_type(event: &str) -> RequestType {
-            let mut request = dummy_request();
-            request.headers.insert(
-                "X-GitHub-Event".to_string(),
-                event.to_string()
-            );
+        let provider = GitHubProvider::new("{}").unwrap();
 
-            request_type(&request, "")
+        // This helper gets the request type of an event
+        macro_rules! assert_req_type {
+            ($provider:expr, $event:expr, $expected:expr) => {
+                let mut request = dummy_request();
+                let _ = request.headers.insert(
+                    "X-GitHub-Event".into(),
+                    $event.to_string(),
+                );
+                let _ = request.headers.insert(
+                    "X-GitHub-Delivery".into(),
+                    "12345".into(),
+                );
+                let _ = request.headers.insert(
+                    "X-Hub-Signature".into(),
+                    "invalid".into(),
+                );
+                request.body = "{}".into();
+
+                assert_eq!($provider.validate(&request), $expected);
+            };
         }
 
-        assert_eq!(get_request_type("ping"), RequestType::Ping);
+        assert_req_type!(provider, "ping", RequestType::Ping);
         for event in GITHUB_EVENTS.iter() {
-            assert_eq!(get_request_type(event), RequestType::ExecuteHook);
+            assert_req_type!(provider, event, RequestType::ExecuteHook);
         }
     }
 
 
     #[test]
     fn test_env() {
+        let provider = GitHubProvider::new("{}").unwrap();
+
         // Create a dummy request
         let mut request = dummy_request();
         request.headers.insert(
@@ -248,7 +252,7 @@ mod tests {
         );
 
         // Get the env
-        let env = env(&request, "");
+        let env = provider.env(&request);
 
         assert_eq!(env.len(), 2);
         assert_eq!(*env.get("EVENT").unwrap(), "ping".to_string());
