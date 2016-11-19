@@ -311,9 +311,16 @@ mod tests {
         // The value of the environment variables forwarded from the current
         // env must have the same content of the current env
         for key in DEFAULT_ENV.iter() {
-            assert_eq!(
-                env::var(key).unwrap().as_str(),
-                *job_env.get(key.as_str()).unwrap());
+            // If the key is not present in the testing environment, ignore it
+            match env::var(key) {
+                Ok(content) => {
+                    assert_eq!(
+                        content.as_str(),
+                        *job_env.get(key.as_str()).unwrap()
+                    );
+                },
+                Err(..) => {},
+            }
         }
 
         env.cleanup();
