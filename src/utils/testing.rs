@@ -166,7 +166,7 @@ impl WebAppInstance {
     pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: Option<u8>)
                -> Self {
         // Create a new instance of WebApp
-        let mut inst = WebApp::new(hooks);
+        let mut inst = WebApp::new();
 
         // Create the input channel
         let (input_send, input_recv) = chan::async();
@@ -181,7 +181,7 @@ impl WebAppInstance {
         };
 
         // Start the web server
-        let addr = inst.listen(&options, input_send).unwrap();
+        let addr = inst.listen(hooks, &options, input_send).unwrap();
 
         // Create the HTTP client
         let url = format!("http://{}", addr);

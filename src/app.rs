@@ -19,7 +19,7 @@ use std::sync::Arc;
 use hooks::{Hooks, Hook};
 use processor::ProcessorManager;
 use web::WebApp;
-use errors::{ErrorKind, FisherResult};
+use errors::FisherResult;
 
 
 #[derive(Debug, Clone)]
@@ -107,7 +107,7 @@ impl<'a> AppFactory<'a> {
 
         // Initialize the state
         let mut processor = ProcessorManager::new();
-        let mut web_api = WebApp::new(self.hooks.reference());
+        let mut web_api = WebApp::new();
 
         // Start the processor
         processor.start(self.options.max_threads, self.hooks.reference());
@@ -115,7 +115,9 @@ impl<'a> AppFactory<'a> {
 
         // Start the Web API
         let listening;
-        match web_api.listen(self.options, processor_input) {
+        match web_api.listen(
+            self.hooks.reference(), self.options, processor_input
+        ) {
             Ok(socket) => {
                 listening = socket;
             },
@@ -123,9 +125,7 @@ impl<'a> AppFactory<'a> {
                 // Be sure to stop the processor
                 processor.stop();
 
-                return Err(
-                    ErrorKind::WebAppStartFailed(error.clone()).into()
-                );
+                return Err(error);
             },
         }
 

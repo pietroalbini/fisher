@@ -15,7 +15,6 @@
 
 use std::net::IpAddr;
 
-use app::FisherOptions;
 use requests::Request;
 use errors::{FisherResult, ErrorKind};
 use utils;
@@ -28,9 +27,9 @@ pub struct ProxySupport {
 
 impl ProxySupport {
 
-    pub fn new(options: &FisherOptions) -> Self {
+    pub fn new(behind: Option<u8>) -> Self {
         ProxySupport {
-            behind: options.behind_proxies,
+            behind: behind,
         }
     }
 
@@ -79,7 +78,6 @@ mod tests {
 
     use utils::testing::*;
     use errors::ErrorKind;
-    use app::FisherOptions;
 
     use super::ProxySupport;
 
@@ -100,25 +98,14 @@ mod tests {
     }
 
 
-    // This macro creates a new ProxySupport instance
-    macro_rules! proxy_support {
-        ($enabled:expr) => {{
-            ProxySupport::new(&FisherOptions {
-                behind_proxies: $enabled,
-                .. FisherOptions::defaults()
-            })
-        }};
-    }
-
-
     #[test]
     fn test_creation() {
         // Create a new disabled ProxySupport instance
-        let proxy = proxy_support!(None);
+        let proxy = ProxySupport::new(None);
         assert_eq!(proxy.behind, None);
 
         // Create a new enabled ProxySupport instance
-        let proxy = proxy_support!(Some(1));
+        let proxy = ProxySupport::new(Some(1));
         assert_eq!(proxy.behind, Some(1));
     }
 
@@ -135,14 +122,14 @@ mod tests {
         }
 
         // Test with a disabled proxy support
-        let p = proxy_support!(None);
+        let p = ProxySupport::new(None);
         assert_ip!(p, req!(), "127.1.1.1");
         assert_ip!(p, req!("127.2.2.2"), "127.1.1.1");
         assert_ip!(p, req!("127.3.3.3, 127.2.2.2"), "127.1.1.1");
         assert_ip!(p, req!("invalid"), "127.1.1.1");
 
         // Test with an enabled proxy support with one proxy
-        let p = proxy_support!(Some(1));
+        let p = ProxySupport::new(Some(1));
         assert_err!(p.source_ip(&req!()), ErrorKind::NotBehindProxy);
         assert_ip!(p, req!("127.2.2.2"), "127.2.2.2");
         assert_ip!(p, req!("127.3.3.3, 127.2.2.2"), "127.2.2.2");
@@ -152,7 +139,7 @@ mod tests {
         );
 
         // Test with an enabled proxy support with two proxies
-        let p = proxy_support!(Some(2));
+        let p = ProxySupport::new(Some(2));
         assert_err!(p.source_ip(&req!()), ErrorKind::NotBehindProxy);
         assert_err!(
             p.source_ip(&req!("127.2.2.2")),
@@ -168,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_fix_request() {
-        let proxy = proxy_support!(Some(1));
+        let proxy = ProxySupport::new(Some(1));
         let mut req = req!("127.2.2.2");
 
         assert_eq!(req.source, IpAddr::from_str("127.1.1.1").unwrap());

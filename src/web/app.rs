@@ -13,177 +13,66 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::net::SocketAddr;
 use std::sync::Arc;
+use std::net::SocketAddr;
 
 use chan;
-use nickel::{Nickel, HttpRouter, Options};
-use hyper::header;
-use rustc_serialize::json::ToJson;
+use tiny_http::Method;
 
+use errors::FisherResult;
 use app::FisherOptions;
 use hooks::Hooks;
-use processor::SenderChan;
-use web::responses::Response as FisherResponse;
-use web::proxies::ProxySupport;
-use requests::convert_request;
+use processor::ProcessorInput;
+use web::http::HttpServer;
 use web::api::WebApi;
 
 
-macro_rules! handler {
-    ( $app:expr, $handler:path $(, $param:expr )* ) => {{
-        let web_api = $app.web_api.clone().unwrap();
-        let proxy_support = $app.proxy_support.clone().unwrap();
-
-        middleware! { |req, mut res|
-            // Make the req object mutable
-            let mut req = req;
-
-            let response;
-            let mut request = convert_request(&mut req);
-
-            // Call the handler if the request is OK, else return a
-            // BadRequest response
-            if let Err(error) = proxy_support.fix_request(&mut request) {
-                response = FisherResponse::BadRequest(error);
-            } else {
-                response = $handler(
-                    &*web_api, request,
-                    $(
-                        req.param($param).unwrap().into()
-                    )*
-                );
-            }
-
-            res.set(response.status());
-            response.to_json()
-        }
-    }};
-}
-
-
 pub struct WebApp {
-    stop_chan: Option<chan::Sender<()>>,
-    sender_chan: Option<SenderChan>,
-    stop: bool,
-    hooks: Arc<Hooks>,
-
-    proxy_support: Option<Arc<ProxySupport>>,
-    web_api: Option<Arc<WebApi>>,
+    server: Option<HttpServer<WebApi>>,
 }
 
 impl WebApp {
 
-    pub fn new(hooks: Arc<Hooks>) -> Self {
+    pub fn new() -> Self {
         WebApp {
-            stop_chan: None,
-            sender_chan: None,
-            stop: false,
-            hooks: hooks,
-
-            proxy_support: None,
-            web_api: None,
+            server: None,
         }
     }
 
-    pub fn listen(&mut self, options: &FisherOptions, sender: SenderChan)
-                  -> Result<SocketAddr, String> {
-        // Store the sender channel
-        self.sender_chan = Some(sender);
+    pub fn listen(&mut self, hooks: Arc<Hooks>, options: &FisherOptions,
+                  input: chan::Sender<ProcessorInput>)
+                 -> FisherResult<SocketAddr> {
+        // Create the web api
+        let api = WebApi::new(input, hooks, options.enable_health);
 
-        // This is to fix lifetime issues with the thread below
-        let bind = options.bind.to_string();
+        // Create the HTTP server
+        let mut server = HttpServer::new(api, options.behind_proxies);
+        server.add_route(
+            Method::Get, "/health",
+            Box::new(WebApi::get_health)
+        );
+        server.add_route(
+            Method::Get, "/hook/?",
+            Box::new(WebApi::process_hook)
+        );
+        server.add_route(
+            Method::Post, "/hook/?",
+            Box::new(WebApi::process_hook)
+        );
 
-        // Configure the proxy support
-        self.proxy_support = Some(Arc::new(
-            ProxySupport::new(&options)
-        ));
+        let socket = try!(server.listen(&options.bind));
 
-        // Create a new instance of the API
-        self.web_api = Some(Arc::new(WebApi::new(
-            self.sender_chan.clone().unwrap(),
-            self.hooks.clone(),
-            options.enable_health,
-        )));
-
-        let app = self.configure_nickel();
-
-        // This channel is used so it's possible to stop the listener
-        let (send_stop, recv_stop) = chan::sync(0);
-        self.stop_chan = Some(send_stop);
-
-        // This channel is used to receive the result from the thread, which
-        // will be returned
-        let (return_send, return_recv) = chan::async();
-
-        ::std::thread::spawn(move || {
-            let bind: &str = &bind;
-            match app.listen(bind) {
-                Ok(listener) => {
-                    // Send the socket address to the main thread
-                    let sock = listener.socket();
-                    return_send.send(Ok(sock));
-
-                    // This blocks until someone sends something to
-                    // self.stop_chan
-                    recv_stop.recv();
-
-                    // Detach the webserver from the current thread, allowing
-                    // the process to exit
-                    listener.detach();
-                },
-                Err(error) => {
-                    // Send the error
-                    return_send.send(Err(format!("{}", error)));
-                }
-            }
-        });
-
-        // Return what the thread sends
-        return_recv.recv().unwrap()
+        self.server = Some(server);
+        Ok(socket)
     }
 
     pub fn stop(&mut self) -> bool {
-        // Don't try to stop twice
-        if self.stop {
-            return true;
-        }
-
-        match self.stop_chan {
-            Some(ref stop_chan) => {
-                // Tell the thread to stop
-                stop_chan.send(());
-
-                self.stop = true;
-                true
-            },
-            None => false,
+        if let Some(ref mut server) = self.server {
+            server.stop()
+        } else {
+            false
         }
     }
-
-    fn configure_nickel(&self) -> Nickel {
-        let mut app = Nickel::new();
-
-        // Disable the default message nickel prints on stdout
-        app.options = Options::default().output_on_listen(false);
-
-        app.utilize(middleware! { |_req, mut res|
-            res.set(header::Server(
-                format!("Fisher/{}", crate_version!())
-            ));
-        });
-
-        app.get("/hook/:hook", handler!(self, WebApi::process_hook, "hook"));
-        app.post("/hook/:hook", handler!(self, WebApi::process_hook, "hook"));
-
-        app.get("/health", handler!(self, WebApi::get_health));
-
-        // This is the not found handler
-        app.utilize(handler!(self, WebApi::not_found));
-
-        app
-    }
-
 }
 
 

@@ -43,10 +43,12 @@ impl WebApi {
         }
     }
 
-    pub fn process_hook(&self, req: Request, hook_name: String) -> Response {
+    pub fn process_hook(&self, req: &Request, args: Vec<String>) -> Response {
+        let hook_name = args.get(0).unwrap();
+
         // Check if the hook exists
         let hook;
-        if let Some(found) = self.hooks.get(&hook_name) {
+        if let Some(found) = self.hooks.get(hook_name) {
             hook = found;
         } else {
             return Response::NotFound;
@@ -62,7 +64,7 @@ impl WebApi {
 
             // Queue a job if the hook should be executed
             RequestType::ExecuteHook => {
-                let job = Job::new(hook.clone(), provider, req);
+                let job = Job::new(hook.clone(), provider, req.clone());
                 self.processor_input.send(ProcessorInput::Job(job));
 
                 Response::Ok
@@ -75,7 +77,7 @@ impl WebApi {
         }
     }
 
-    pub fn get_health(&self, _req: Request) -> Response {
+    pub fn get_health(&self, _req: &Request, _args: Vec<String>) -> Response {
         if self.health_enabled {
             // Create a channel to communicate with the processor
             let (details_send, details_recv) = chan::async();
@@ -90,9 +92,5 @@ impl WebApi {
         } else {
             Response::Forbidden
         }
-    }
-
-    pub fn not_found(&self, _req: Request) -> Response {
-        Response::NotFound
     }
 }

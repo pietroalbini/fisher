@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+mod http;
 mod app;
 mod responses;
 mod proxies;
@@ -20,4 +21,5 @@ mod proxies;
 // Parts of the webapp
 mod api;
 
+pub use self::http::HttpServer;
 pub use self::app::WebApp;
