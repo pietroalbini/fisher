@@ -15,13 +15,13 @@
 
 use std::collections::{BTreeMap};
 
-use nickel::status::StatusCode;
 use rustc_serialize::json::{Json, ToJson};
 
 use errors::FisherError;
 use processor::HealthDetails;
 
 
+#[derive(Debug)]
 pub enum Response {
     NotFound,
     Forbidden,
@@ -32,12 +32,12 @@ pub enum Response {
 
 impl Response {
 
-    pub fn status(&self) -> StatusCode {
+    pub fn status(&self) -> u16 {
         match *self {
-            Response::NotFound => StatusCode::NotFound,
-            Response::Forbidden => StatusCode::Forbidden,
-            Response::BadRequest(..) => StatusCode::BadRequest,
-            _ => StatusCode::Ok,
+            Response::NotFound => 404,
+            Response::Forbidden => 403,
+            Response::BadRequest(..) => 400,
+            _ => 200,
         }
     }
 }
@@ -71,7 +71,6 @@ impl ToJson for Response {
 #[cfg(test)]
 mod tests {
     use rustc_serialize::json::ToJson;
-    use nickel::status::StatusCode;
 
     use processor::HealthDetails;
     use errors::{FisherError, ErrorKind};
@@ -81,7 +80,7 @@ mod tests {
     #[test]
     fn test_not_found() {
         let response = Response::NotFound;
-        assert_eq!(response.status(), StatusCode::NotFound);
+        assert_eq!(response.status(), 404);
 
         // The result must be an object
         let json = response.to_json();
@@ -98,7 +97,7 @@ mod tests {
     #[test]
     fn test_forbidden() {
         let response = Response::Forbidden;
-        assert_eq!(response.status(), StatusCode::Forbidden);
+        assert_eq!(response.status(), 403);
 
         // The result must be an object
         let json = response.to_json();
@@ -119,7 +118,7 @@ mod tests {
         let error_msg = format!("{}", error);
 
         let response = Response::BadRequest(error);
-        assert_eq!(response.status(), StatusCode::BadRequest);
+        assert_eq!(response.status(), 400);
 
         // The result must be an object
         let json = response.to_json();
@@ -142,7 +141,7 @@ mod tests {
     #[test]
     fn test_ok() {
         let response = Response::Ok;
-        assert_eq!(response.status(), StatusCode::Ok);
+        assert_eq!(response.status(), 200);
 
         // The result must be an object
         let json = response.to_json();
@@ -166,7 +165,7 @@ mod tests {
         // The result must be an object
         let json = response.to_json();
         let obj = json.as_object().unwrap();
-        assert_eq!(response.status(), StatusCode::Ok);
+        assert_eq!(response.status(), 200);
 
 
         // The status must be "ok"

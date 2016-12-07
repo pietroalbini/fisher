@@ -29,7 +29,6 @@ pub type FisherResult<T> = Result<T, FisherError>;
 pub enum ErrorKind {
     ProviderNotFound(String),
     InvalidInput(String),
-    WebAppStartFailed(String),
     NotBehindProxy,
 
     // Derived errors
@@ -106,8 +105,6 @@ impl Error for FisherError {
                 "provider not found",
             ErrorKind::InvalidInput(..) =>
                 "invalid input",
-            ErrorKind::WebAppStartFailed(..) =>
-                "failed to start the Web API",
             ErrorKind::NotBehindProxy =>
                 "not behind the proxies",
             ErrorKind::IoError(ref error) =>
@@ -141,9 +138,6 @@ impl fmt::Display for FisherError {
 
             ErrorKind::InvalidInput(ref error) =>
                 format!("invalid input: {}", error),
-
-            ErrorKind::WebAppStartFailed(ref error) =>
-                format!("{}", error),
 
             ErrorKind::NotBehindProxy =>
                 "not behind the proxies".into(),

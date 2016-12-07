@@ -17,14 +17,14 @@ extern crate rustc_serialize;
 extern crate regex;
 extern crate ansi_term;
 extern crate chan_signal;
-extern crate hyper;
 extern crate url;
 extern crate rand;
+extern crate tiny_http;
 #[macro_use] extern crate chan;
-#[macro_use] extern crate nickel;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
 #[cfg(feature = "provider-github")] extern crate ring;
+#[cfg(test)] extern crate hyper;
 
 #[macro_use] mod utils;
 mod cli;

@@ -13,12 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::io::Read;
 use std::net::IpAddr;
 use std::collections::HashMap;
 
-use nickel;
-use hyper::uri::RequestUri;
+use tiny_http;
 use url::form_urlencoded;
 use rustc_serialize::json;
 
@@ -71,51 +69,41 @@ impl From<JobOutput> for Request {
     }
 }
 
+impl<'a> From<&'a mut tiny_http::Request> for Request {
 
-pub fn convert_request(req: &mut nickel::Request) -> Request {
-    let source = req.origin.remote_addr.clone().ip();
+    fn from(origin: &'a mut tiny_http::Request) -> Request {
+        // Get the source IP
+        let source = origin.remote_addr().ip().clone();
 
-    // Convert headers from the hyper representation to strings
-    let mut headers = HashMap::new();
-    for header in req.origin.headers.iter() {
-        headers.insert(header.name().to_string(), header.value_string());
-    }
+        // Get the headers
+        let mut headers = HashMap::new();
+        for header in origin.headers() {
+            headers.insert(
+                header.field.as_str().as_str().to_string(),
+                header.value.as_str().to_string(),
+            );
+        }
 
-    // Get the body
-    let mut body = String::new();
-    let _ = req.origin.read_to_string(&mut body);
+        // Get the body
+        let mut body = String::new();
+        origin.as_reader().read_to_string(&mut body).unwrap();
 
-    let params = params_from_request(req);
+        // Get the querystring
+        let url = origin.url();
+        let params;
+        if url.contains("?") {
+            let query = url.rsplitn(2, "?").nth(0).unwrap();
+            params = params_from_query(query);
+        } else {
+            params = HashMap::new();
+        }
 
-    Request {
-        source: source,
-        headers: headers,
-        params: params,
-        body: body,
-    }
-}
-
-
-fn params_from_request(req: &nickel::Request) -> HashMap<String, String> {
-    let ref uri = req.origin.uri;
-
-    let query_string = match *uri {
-        RequestUri::AbsoluteUri(ref url) => Some(url.query()),
-        RequestUri::AbsolutePath(ref s) => Some(s.splitn(2, '?').nth(1)),
-        _ => None,
-    };
-
-    match query_string {
-        Some(path) => {
-            // Don't do anything if there is no query string
-            if path.is_none() {
-                return HashMap::new();
-            }
-            let path = path.unwrap();
-
-            params_from_query(path)
-        },
-        None => HashMap::new(),
+        Request {
+            source: source,
+            headers: headers,
+            params: params,
+            body: body,
+        }
     }
 }
 
