@@ -109,8 +109,8 @@ impl<App: Send + Sync + 'static> Handler<App> {
         }
     }
 
-    fn matches(&self, req: &tiny_http::Request) -> Option<Vec<String>> {
-        self.route.matches(req.method(), req.url())
+    fn matches(&self, method: &Method, url: &str) -> Option<Vec<String>> {
+        self.route.matches(method, url)
     }
 
     fn call(&self, app: &App, req: &Request, args: Vec<String>) -> Response {
@@ -208,8 +208,11 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
                 } else if let Err(e) = proxy_support.fix_request(&mut req) {
                     response = Response::BadRequest(e);
                 } else {
+                    let method = request.method();
+                    let url = request.url();
+
                     for handler in handlers {
-                        if let Some(args) = handler.matches(&request) {
+                        if let Some(args) = handler.matches(method, url) {
                             response = handler.call(&app, &req, args);
                             break;
                         }
@@ -270,9 +273,33 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
 
 #[cfg(test)]
 mod tests {
-    use tiny_http::Method;
+    use std::time::Duration;
 
-    use super::Route;
+    use tiny_http::Method;
+    use hyper;
+    use hyper::status::StatusCode;
+
+    use requests::Request;
+    use web::responses::Response;
+    use utils::testing::*;
+    use super::{Route, Handler, HttpServer};
+
+
+    struct DummyData(Vec<String>);
+
+    fn dummy_handler_fn(data: &DummyData, _req: &Request, args: Vec<String>)
+                        -> Response {
+        if data.0 == args {
+           Response::Ok
+        } else {
+           Response::Forbidden
+        }
+    }
+
+    fn dummy_handler() -> Handler<DummyData> {
+        let route = Route::new(Method::Get, "/?");
+        Handler::new(Box::new(dummy_handler_fn), route)
+    }
 
 
     #[test]
@@ -322,5 +349,62 @@ mod tests {
         );
         assert_eq!(basic.matches(&Method::Post, "/a/t/"), None);
         assert_eq!(basic.matches(&Method::Get, "/a/t/b"), None);
+    }
+
+
+    #[test]
+    fn test_handlers() {
+        let handler = dummy_handler();
+
+        assert_eq!(
+            handler.matches(&Method::Get, "/test"),
+            Some(vec!["test".into()])
+        );
+        assert_eq!(
+            handler.call(
+                &DummyData(vec!["test".into()]), &dummy_request(),
+                vec!["test".into()]
+            ).status(),
+            200
+        );
+    }
+
+
+    #[test]
+    fn test_server() {
+        macro_rules! req {
+            ($client:expr, $method:expr, $url:expr) => {{
+                $client.request($method, &$url).send()
+            }};
+        }
+
+        // Create the server instance
+        let mut server = HttpServer::new(DummyData(vec!["test".into()]), None);
+        server.add_route(Method::Get, "/?", Box::new(dummy_handler_fn));
+
+        // Start the server
+        let addr = server.listen(&"127.0.0.1:0".into()).unwrap();
+
+        let url = format!("http://{}", addr);
+        let mut client = hyper::Client::new();
+
+        // Sometimes requests times out after the server was shut down
+        // Don't block tests in those cases
+        client.set_read_timeout(Some(Duration::new(1, 0)));
+        client.set_write_timeout(Some(Duration::new(1, 0)));
+
+        // Make a dummy request
+        let res = req!(
+            client, hyper::method::Method::Get, format!("{}/test", url)
+        ).unwrap();
+        assert_eq!(res.status, StatusCode::Ok);
+
+        // Stop the server
+        server.stop();
+
+        assert!(
+            req!(client, hyper::method::Method::Get, format!("{}/test", url))
+            .is_err()
+        );
     }
 }

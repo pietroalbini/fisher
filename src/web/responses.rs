@@ -21,6 +21,7 @@ use errors::FisherError;
 use processor::HealthDetails;
 
 
+#[derive(Debug)]
 pub enum Response {
     NotFound,
     Forbidden,

@@ -221,7 +221,7 @@ impl Processor {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct HealthDetails {
     pub queue_size: usize,
     pub active_jobs: u16,
