@@ -16,8 +16,10 @@
 use std::fs;
 use std::path::Path;
 use std::collections::HashMap;
+use std::collections::hash_map::Iter as HashMapIter;
 use std::os::unix::fs::PermissionsExt;
 use std::io::{BufReader, BufRead};
+use std::sync::Arc;
 
 use regex::Regex;
 
@@ -27,7 +29,6 @@ use errors::FisherResult;
 
 
 pub type VecProviders = Vec<providers::HookProvider>;
-pub type Hooks = HashMap<String, Hook>;
 
 
 lazy_static! {
@@ -37,7 +38,6 @@ lazy_static! {
 }
 
 
-#[derive(Clone)]
 pub struct Hook {
     name: String,
     exec: String,
@@ -132,8 +132,39 @@ impl Hook {
 }
 
 
-pub fn collect<T: AsRef<Path>>(base: T) -> FisherResult<Hooks> {
-    let mut result = HashMap::new();
+#[derive(Clone)]
+pub struct Hooks {
+    hooks: HashMap<String, Arc<Hook>>,
+}
+
+impl Hooks {
+
+    pub fn new() -> Self {
+        Hooks {
+            hooks: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, name: String, hook: Hook) {
+        self.hooks.insert(name, Arc::new(hook));
+    }
+
+    pub fn get(&self, name: &String) -> Option<Arc<Hook>> {
+        match self.hooks.get(name) {
+            Some(hook) => Some(hook.clone()),
+            None => None,
+        }
+    }
+
+    pub fn iter(&self) -> HashMapIter<String, Arc<Hook>> {
+        self.hooks.iter()
+    }
+}
+
+
+pub fn collect<T: AsRef<Path>>(base: T)
+        -> FisherResult<HashMap<String, Hook>> {
+    let mut hooks = HashMap::new();
 
     for entry in try!(fs::read_dir(&base)) {
         let pathbuf = try!(entry).path();
@@ -152,13 +183,13 @@ pub fn collect<T: AsRef<Path>>(base: T) -> FisherResult<Hooks> {
         }
 
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
-        let exec = try!(fs::canonicalize(path)).to_str().unwrap().to_string();
+        let exec = try!(fs::canonicalize(path)).to_str().unwrap().into();
 
         let hook = try!(Hook::load(name.clone(), exec));
-        result.insert(name.clone(), hook);
+        hooks.insert(name, hook);
     }
 
-    Ok(result)
+    Ok(hooks)
 }
 
 

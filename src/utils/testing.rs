@@ -255,8 +255,14 @@ impl TestingEnv {
     pub fn new() -> Self {
         let hooks_dir = sample_hooks().to_str().unwrap().to_string();
 
+        let mut hooks = Hooks::new();
+        let mut collected = hooks::collect(&hooks_dir).unwrap();
+        for name in collected.keys().cloned().collect::<Vec<String>>() {
+            hooks.insert(name.clone(), collected.remove(&name).unwrap());
+        }
+
         TestingEnv {
-            hooks: Arc::new(hooks::collect(&hooks_dir).unwrap()),
+            hooks: Arc::new(hooks),
             remove_dirs: vec![hooks_dir],
         }
     }

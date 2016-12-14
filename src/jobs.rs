@@ -19,6 +19,7 @@ use std::fs;
 use std::env;
 use std::path::PathBuf;
 use std::io::Write;
+use std::sync::Arc;
 
 use hooks::Hook;
 use utils;
@@ -42,15 +43,15 @@ lazy_static! {
 
 #[derive(Clone)]
 pub struct Job {
-    hook: Hook,
+    hook: Arc<Hook>,
     provider: Option<HookProvider>,
     request: Request,
 }
 
 impl Job {
 
-    pub fn new(hook: Hook, provider: Option<HookProvider>, request: Request)
-               -> Job {
+    pub fn new(hook: Arc<Hook>, provider: Option<HookProvider>,
+               request: Request) -> Job {
         Job {
             hook: hook,
             provider: provider,

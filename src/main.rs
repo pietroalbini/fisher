@@ -69,16 +69,19 @@ fn main() {
     let mut factory = app::AppFactory::new(&options);
 
     // Collect all the hooks from the directory
-    let hooks = errors::unwrap(hooks::collect(&options.hooks_dir));
+    let mut hooks = errors::unwrap(hooks::collect(&options.hooks_dir));
     println!("{} ({} total)",
         Style::new().bold().paint("Collected hooks:"), hooks.len(),
     );
 
     // Load all the hooks in the Fisher instance
-    let mut hooks_names: Vec<&String> = hooks.keys().collect();
-    hooks_names.sort();
+    let hooks_names = {
+        let mut names: Vec<String> = hooks.keys().cloned().collect();
+        names.sort();
+        names
+    };
     for name in &hooks_names {
-        factory.add_hook(&name, hooks.get(*name).unwrap().clone());
+        factory.add_hook(name.clone(), hooks.remove(name).unwrap());
         println!("- {}", name);
     }
 

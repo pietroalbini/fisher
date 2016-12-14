@@ -66,7 +66,7 @@ impl HooksContainer {
     }
 
     fn finalize(&self) -> HooksContainer {
-        if let HooksContainer::Mutable(ref hooks) = *self {
+        if let &HooksContainer::Mutable(ref hooks) = self {
             HooksContainer::Immutable(Arc::new(hooks.clone()))
         } else {
             panic!("Already finalized!")
@@ -97,8 +97,8 @@ impl<'a> AppFactory<'a> {
         }
     }
 
-    pub fn add_hook(&mut self, name: &str, hook: Hook) {
-        self.hooks.insert(name.to_string(), hook);
+    pub fn add_hook(&mut self, name: String, hook: Hook) {
+        self.hooks.insert(name, hook);
     }
 
     pub fn start(&'a mut self) -> FisherResult<RunningApp> {
