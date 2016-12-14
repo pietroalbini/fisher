@@ -36,6 +36,7 @@ pub enum ErrorKind {
     JsonError(json::DecoderError),
     AddrParseError(net::AddrParseError),
     ParseIntError(num::ParseIntError),
+    GenericError(Box<Error + Send + Sync>),
 }
 
 
@@ -115,6 +116,8 @@ impl Error for FisherError {
                 error.description(),
             ErrorKind::ParseIntError(..) =>
                 "invalid number",
+            ErrorKind::GenericError(ref error) =>
+                error.description(),
         }
     }
 
@@ -181,6 +184,9 @@ impl fmt::Display for FisherError {
 
             ErrorKind::ParseIntError(..) =>
                 "you didn't provide a valid number".into(),
+
+            ErrorKind::GenericError(ref error) =>
+                format!("{}", error),
         };
 
         write!(f, "{}", description)
@@ -212,6 +218,7 @@ derive_error!(io::Error, ErrorKind::IoError);
 derive_error!(json::DecoderError, ErrorKind::JsonError);
 derive_error!(net::AddrParseError, ErrorKind::AddrParseError);
 derive_error!(num::ParseIntError, ErrorKind::ParseIntError);
+derive_error!(Box<Error + Send + Sync>, ErrorKind::GenericError);
 
 
 pub fn print_err<T>(result: Result<T, FisherError>) -> Result<T, FisherError> {
