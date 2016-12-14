@@ -25,8 +25,8 @@ pub type ProviderFactory = fn(&str) -> FisherResult<BoxedProvider>;
 
 
 /// This trait should be implemented by every Fisher provider
-/// The objects implementing this trait must also implement Clone
-pub trait Provider: ProviderClone {
+/// The objects implementing this trait must also implement Clone and Debug
+pub trait Provider: ProviderClone + ::std::fmt::Debug {
 
     /// This method should create a new instance of the provider, from a
     /// given configuration string
@@ -102,7 +102,7 @@ impl Factories {
 }
 
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct HookProvider {
     provider: BoxedProvider,
     name: String,

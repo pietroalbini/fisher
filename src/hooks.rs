@@ -38,6 +38,7 @@ lazy_static! {
 }
 
 
+#[derive(Debug)]
 pub struct Hook {
     name: String,
     exec: String,
@@ -132,7 +133,7 @@ impl Hook {
 }
 
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Hooks {
     hooks: HashMap<String, Arc<Hook>>,
 }

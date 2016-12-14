@@ -38,7 +38,7 @@ lazy_static! {
 }
 
 
-#[derive(Clone, RustcDecodable)]
+#[derive(Debug, Clone, RustcDecodable)]
 pub struct GitHubProvider {
     secret: Option<String>,
     events: Option<Vec<String>>,
