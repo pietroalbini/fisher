@@ -111,7 +111,7 @@ impl<'a> AppFactory<'a> {
 
         // Start the processor
         processor.start(self.options.max_threads, self.hooks.reference());
-        let processor_input = processor.sender().unwrap();
+        let processor_input = processor.input().unwrap();
 
         // Start the Web API
         let listening;

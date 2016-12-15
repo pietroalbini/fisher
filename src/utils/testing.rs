@@ -17,10 +17,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 use std::fs;
 
-use chan;
 use hyper::client as hyper;
 use hyper::method::Method;
 
@@ -33,6 +32,8 @@ use processor::{ProcessorInput, HealthDetails};
 use providers::{Provider, ProviderFactory, BoxedProvider, testing};
 use errors::FisherResult;
 use utils;
+
+use utils::compat;
 
 
 #[macro_export]
@@ -153,12 +154,19 @@ pub fn sample_hooks() -> PathBuf {
 }
 
 
+enum FakeProcessorInput {
+    Recv(mpsc::Sender<ProcessorInput>),
+    TryRecv(mpsc::Sender<Option<ProcessorInput>>),
+    Stop,
+}
+
+
 pub struct WebAppInstance {
     inst: WebApp,
 
     url: String,
     client: hyper::Client,
-    input_recv: chan::Receiver<ProcessorInput>,
+    input_request: mpsc::Sender<FakeProcessorInput>,
 }
 
 impl WebAppInstance {
@@ -168,8 +176,29 @@ impl WebAppInstance {
         // Create a new instance of WebApp
         let mut inst = WebApp::new();
 
-        // Create the input channel
-        let (input_send, input_recv) = chan::async();
+        // Create the input channel for the fake processor
+        let (input_send, input_recv) = mpsc::channel();
+        let (input_request_send, input_request_recv) = mpsc::channel();
+
+        // Create a fake processor
+        ::std::thread::spawn(move || {
+            for req in input_request_recv.iter() {
+                match req {
+                    FakeProcessorInput::Recv(return_to) => {
+                        return_to.send(
+                            input_recv.recv().unwrap()
+                        ).unwrap();
+                    },
+                    FakeProcessorInput::TryRecv(return_to) => {
+                        return_to.send(match input_recv.try_recv() {
+                            Ok(data) => Some(data),
+                            Err(..) => None,
+                        }).unwrap();
+                    },
+                    FakeProcessorInput::Stop => break,
+                }
+            }
+        });
 
         // Set the options
         let options = FisherOptions {
@@ -192,7 +221,7 @@ impl WebAppInstance {
 
             url: url,
             client: client,
-            input_recv: input_recv,
+            input_request: input_request_send,
         }
     }
 
@@ -203,36 +232,38 @@ impl WebAppInstance {
     }
 
     pub fn processor_input(&self) -> Option<ProcessorInput> {
-        let input_recv = &self.input_recv;
+        let (resp_send, resp_recv) = mpsc::channel();
 
-        // This returns Some only if there is something right now
-        chan_select! {
-            default => {
-                return None;
-            },
-            input_recv.recv() -> input => {
-                return Some(input.unwrap());
-            },
-        };
+        // Request to the fake processor if there are inputs
+        self.input_request.send(
+            FakeProcessorInput::TryRecv(resp_send)
+        ).unwrap();
+        resp_recv.recv().unwrap()
     }
 
     pub fn next_health(&self, details: HealthDetails) -> NextHealthCheck {
-        let input_chan = self.input_recv.clone();
-        let (result_send, result_recv) = chan::async();
+        let input_request = self.input_request.clone();
+        let (result_send, result_recv) = mpsc::channel();
 
         ::std::thread::spawn(move || {
-            let input = input_chan.recv().unwrap();
+            let (resp_send, resp_recv) = mpsc::channel();
+
+            // Request to the fake processor the next input
+            input_request.send(
+                FakeProcessorInput::Recv(resp_send)
+            ).unwrap();
+            let input = resp_recv.recv().unwrap();
 
             if let ProcessorInput::HealthStatus(ref sender) = input {
                 // Send the HealthDetails we want
-                sender.send(details);
+                sender.send(details).unwrap();
 
                 // Everything was OK
-                result_send.send(None);
+                result_send.send(None).unwrap();
             } else {
                 result_send.send(Some(
                     "Wrong kind of ProcessorInput received!".to_string()
-                ));
+                )).unwrap();
             }
         });
 
@@ -240,6 +271,7 @@ impl WebAppInstance {
     }
 
     pub fn stop(&mut self) -> bool {
+        self.input_request.send(FakeProcessorInput::Stop).unwrap();
         self.inst.stop()
     }
 }
@@ -299,32 +331,27 @@ impl TestingEnv {
 
 
 pub struct NextHealthCheck {
-    result_recv: chan::Receiver<Option<String>>,
+    result_recv: mpsc::Receiver<Option<String>>,
 }
 
 impl NextHealthCheck {
 
-    fn new(result_recv: chan::Receiver<Option<String>>) -> Self {
+    fn new(result_recv: mpsc::Receiver<Option<String>>) -> Self {
         NextHealthCheck {
             result_recv: result_recv,
         }
     }
 
     pub fn check(&self) {
-        let result_recv = &self.result_recv;
-
-        let timeout = chan::after(Duration::from_secs(5));
-
-        chan_select! {
-            timeout.recv() => {
-                panic!("No ProcessorInput received!");
-            },
-            result_recv.recv() -> result => {
-                // Forward panics
-                if let Some(message) = result.unwrap() {
+        let timeout = Duration::from_secs(5);
+        match compat::recv_timeout(&self.result_recv, timeout) {
+            Ok(result) => {
+                // Propagate panics
+                if let Some(message) = result {
                     panic!(message);
                 }
             },
+            Err(..) => panic!("No ProcessorInput received!"),
         };
     }
 }

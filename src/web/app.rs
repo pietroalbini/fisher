@@ -13,10 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::net::SocketAddr;
 
-use chan;
 use tiny_http::Method;
 
 use errors::FisherResult;
@@ -40,7 +39,7 @@ impl WebApp {
     }
 
     pub fn listen(&mut self, hooks: Arc<Hooks>, options: &FisherOptions,
-                  input: chan::Sender<ProcessorInput>)
+                  input: mpsc::Sender<ProcessorInput>)
                  -> FisherResult<SocketAddr> {
         // Create the web api
         let api = WebApi::new(input, hooks, options.enable_health);

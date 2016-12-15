@@ -13,20 +13,14 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-mod tempdir;
-mod net;
-
-pub mod compat;
-
-#[cfg(test)]
-mod parse_env;
-
-#[cfg(test)]
-#[macro_use] pub mod testing;
+extern crate rustc_version;
 
 
-pub use utils::tempdir::create_temp_dir;
-pub use utils::net::parse_forwarded_for;
+fn main() {
+    let version = rustc_version::version();
 
-#[cfg(test)]
-pub use utils::parse_env::parse_env;
+    // Backport for mpsc::Receiver::recv_timeout
+    if version.major == 1 && version.minor < 12 {
+        println!("cargo:rustc-cfg=fisher_backport_recv_timeout");
+    }
+}
