@@ -13,6 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
- mod recv_timeout;
-
- pub use self::recv_timeout::*;
+// Currently just used in tests
+#[cfg(test)] mod recv_timeout;
+#[cfg(test)] pub use self::recv_timeout::*;
