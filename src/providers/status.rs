@@ -68,7 +68,7 @@ impl Provider for StatusProvider {
             if ! EVENTS.contains(&event.as_ref()) {
                 // Return an error if the event doesn't exist
                 return Err(ErrorKind::InvalidInput(format!(
-                    r#""{}" is not a FIsher status event"#, event
+                    r#""{}" is not a Fisher status event"#, event
                 )).into());
             }
         }
