@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -59,8 +59,14 @@ impl Job {
         }
     }
 
+    #[inline]
     pub fn hook_name(&self) -> &str {
         self.hook.name()
+    }
+
+    #[inline]
+    pub fn request_ip(&self) -> String {
+        format!("{}", self.request.source)
     }
 
     pub fn process(&self) -> FisherResult<JobOutput> {
@@ -73,6 +79,9 @@ impl Job {
         let working_directory = try!(utils::create_temp_dir());
         command.current_dir(working_directory.to_str().unwrap());
         command.env("HOME".to_string(), working_directory.to_str().unwrap());
+
+        // Set the request IP
+        command.env("FISHER_REQUEST_IP".to_string(), self.request_ip());
 
         // Save the request body
         let request_body = try!(self.save_request_body(&working_directory));
@@ -148,6 +157,7 @@ pub struct JobOutput {
     pub signal: Option<i32>,
 
     pub hook_name: String,
+    pub request_ip: String,
 }
 
 impl<'a> From<(&'a Job, process::Output)> for JobOutput {
@@ -162,6 +172,7 @@ impl<'a> From<(&'a Job, process::Output)> for JobOutput {
             signal: data.1.status.signal(),
 
             hook_name: data.0.hook_name().into(),
+            request_ip: data.0.request_ip(),
         }
     }
 }
@@ -277,6 +288,7 @@ mod tests {
             // Those are added by the processor
             res.push("HOME");
             res.push("FISHER_REQUEST_BODY");
+            res.push("FISHER_REQUEST_IP");
 
             // Those are extra variables added by bash
             res.push("PWD");
@@ -307,6 +319,13 @@ mod tests {
         assert_eq!(
             *job_env.get("HOME").unwrap(),
             working_directory
+        );
+
+        // The IP address must be correct
+        // dummy_request() sets it to 127.0.0.1
+        assert_eq!(
+            *&job_env.get("FISHER_REQUEST_IP").unwrap(),
+            &"127.0.0.1"
         );
 
         // The value of the environment variables forwarded from the current

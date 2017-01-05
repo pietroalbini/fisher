@@ -6,6 +6,7 @@ This document contains what changed in each release of Fisher.
 
 *Not yet released.*
 
+* Add the `$FISHER_REQUEST_IP` environment variable
 * Add support for status hooks
 * Refactored a bunch of the code
 * Improve testing coverage of the project

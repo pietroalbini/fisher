@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -205,6 +205,7 @@ mod tests {
             signal: None,
 
             hook_name: "example".into(),
+            request_ip: "127.0.0.1".into(),
         }
     }
 
