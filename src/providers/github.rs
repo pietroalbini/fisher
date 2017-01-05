@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ pub struct GitHubProvider {
     events: Option<Vec<String>>,
 }
 
-impl Provider for GitHubProvider {
+impl ProviderTrait for GitHubProvider {
 
     fn new(input: &str) -> FisherResult<GitHubProvider> {
         let inst: GitHubProvider = try!(json::decode(input));
@@ -169,7 +169,7 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
 mod tests {
     use utils::testing::*;
     use requests::RequestType;
-    use providers::Provider;
+    use providers::ProviderTrait;
 
     use super::{GITHUB_EVENTS, GitHubProvider, verify_signature};
 

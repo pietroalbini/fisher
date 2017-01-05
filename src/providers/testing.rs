@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@ pub struct TestingProvider {
     config: String,
 }
 
-impl Provider for TestingProvider {
+impl ProviderTrait for TestingProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
         // If the configuration is "yes", then it's correct
@@ -103,7 +103,7 @@ mod tests {
 
     use utils::testing::*;
     use requests::RequestType;
-    use providers::Provider;
+    use providers::ProviderTrait;
 
     use super::TestingProvider;
 

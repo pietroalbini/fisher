@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -23,12 +23,9 @@ use std::sync::Arc;
 
 use regex::Regex;
 
-use providers::{self, HookProvider};
+use providers::Provider;
 use requests::{Request, RequestType};
 use errors::FisherResult;
-
-
-pub type VecProviders = Vec<providers::HookProvider>;
 
 
 lazy_static! {
@@ -42,7 +39,7 @@ lazy_static! {
 pub struct Hook {
     name: String,
     exec: String,
-    providers: VecProviders,
+    providers: Vec<Provider>,
 }
 
 impl Hook {
@@ -57,13 +54,13 @@ impl Hook {
         })
     }
 
-    fn load_providers(file: &String) -> FisherResult<VecProviders> {
+    fn load_providers(file: &String) -> FisherResult<Vec<Provider>> {
         let f = fs::File::open(file).unwrap();
         let reader = BufReader::new(f);
 
         let mut content;
         let mut line_number: u32 = 0;
-        let mut result: VecProviders = vec![];
+        let mut result = vec![];
         for line in reader.lines() {
             line_number += 1;
             content = line.unwrap();
@@ -78,7 +75,7 @@ impl Hook {
                 let name = cap.at(1).unwrap();
                 let data = cap.at(2).unwrap();
 
-                match providers::get(&name, &data) {
+                match Provider::new(&name, &data) {
                     Ok(provider) => {
                         result.push(provider);
                     },
@@ -94,8 +91,7 @@ impl Hook {
         Ok(result)
     }
 
-    pub fn validate(&self, req: &Request)
-                    -> (RequestType, Option<HookProvider>) {
+    pub fn validate(&self, req: &Request) -> (RequestType, Option<Provider>) {
         if self.providers.len() > 0 {
             // Check every provider if they're present
             for provider in &self.providers {
@@ -108,7 +104,7 @@ impl Hook {
     }
 
     pub fn validate_provider(&self, name: &str, req: &Request)
-                             -> Option<HookProvider> {
+                            -> Option<Provider> {
         for provider in &self.providers {
             // Skip providers with different names
             if provider.name() != name {

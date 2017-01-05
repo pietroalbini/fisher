@@ -59,7 +59,7 @@ impl StatusProvider {
     }
 }
 
-impl Provider for StatusProvider {
+impl ProviderTrait for StatusProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
         let inst: Self = try!(json::decode(config));
@@ -190,7 +190,7 @@ mod tests {
     use utils;
     use requests::RequestType;
     use jobs::JobOutput;
-    use providers::Provider;
+    use providers::ProviderTrait;
 
     use super::StatusProvider;
 

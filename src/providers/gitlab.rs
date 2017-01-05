@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ pub struct GitLabProvider {
     events: Option<Vec<String>>,
 }
 
-impl Provider for GitLabProvider {
+impl ProviderTrait for GitLabProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
         let inst: GitLabProvider = try!(json::decode(config));
@@ -131,7 +131,7 @@ mod tests {
 
     use utils::testing::*;
     use requests::{Request, RequestType};
-    use providers::Provider;
+    use providers::ProviderTrait;
 
     use super::{GITLAB_EVENTS, GitLabProvider, normalize_event_name};
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -29,8 +29,6 @@ use jobs::Job;
 use web::WebApp;
 use requests::Request;
 use processor::{ProcessorInput, HealthDetails};
-use providers::{Provider, ProviderFactory, BoxedProvider, testing};
-use errors::FisherResult;
 use utils;
 
 use utils::compat;
@@ -68,16 +66,6 @@ pub fn dummy_request() -> Request {
         source: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
         body: String::new(),
     }
-}
-
-
-pub fn testing_provider_factory() -> ProviderFactory {
-    fn factory(config: &str) -> FisherResult<BoxedProvider> {
-        let prov = try!(testing::TestingProvider::new(config));
-        Ok(Box::new(prov) as BoxedProvider)
-    }
-
-    factory
 }
 
 

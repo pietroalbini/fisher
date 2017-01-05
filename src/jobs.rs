@@ -24,7 +24,7 @@ use std::sync::Arc;
 use hooks::Hook;
 use utils;
 use requests::Request;
-use providers::HookProvider;
+use providers::Provider;
 use errors::FisherResult;
 
 
@@ -44,13 +44,13 @@ lazy_static! {
 #[derive(Clone)]
 pub struct Job {
     hook: Arc<Hook>,
-    provider: Option<HookProvider>,
+    provider: Option<Provider>,
     request: Request,
 }
 
 impl Job {
 
-    pub fn new(hook: Arc<Hook>, provider: Option<HookProvider>,
+    pub fn new(hook: Arc<Hook>, provider: Option<Provider>,
                request: Request) -> Job {
         Job {
             hook: hook,

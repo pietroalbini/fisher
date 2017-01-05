@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,87 +13,154 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-mod core;
-mod prelude;
-
 mod status;
 mod standalone;
 #[cfg(feature = "provider-github")] mod github;
 #[cfg(feature = "provider-gitlab")] mod gitlab;
 #[cfg(test)] pub mod testing;
 
-use errors::FisherResult;
-pub use providers::core::{Factories, ProviderFactory, Provider, HookProvider};
-pub use providers::core::BoxedProvider;
 
+pub mod prelude {
 
-// This macro simplifies adding new providers
-macro_rules! provider {
-    ($factories:expr, $name:expr, $provider:path) => {{
-        use $provider as provider;
+    pub use std::collections::HashMap;
+    pub use std::path::PathBuf;
 
-        fn factory(config: &str) -> FisherResult<BoxedProvider> {
-            let prov = try!(provider::new(config));
-            Ok(Box::new(prov) as BoxedProvider)
-        }
-
-        $factories.add($name, factory);
-    }};
-    ($factories:expr, $name:expr, $provider:path, on $cfg:meta) => {{
-        #[cfg($cfg)]
-        fn inner(factories: &mut Factories) {
-            provider!(factories, $name, $provider);
-        }
-        #[cfg(not($cfg))]
-        fn inner(_factories: &mut Factories) {}
-
-        inner(&mut $factories);
-    }};
+    pub use providers::ProviderTrait;
+    pub use requests::{Request, RequestType};
+    pub use errors::FisherResult;
 }
 
 
-lazy_static! {
-    static ref FACTORIES: Factories = {
-        let mut f = Factories::new();
+use std::collections::HashMap;
+use std::path::PathBuf;
 
-        provider!(f,
-            "Standalone",
-            self::standalone::StandaloneProvider
-        );
-        provider!(f,
-            "Status",
-            self::status::StatusProvider
-        );
-        provider!(f,
-            "GitHub",
-            self::github::GitHubProvider,
-            on feature="provider-github"
-        );
-        provider!(f,
-            "GitLab",
-            self::gitlab::GitLabProvider,
-            on feature="provider-gitlab"
-        );
+use requests::{Request, RequestType};
+use errors::{FisherResult, ErrorKind};
 
-        // This is added only during unit tests
-        provider!(f,
-            "Testing",
-            self::testing::TestingProvider,
-            on test
-        );
 
-        f
+/// This trait should be implemented by every Fisher provider
+/// The objects implementing this trait must also implement Clone and Debug
+pub trait ProviderTrait: ::std::fmt::Debug {
+
+    /// This method should create a new instance of the provider, from a
+    /// given configuration string
+    fn new(&str) -> FisherResult<Self> where Self: Sized;
+
+    /// This method should validate an incoming request, returning its
+    /// type if the request is valid
+    fn validate(&self, &Request) -> RequestType;
+
+    /// This method should provide the environment variables of the provided
+    /// request. Those variables will be passed to the process
+    fn env(&self, &Request) -> HashMap<String, String>;
+
+    /// This method should prepare the directory in which the hook will be run.
+    /// This means, if you want to add extra files in there you should use
+    /// this. You're not required to implement this method
+    fn prepare_directory(&self, _req: &Request, _path: &PathBuf)
+                         -> FisherResult<()> {
+        Ok(())
+    }
+}
+
+
+macro_rules! ProviderEnum {
+    ($($cfg:meta | $name:ident => $provider:path),*) => {
+
+        #[derive(Debug)]
+        pub enum Provider {
+            $(
+                #[cfg($cfg)]
+                $name($provider),
+            )*
+        }
+
+        impl Provider {
+
+            pub fn new(name: &str, config: &str) -> FisherResult<Provider> {
+                match name {
+                    $(
+                        #[cfg($cfg)]
+                        stringify!($name) => {
+                            use $provider as InnerProvider;
+                            match InnerProvider::new(config) {
+                                Ok(prov) => Ok(Provider::$name(prov)),
+                                Err(err) => Err(err),
+                            }
+                        },
+                    )*
+                    _ => Err(
+                        ErrorKind::ProviderNotFound(name.to_string()).into()
+                    ),
+                }
+            }
+
+            pub fn validate(&self, req: &Request) -> RequestType {
+                match self {
+                    $(
+                        #[cfg($cfg)]
+                        &Provider::$name(ref prov) => {
+                            (prov as &ProviderTrait).validate(req)
+                        },
+                    )*
+                }
+            }
+
+            pub fn env(&self, req: &Request) -> HashMap<String, String> {
+                match self {
+                    $(
+                        #[cfg($cfg)]
+                        &Provider::$name(ref prov) => {
+                            (prov as &ProviderTrait).env(req)
+                        },
+                    )*
+                }
+            }
+
+            pub fn prepare_directory(&self, req: &Request, path: &PathBuf)
+                                    -> FisherResult<()> {
+                match self {
+                    $(
+                        #[cfg($cfg)]
+                        &Provider::$name(ref prov) => {
+                            (prov as &ProviderTrait)
+                                .prepare_directory(req, path)
+                        },
+                    )*
+                }
+            }
+
+            pub fn name(&self) -> &str {
+                match self {
+                    $(
+                        #[cfg($cfg)]
+                        &Provider::$name(..) => stringify!($name),
+                    )*
+                }
+            }
+        }
+
+        impl Clone for Provider {
+
+            fn clone(&self) -> Provider {
+                match self {
+                    $(
+                        #[cfg($cfg)]
+                        &Provider::$name(ref prov) => {
+                            Provider::$name(prov.clone())
+                        },
+                    )*
+                }
+            }
+        }
     };
 }
 
 
-pub fn get(name: &str, config: &str) -> FisherResult<HookProvider> {
-    let name = name.to_string();
-
-    // Get the related factory
-    let factory = try!(FACTORIES.by_name(&name));
-
-    // Create a new provider
-    let provider = try!(factory(&config));
-    Ok(HookProvider::new(provider, name))
+ProviderEnum! {
+    any(test, not(test)) | Standalone => self::standalone::StandaloneProvider,
+    any(test, not(test)) | Status => self::status::StatusProvider,
+    feature="provider-github" | GitHub => self::github::GitHubProvider,
+    feature="provider-gitlab" | GitLab => self::gitlab::GitLabProvider,
+    test | Testing => self::testing::TestingProvider
 }
