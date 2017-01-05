@@ -13,9 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
-
-use chan;
+use std::sync::{Arc, Mutex, mpsc};
 
 use requests::{Request, RequestType};
 use hooks::Hooks;
@@ -26,7 +24,7 @@ use web::responses::Response;
 
 #[derive(Clone)]
 pub struct WebApi {
-    processor_input: chan::Sender<ProcessorInput>,
+    processor_input: Arc<Mutex<mpsc::Sender<ProcessorInput>>>,
     hooks: Arc<Hooks>,
 
     health_enabled: bool,
@@ -34,10 +32,10 @@ pub struct WebApi {
 
 impl WebApi {
 
-    pub fn new(processor_input: chan::Sender<ProcessorInput>,
+    pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
                hooks: Arc<Hooks>, health_enabled: bool) -> Self {
         WebApi {
-            processor_input: processor_input,
+            processor_input: Arc::new(Mutex::new(processor_input)),
             hooks: hooks,
             health_enabled: health_enabled,
         }
@@ -65,7 +63,8 @@ impl WebApi {
             // Queue a job if the hook should be executed
             RequestType::ExecuteHook => {
                 let job = Job::new(hook.clone(), provider, req.clone());
-                self.processor_input.send(ProcessorInput::Job(job));
+                self.processor_input.lock().unwrap()
+                    .send(ProcessorInput::Job(job)).unwrap();
 
                 Response::Ok
             },
@@ -80,12 +79,12 @@ impl WebApi {
     pub fn get_health(&self, _req: &Request, _args: Vec<String>) -> Response {
         if self.health_enabled {
             // Create a channel to communicate with the processor
-            let (details_send, details_recv) = chan::async();
+            let (details_send, details_recv) = mpsc::channel();
 
             // Get the details from the processor
-            self.processor_input.send(
+            self.processor_input.lock().unwrap().send(
                 ProcessorInput::HealthStatus(details_send)
-            );
+            ).unwrap();
             let details = details_recv.recv().unwrap();
 
             Response::HealthStatus(details)

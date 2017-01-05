@@ -14,10 +14,9 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 
 use rustc_serialize::json::{Json, ToJson};
-use chan;
 
 use jobs::Job;
 use hooks::Hooks;
@@ -25,57 +24,54 @@ use requests::Request;
 use errors;
 
 
-pub type SenderChan = chan::Sender<ProcessorInput>;
-
-
 pub struct ProcessorManager {
-    sender: Option<SenderChan>,
-    stop_wait: Option<chan::Receiver<()>>,
+    input: Option<mpsc::Sender<ProcessorInput>>,
+    stop_wait: Option<mpsc::Receiver<()>>,
 }
 
 impl ProcessorManager {
 
     pub fn new() -> ProcessorManager {
         ProcessorManager {
-            sender: None,
+            input: None,
             stop_wait: None,
         }
     }
 
     pub fn start(&mut self, max_threads: u16, hooks: Arc<Hooks>) {
-        // This is used to retrieve the sender we want from the child thread
-        let (sender_send, sender_recv) = chan::sync(0);
+        // This is used to retrieve the input we want from the child thread
+        let (input_send, input_recv) = mpsc::sync_channel(0);
 
         // This is used by the thread to notify the processor it completed its
         // work, in order to block execution when stopping fisher
-        let (stop_wait_send, stop_wait_recv) = chan::sync(0);
+        let (stop_wait_send, stop_wait_recv) = mpsc::sync_channel(0);
 
         ::std::thread::spawn(move || {
             let (mut processor, input) = Processor::new(max_threads, hooks);
 
-            // Send the sender back to the parent thread
-            sender_send.send(input);
+            // Send the input back to the parent thread
+            input_send.send(input).unwrap();
 
             processor.run();
 
             // Notify ProcessorManager the thread did its work
-            stop_wait_send.send(());
+            stop_wait_send.send(()).unwrap();
         });
 
-        self.sender = Some(sender_recv.recv().unwrap());
+        self.input = Some(input_recv.recv().unwrap());
         self.stop_wait = Some(stop_wait_recv);
     }
 
     pub fn stop(&self) {
-        match self.sender {
-            Some(ref sender) => {
+        match self.input {
+            Some(ref input) => {
                 // Tell the processor to exit as soon as possible
-                sender.send(ProcessorInput::StopSignal);
+                input.send(ProcessorInput::StopSignal).unwrap();
 
                 // Wait until the processor did its work
                 match self.stop_wait {
                     Some(ref stop_wait) => {
-                        stop_wait.recv();
+                        stop_wait.recv().unwrap();
                     },
                     None => {},
                 }
@@ -84,8 +80,8 @@ impl ProcessorManager {
         }
     }
 
-    pub fn sender(&self) -> Option<SenderChan> {
-        self.sender.clone()
+    pub fn input(&self) -> Option<mpsc::Sender<ProcessorInput>> {
+        self.input.clone()
     }
 }
 
@@ -94,7 +90,7 @@ impl ProcessorManager {
 pub enum ProcessorInput {
     StopSignal,
     Job(Job),
-    HealthStatus(chan::Sender<HealthDetails>),
+    HealthStatus(mpsc::Sender<HealthDetails>),
     JobEnded,
 }
 
@@ -107,16 +103,16 @@ struct Processor {
     threads_count: u16,
     max_threads: u16,
 
-    input_recv: chan::Receiver<ProcessorInput>,
-    input_send: chan::Sender<ProcessorInput>,
+    input_recv: mpsc::Receiver<ProcessorInput>,
+    input_send: mpsc::Sender<ProcessorInput>,
 }
 
 impl Processor {
 
     pub fn new(max_threads: u16, hooks: Arc<Hooks>)
-               -> (Processor, SenderChan) {
+               -> (Processor, mpsc::Sender<ProcessorInput>) {
         // Create the channel for the input
-        let (input_send, input_recv) = chan::async();
+        let (input_send, input_recv) = mpsc::channel();
 
         let processor = Processor {
             jobs: VecDeque::new(),
@@ -157,7 +153,7 @@ impl Processor {
                     }
                 },
                 ProcessorInput::HealthStatus(return_to) => {
-                    return_to.send(HealthDetails::of(&self));
+                    return_to.send(HealthDetails::of(&self)).unwrap();
                 },
                 ProcessorInput::JobEnded => {
                     self.threads_count -= 1;
@@ -214,7 +210,7 @@ impl Processor {
             }
 
             // Notify the end of this thread
-            input_send.send(ProcessorInput::JobEnded);
+            input_send.send(ProcessorInput::JobEnded).unwrap();
         });
     }
 
