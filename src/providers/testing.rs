@@ -22,7 +22,7 @@ use providers::prelude::*;
 use errors::ErrorKind;
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TestingProvider {
     config: String,
 }

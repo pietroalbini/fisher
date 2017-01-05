@@ -44,13 +44,13 @@ lazy_static! {
 #[derive(Clone)]
 pub struct Job {
     hook: Arc<Hook>,
-    provider: Option<Provider>,
+    provider: Option<Arc<Provider>>,
     request: Request,
 }
 
 impl Job {
 
-    pub fn new(hook: Arc<Hook>, provider: Option<Provider>,
+    pub fn new(hook: Arc<Hook>, provider: Option<Arc<Provider>>,
                request: Request) -> Job {
         Job {
             hook: hook,

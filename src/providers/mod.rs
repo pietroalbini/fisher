@@ -139,20 +139,6 @@ macro_rules! ProviderEnum {
                 }
             }
         }
-
-        impl Clone for Provider {
-
-            fn clone(&self) -> Provider {
-                match self {
-                    $(
-                        #[cfg($cfg)]
-                        &Provider::$name(ref prov) => {
-                            Provider::$name(prov.clone())
-                        },
-                    )*
-                }
-            }
-        }
     };
 }
 

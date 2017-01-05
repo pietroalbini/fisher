@@ -33,7 +33,7 @@ lazy_static! {
 }
 
 
-#[derive(Debug, Clone, RustcDecodable)]
+#[derive(Debug, RustcDecodable)]
 pub struct StatusProvider {
     events: Vec<String>,
     hooks: Option<Vec<String>>,

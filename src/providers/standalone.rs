@@ -18,7 +18,7 @@ use rustc_serialize::json;
 use providers::prelude::*;
 
 
-#[derive(Debug, Clone, RustcDecodable)]
+#[derive(Debug, RustcDecodable)]
 pub struct StandaloneProvider {
     secret: String,
 

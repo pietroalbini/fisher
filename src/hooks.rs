@@ -39,7 +39,7 @@ lazy_static! {
 pub struct Hook {
     name: String,
     exec: String,
-    providers: Vec<Provider>,
+    providers: Vec<Arc<Provider>>,
 }
 
 impl Hook {
@@ -54,7 +54,7 @@ impl Hook {
         })
     }
 
-    fn load_providers(file: &String) -> FisherResult<Vec<Provider>> {
+    fn load_providers(file: &String) -> FisherResult<Vec<Arc<Provider>>> {
         let f = fs::File::open(file).unwrap();
         let reader = BufReader::new(f);
 
@@ -77,7 +77,7 @@ impl Hook {
 
                 match Provider::new(&name, &data) {
                     Ok(provider) => {
-                        result.push(provider);
+                        result.push(Arc::new(provider));
                     },
                     Err(mut error) => {
                         error.set_file(file.clone());
@@ -91,7 +91,8 @@ impl Hook {
         Ok(result)
     }
 
-    pub fn validate(&self, req: &Request) -> (RequestType, Option<Provider>) {
+    pub fn validate(&self, req: &Request)
+                   -> (RequestType, Option<Arc<Provider>>) {
         if self.providers.len() > 0 {
             // Check every provider if they're present
             for provider in &self.providers {
@@ -104,7 +105,7 @@ impl Hook {
     }
 
     pub fn validate_provider(&self, name: &str, req: &Request)
-                            -> Option<Provider> {
+                            -> Option<Arc<Provider>> {
         for provider in &self.providers {
             // Skip providers with different names
             if provider.name() != name {
