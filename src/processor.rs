@@ -184,27 +184,26 @@ impl Processor {
 
             // Display the error if there is one
             if let Err(mut error) = result {
-                error.set_hook(job.hook_name().to_string());
+                error.set_hook(job.hook_name().into());
                 let _ = errors::print_err::<()>(Err(error));
             } else {
                 let output = result.unwrap();
                 let req: Request = output.into();
+                let event = req.params.get("event").unwrap();
 
-                for (hook_name, hook) in hooks.iter() {
-                    // Validate the request only on the Status providers
-                    let opt_provider = hook.validate_provider("Status", &req);
+                let mut status_job;
+                let mut status_result;
+                for hook_provider in hooks.status_hooks_iter(event) {
+                    status_job = Job::new(
+                        hook_provider.hook.clone(),
+                        Some(hook_provider.provider.clone()),
+                        req.clone(),
+                    );
 
-                    if let Some(provider) = opt_provider {
-                        let status_job = Job::new(
-                            hook.clone(), Some(provider), req.clone()
-                        );
-
-                        // Process the new status job
-                        let result = status_job.process();
-                        if let Err(mut error) = result {
-                            error.set_hook(hook_name.to_string());
-                            let _ = errors::print_err::<()>(Err(error));
-                        }
+                    status_result = status_job.process();
+                    if let Err(mut error) = status_result {
+                        error.set_hook(hook_provider.hook.name().into());
+                        let _ = errors::print_err::<()>(Err(error));
                     }
                 }
             }

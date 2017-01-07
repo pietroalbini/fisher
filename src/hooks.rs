@@ -16,7 +16,7 @@
 use std::fs;
 use std::path::Path;
 use std::collections::HashMap;
-use std::collections::hash_map::Iter as HashMapIter;
+use std::slice::Iter as SliceIter;
 use std::os::unix::fs::PermissionsExt;
 use std::io::{BufReader, BufRead};
 use std::sync::Arc;
@@ -104,22 +104,6 @@ impl Hook {
         }
     }
 
-    pub fn validate_provider(&self, name: &str, req: &Request)
-                            -> Option<Arc<Provider>> {
-        for provider in &self.providers {
-            // Skip providers with different names
-            if provider.name() != name {
-                continue;
-            }
-
-            if provider.validate(&req).valid() {
-                return Some(provider.clone());
-            }
-        }
-
-        None
-    }
-
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -131,8 +115,16 @@ impl Hook {
 
 
 #[derive(Debug, Clone)]
+pub struct HookProvider {
+    pub hook: Arc<Hook>,
+    pub provider: Arc<Provider>,
+}
+
+
+#[derive(Debug, Clone)]
 pub struct Hooks {
     hooks: HashMap<String, Arc<Hook>>,
+    status_hooks: HashMap<String, Vec<HookProvider>>,
 }
 
 impl Hooks {
@@ -140,11 +132,27 @@ impl Hooks {
     pub fn new() -> Self {
         Hooks {
             hooks: HashMap::new(),
+            status_hooks: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, name: String, hook: Hook) {
-        self.hooks.insert(name, Arc::new(hook));
+        let hook = Arc::new(hook);
+        self.hooks.insert(name, hook.clone());
+
+        for provider in &hook.providers {
+            if let &Provider::Status(ref status) = provider.as_ref() {
+                // Load all the kinds of events
+                for event in status.events() {
+                    self.status_hooks.entry(event.clone())
+                        .or_insert(Vec::new())
+                        .push(HookProvider {
+                            hook: hook.clone(),
+                            provider: provider.clone(),
+                        });
+                }
+            }
+        }
     }
 
     pub fn get(&self, name: &String) -> Option<Arc<Hook>> {
@@ -154,8 +162,13 @@ impl Hooks {
         }
     }
 
-    pub fn iter(&self) -> HashMapIter<String, Arc<Hook>> {
-        self.hooks.iter()
+    pub fn status_hooks_iter(&self, name: &str) -> SliceIter<HookProvider> {
+        if let Some(ref hook_providers) = self.status_hooks.get(name.into()) {
+            hook_providers.iter()
+        } else {
+            // Return an empty iterator if there is no hook for this kind
+            (&[]).iter()
+        }
     }
 }
 
@@ -201,7 +214,7 @@ mod tests {
     use utils;
     use errors::ErrorKind;
 
-    use super::{Hook, collect};
+    use super::{Hook, Hooks, collect};
 
 
     macro_rules! assert_hook {
@@ -341,6 +354,48 @@ mod tests {
         let providers = load_providers!(base, "two-providers.sh").unwrap();
         assert_provider!(providers, 0, "Testing");
         assert_provider!(providers, 1, "Standalone");
+
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn test_hooks_status_hooks_iter() {
+        let base = utils::create_temp_dir().unwrap();
+
+        // Create a standard hook
+        create_hook!(base, "test.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Testing: something"#,
+            r#"echo "hi";"#
+        );
+
+        // Create two different status hooks
+        create_hook!(base, "status1.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Status: {"events": ["job_completed", "job_failed"]}"#,
+            r#"echo "hi";"#
+        );
+        create_hook!(base, "status2.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Status: {"events": ["job_failed"]}"#,
+            r#"echo "hi";"#
+        );
+
+        let mut hooks = Hooks::new();
+        hooks.insert("test".into(), assert_hook!(base, "test"));
+        hooks.insert("status1".into(), assert_hook!(base, "status1"));
+        hooks.insert("status2".into(), assert_hook!(base, "status2"));
+
+        assert_eq!(
+            hooks.status_hooks_iter("job_completed").map(|hp| hp.hook.name())
+                 .collect::<Vec<&str>>(),
+            vec!["status1"]
+        );
+        assert_eq!(
+            hooks.status_hooks_iter("job_failed").map(|hp| hp.hook.name())
+                 .collect::<Vec<&str>>(),
+            vec!["status1", "status2"]
+        );
 
         fs::remove_dir_all(base).unwrap();
     }

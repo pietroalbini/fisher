@@ -31,16 +31,6 @@ pub enum RequestType {
     Invalid,
 }
 
-impl RequestType {
-
-    pub fn valid(&self) -> bool {
-        match *self {
-            RequestType::Invalid => false,
-            _ => true,
-        }
-    }
-}
-
 
 #[derive(Clone)]
 pub struct Request {

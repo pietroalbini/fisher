@@ -15,6 +15,7 @@
 
 use std::fs;
 use std::io::Write;
+use std::slice::Iter as SliceIter;
 
 use rustc_serialize::json;
 
@@ -54,8 +55,8 @@ impl StatusProvider {
     }
 
     #[inline]
-    pub fn event_allowed(&self, name: &String) -> bool {
-        self.events.contains(name)
+    pub fn events(&self) -> SliceIter<String> {
+        self.events.iter()
     }
 }
 
@@ -110,7 +111,7 @@ impl ProviderTrait for StatusProvider {
         }
 
         // The event must be allowed
-        if ! self.event_allowed(req.params.get("event").unwrap()) {
+        if ! self.events.contains(req.params.get("event").unwrap()) {
             return RequestType::Invalid;
         }
 
@@ -229,27 +230,6 @@ mod tests {
         assert_custom!(Some(vec![]), "test", false);
         assert_custom!(Some(vec!["something".to_string()]), "test", false);
         assert_custom!(Some(vec!["test".to_string()]), "test", true);
-    }
-
-
-    #[test]
-    fn config_event_allowed() {
-        macro_rules! assert_custom {
-            ($events:expr, $check:expr, $expected:expr) => {{
-                let provider = StatusProvider {
-                    hooks: None,
-                    events: $events,
-                };
-                assert_eq!(
-                    provider.event_allowed(&$check.to_string()),
-                    $expected
-                );
-            }};
-        };
-
-        assert_custom!(vec![], "test", false);
-        assert_custom!(vec!["something".to_string()], "test", false);
-        assert_custom!(vec!["test".to_string()], "test", true);
     }
 
 
