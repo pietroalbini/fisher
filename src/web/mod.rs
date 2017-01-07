@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,6 +15,7 @@
 
 mod http;
 mod app;
+mod requests;
 mod responses;
 mod proxies;
 
@@ -23,3 +24,4 @@ mod api;
 
 pub use self::http::HttpServer;
 pub use self::app::WebApp;
+pub use self::requests::WebRequest;

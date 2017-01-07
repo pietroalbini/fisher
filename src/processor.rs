@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -188,8 +188,8 @@ impl Processor {
                 let _ = errors::print_err::<()>(Err(error));
             } else {
                 let output = result.unwrap();
-                let req: Request = output.into();
-                let event = req.params.get("event").unwrap();
+                let req = Request::Web(output.into());
+                let event = req.web().unwrap().params.get("event").unwrap();
 
                 let mut status_job;
                 let mut status_result;

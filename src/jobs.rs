@@ -66,7 +66,10 @@ impl Job {
 
     #[inline]
     pub fn request_ip(&self) -> String {
-        format!("{}", self.request.source)
+        format!("{}", match self.request {
+            Request::Web(ref req) => req.source,
+            _ => unreachable!(),
+        })
     }
 
     pub fn process(&self) -> FisherResult<JobOutput> {
@@ -140,7 +143,10 @@ impl Job {
 
         // Write the request body on disk
         let mut file = try!(fs::File::create(&path));
-        try!(write!(file, "{}\n", self.request.body));
+        try!(write!(file, "{}\n", match self.request {
+            Request::Web(ref req) => &req.body,
+            _ => unreachable!(),
+        }));
 
         Ok(path)
     }
@@ -192,7 +198,7 @@ mod tests {
     fn test_job_creation() {
         let env = TestingEnv::new();
 
-        let _ = env.create_job("example", dummy_request());
+        let _ = env.create_job("example", dummy_web_request().into());
 
         env.cleanup();
     }
@@ -202,7 +208,7 @@ mod tests {
     fn test_job_hook_name() {
         let env = TestingEnv::new();
 
-        let job = env.create_job("example", dummy_request());
+        let job = env.create_job("example", dummy_web_request().into());
         assert_eq!(job.hook_name(), "example".to_string());
 
         env.cleanup();
@@ -213,12 +219,12 @@ mod tests {
         let env = TestingEnv::new();
 
         // The "example" hook should be processed without problems
-        let job = env.create_job("example", dummy_request());
+        let job = env.create_job("example", dummy_web_request().into());
         let result = job.process().unwrap();
         assert!(result.success);
         assert_eq!(result.exit_code, Some(0));
 
-        let job = env.create_job("failing", dummy_request());
+        let job = env.create_job("failing", dummy_web_request().into());
         let result = job.process().unwrap();
         assert!(! result.success);
         assert_eq!(result.exit_code, Some(1));
@@ -251,12 +257,12 @@ mod tests {
         env.delete_also(&output);
 
         // Create a new dummy request
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.body = "a body!".to_string();
         req.params.insert("env".to_string(), output.to_string());
 
         // Process the job
-        let job = env.create_job("jobs-details", req);
+        let job = env.create_job("jobs-details", req.into());
         assert!(job.process().is_ok());
 
         // The hook must be executed
@@ -322,7 +328,7 @@ mod tests {
         );
 
         // The IP address must be correct
-        // dummy_request() sets it to 127.0.0.1
+        // dummy_web_request() sets it to 127.0.0.1
         assert_eq!(
             *&job_env.get("FISHER_REQUEST_IP").unwrap(),
             &"127.0.0.1"

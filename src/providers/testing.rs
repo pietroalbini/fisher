@@ -41,7 +41,14 @@ impl ProviderTrait for TestingProvider {
         }
     }
 
-    fn validate(&self, req: &Request) -> RequestType {
+    fn validate(&self, request: &Request) -> RequestType {
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return RequestType::Invalid;
+        }
+
         // If the secret param is provided, validate it
         if let Some(secret) = req.params.get("secret") {
             if secret != "testing" {
@@ -70,8 +77,15 @@ impl ProviderTrait for TestingProvider {
         RequestType::ExecuteHook
     }
 
-    fn env(&self, req: &Request) -> HashMap<String, String> {
+    fn env(&self, request: &Request) -> HashMap<String, String> {
         let mut res = HashMap::new();
+
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return res;
+        }
 
         // Return the provided env
         if let Some(env) = req.params.get("env") {
@@ -121,39 +135,39 @@ mod tests {
         let p = TestingProvider::new("").unwrap();
 
         // Without any secret
-        assert_eq!(p.validate(&dummy_request()), RequestType::ExecuteHook);
+        assert_eq!(p.validate(&dummy_web_request().into()), RequestType::ExecuteHook);
 
         // With the wrong secret
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert("secret".to_string(), "wrong!!!".to_string());
-        assert_eq!(p.validate(&req), RequestType::Invalid);
+        assert_eq!(p.validate(&req.into()), RequestType::Invalid);
 
         // With the correct secret
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert("secret".to_string(), "testing".to_string());
-        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
+        assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
 
         // With the wrong IP address
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert("ip".into(), "127.1.1.1".into());
         req.source = IpAddr::from_str("127.2.2.2").unwrap();
-        assert_eq!(p.validate(&req), RequestType::Invalid);
+        assert_eq!(p.validate(&req.into()), RequestType::Invalid);
 
         // With the right IP address
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert("ip".into(), "127.1.1.1".into());
         req.source = IpAddr::from_str("127.1.1.1").unwrap();
-        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
+        assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
 
         // With the request_type param but with no meaningful value
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert("request_type".to_string(), "something".to_string());
-        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
+        assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
 
         // With the request_type param and the "ping" value
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert("request_type".to_string(), "ping".to_string());
-        assert_eq!(p.validate(&req), RequestType::Ping);
+        assert_eq!(p.validate(&req.into()), RequestType::Ping);
     }
 
 
@@ -162,15 +176,15 @@ mod tests {
         let p = TestingProvider::new("").unwrap();
 
         // Without the env param
-        assert_eq!(p.env(&dummy_request()), HashMap::new());
+        assert_eq!(p.env(&dummy_web_request().into()), HashMap::new());
 
         // With the env param
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert("env".to_string(), "test".to_string());
 
         let mut should_be = HashMap::new();
         should_be.insert("ENV".to_string(), "test".to_string());
 
-        assert_eq!(p.env(&req), should_be);
+        assert_eq!(p.env(&req.into()), should_be);
     }
 }

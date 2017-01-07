@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -197,7 +197,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
                 }
 
                 // Convert the request to a Fisher request
-                let mut req: Request = (&mut request).into();
+                let mut req = Request::Web((&mut request).into());
 
                 let mut response = Response::NotFound;
 
@@ -362,7 +362,7 @@ mod tests {
         );
         assert_eq!(
             handler.call(
-                &DummyData(vec!["test".into()]), &dummy_request(),
+                &DummyData(vec!["test".into()]), &dummy_web_request().into(),
                 vec!["test".into()]
             ).status(),
             200

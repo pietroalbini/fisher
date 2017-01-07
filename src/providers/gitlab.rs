@@ -58,7 +58,14 @@ impl ProviderTrait for GitLabProvider {
         Ok(inst)
     }
 
-    fn validate(&self, req: &Request) -> RequestType {
+    fn validate(&self, request: &Request) -> RequestType {
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return RequestType::Invalid;
+        }
+
         // Check if the correct headers are provided
         for header in GITLAB_HEADERS.iter() {
             if ! req.headers.contains_key(*header) {
@@ -99,7 +106,14 @@ impl ProviderTrait for GitLabProvider {
         RequestType::ExecuteHook
     }
 
-    fn env(&self, req: &Request) -> HashMap<String, String> {
+    fn env(&self, request: &Request) -> HashMap<String, String> {
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return HashMap::new();
+        }
+
         // Get the current event name
         let event_header = normalize_event_name(
             &req.headers.get("X-Gitlab-Event").unwrap()
@@ -131,13 +145,14 @@ mod tests {
 
     use utils::testing::*;
     use requests::{Request, RequestType};
+    use web::WebRequest;
     use providers::ProviderTrait;
 
     use super::{GITLAB_EVENTS, GitLabProvider, normalize_event_name};
 
 
-    fn base_request() -> Request {
-        let mut base = dummy_request();
+    fn base_request() -> WebRequest {
+        let mut base = dummy_web_request();
 
         base.headers.insert(
             "X-Gitlab-Event".to_string(), "Push Hook".to_string()
@@ -187,7 +202,10 @@ mod tests {
                 format!("{} Hook", event),
             );
 
-            assert_eq!(provider.validate(&request), RequestType::ExecuteHook);
+            assert_eq!(
+                provider.validate(&request.into()),
+                RequestType::ExecuteHook
+            );
         }
     }
 
@@ -198,36 +216,36 @@ mod tests {
 
         // Check with a dummy request - missing headers and no json body
         assert_eq!(
-            provider.validate(&dummy_request()),
+            provider.validate(&dummy_web_request().into()),
             RequestType::Invalid
         );
 
         // Check with a request with the headers and no JSON body
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.headers.insert(
             "X-Gitlab-Event".to_string(), "Push Hook".to_string()
         );
         assert_eq!(
-            provider.validate(&req),
+            provider.validate(&req.into()),
             RequestType::Invalid
         );
 
         // Check with a request with missing headers and a JSON body
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.body = r#"{"a": "b"}"#.to_string();
         assert_eq!(
-            provider.validate(&req),
+            provider.validate(&req.into()),
             RequestType::Invalid
         );
 
         // Check with a request with the headers and a JSON body
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.headers.insert(
             "X-Gitlab-Event".to_string(), "Push Hook".to_string()
         );
         req.body = r#"{"a": "b"}"#.to_string();
         assert_eq!(
-            provider.validate(&req),
+            provider.validate(&req.into()),
             RequestType::ExecuteHook
         );
     }
@@ -240,13 +258,13 @@ mod tests {
         // Make sure the base request validates without a secret
         let no_secret = GitLabProvider::new("{}").unwrap();
         assert_eq!(
-            no_secret.validate(&base_request()),
+            no_secret.validate(&base_request().into()),
             RequestType::ExecuteHook
         );
 
         // Check a request without the header
         assert_eq!(
-            provider.validate(&base_request()),
+            provider.validate(&base_request().into()),
             RequestType::Invalid
         );
 
@@ -254,7 +272,7 @@ mod tests {
         let mut req = base_request();
         req.headers.insert("X-Gitlab-Token".to_string(), "12345".to_string());
         assert_eq!(
-            provider.validate(&req),
+            provider.validate(&req.into()),
             RequestType::Invalid
         );
 
@@ -262,7 +280,7 @@ mod tests {
         let mut req = base_request();
         req.headers.insert("X-Gitlab-Token".to_string(), "abcde".to_string());
         assert_eq!(
-            provider.validate(&req),
+            provider.validate(&req.into()),
             RequestType::ExecuteHook
         );
     }
@@ -280,7 +298,7 @@ mod tests {
                 "X-Gitlab-Event".to_string(), name.to_string()
             );
 
-            base
+            Request::Web(base)
         }
 
         // With a list of allowed events
@@ -321,7 +339,7 @@ mod tests {
         );
 
         let provider = GitLabProvider::new("{}").unwrap();
-        assert_eq!(provider.env(&req), expected);
+        assert_eq!(provider.env(&req.into()), expected);
     }
 
 

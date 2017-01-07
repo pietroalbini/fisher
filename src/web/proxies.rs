@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -34,6 +34,7 @@ impl ProxySupport {
     }
 
     pub fn source_ip(&self, req: &Request) -> FisherResult<IpAddr> {
+        let req = try!(req.web());
         let original = req.source;
 
         // Return the original IP if the proxy support is disabled
@@ -64,9 +65,13 @@ impl ProxySupport {
 
     pub fn fix_request(&self, req: &mut Request) -> FisherResult<()> {
         let fixed_ip = try!(self.source_ip(&req));
-        req.source = fixed_ip;
 
-        Ok(())
+        if let &mut Request::Web(ref mut req) = req {
+            req.source = fixed_ip;
+            Ok(())
+        } else {
+            Err(ErrorKind::WrongRequestKind.into())
+        }
     }
 }
 
@@ -78,6 +83,7 @@ mod tests {
 
     use utils::testing::*;
     use errors::ErrorKind;
+    use requests::Request;
 
     use super::ProxySupport;
 
@@ -86,13 +92,18 @@ mod tests {
     // optionally, a custom X-Forwarded-For
     macro_rules! req {
         () => {{
-            let mut req = dummy_request();
+            let mut req = dummy_web_request();
             req.source = IpAddr::from_str("127.1.1.1").unwrap();
-            req
+            Request::Web(req)
         }};
         ($fwd_for:expr) => {{
             let mut req = req!();
-            req.headers.insert("X-Forwarded-For".into(), $fwd_for.into());
+            if let Request::Web(ref mut inner) = req {
+                inner.headers.insert(
+                    "X-Forwarded-For".into(),
+                    $fwd_for.into()
+                );
+            }
             req
         }};
     }
@@ -158,8 +169,14 @@ mod tests {
         let proxy = ProxySupport::new(Some(1));
         let mut req = req!("127.2.2.2");
 
-        assert_eq!(req.source, IpAddr::from_str("127.1.1.1").unwrap());
+        assert_eq!(
+            req.web().unwrap().source,
+            IpAddr::from_str("127.1.1.1").unwrap()
+        );
         proxy.fix_request(&mut req).unwrap();
-        assert_eq!(req.source, IpAddr::from_str("127.2.2.2").unwrap());
+        assert_eq!(
+            req.web().unwrap().source,
+            IpAddr::from_str("127.2.2.2").unwrap()
+        );
     }
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ pub enum ErrorKind {
     ProviderNotFound(String),
     InvalidInput(String),
     NotBehindProxy,
+    WrongRequestKind,
 
     // Derived errors
     IoError(io::Error),
@@ -108,6 +109,8 @@ impl Error for FisherError {
                 "invalid input",
             ErrorKind::NotBehindProxy =>
                 "not behind the proxies",
+            ErrorKind::WrongRequestKind =>
+                "wrong request kind",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -144,6 +147,9 @@ impl fmt::Display for FisherError {
 
             ErrorKind::NotBehindProxy =>
                 "not behind the proxies".into(),
+
+            ErrorKind::WrongRequestKind =>
+                "wrong request kind".into(),
 
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),

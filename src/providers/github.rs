@@ -64,7 +64,14 @@ impl ProviderTrait for GitHubProvider {
         Ok(inst)
     }
 
-    fn validate(&self, req: &Request) -> RequestType {
+    fn validate(&self, request: &Request) -> RequestType {
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return RequestType::Invalid;
+        }
+
         // Check if the correct headers are present
         for header in GITHUB_HEADERS.iter() {
             if ! req.headers.contains_key(*header) {
@@ -111,8 +118,15 @@ impl ProviderTrait for GitHubProvider {
         RequestType::ExecuteHook
     }
 
-    fn env(&self, req: &Request) -> HashMap<String, String> {
+    fn env(&self, request: &Request) -> HashMap<String, String> {
         let mut res = HashMap::new();
+
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return res;
+        }
 
         res.insert(
             "EVENT".to_string(),
@@ -210,7 +224,7 @@ mod tests {
         // This helper gets the request type of an event
         macro_rules! assert_req_type {
             ($provider:expr, $event:expr, $expected:expr) => {
-                let mut request = dummy_request();
+                let mut request = dummy_web_request();
                 let _ = request.headers.insert(
                     "X-GitHub-Event".into(),
                     $event.to_string(),
@@ -225,7 +239,7 @@ mod tests {
                 );
                 request.body = "{}".into();
 
-                assert_eq!($provider.validate(&request), $expected);
+                assert_eq!($provider.validate(&request.into()), $expected);
             };
         }
 
@@ -241,7 +255,7 @@ mod tests {
         let provider = GitHubProvider::new("{}").unwrap();
 
         // Create a dummy request
-        let mut request = dummy_request();
+        let mut request = dummy_web_request();
         request.headers.insert(
             "X-GitHub-Event".to_string(),
             "ping".to_string()
@@ -252,7 +266,7 @@ mod tests {
         );
 
         // Get the env
-        let env = provider.env(&request);
+        let env = provider.env(&request.into());
 
         assert_eq!(env.len(), 2);
         assert_eq!(*env.get("EVENT").unwrap(), "ping".to_string());

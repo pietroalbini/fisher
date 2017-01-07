@@ -26,7 +26,7 @@ use hyper::method::Method;
 use app::FisherOptions;
 use hooks::{self, Hooks};
 use jobs::Job;
-use web::WebApp;
+use web::{WebApp, WebRequest};
 use requests::Request;
 use processor::{ProcessorInput, HealthDetails};
 use utils;
@@ -59,8 +59,8 @@ macro_rules! assert_err {
 }
 
 
-pub fn dummy_request() -> Request {
-    Request {
+pub fn dummy_web_request() -> WebRequest {
+    WebRequest {
         headers: HashMap::new(),
         params: HashMap::new(),
         source: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),

@@ -51,7 +51,14 @@ impl ProviderTrait for StandaloneProvider {
         Ok(inst)
     }
 
-    fn validate(&self, req: &Request) -> RequestType {
+    fn validate(&self, request: &Request) -> RequestType {
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return RequestType::Invalid;
+        }
+
         // First of all check the secret code
         let secret;
         if let Some(found) = req.params.get(&self.param_name()) {
@@ -138,31 +145,31 @@ mod tests {
 
         // Test a request with no headers or params
         // It should not be validate
-        assert_eq!(p.validate(&dummy_request()), RequestType::Invalid);
+        assert_eq!(p.validate(&dummy_web_request().into()), RequestType::Invalid);
 
         // Test a request with the secret param, but the wrong secret key
         // It should not be validated
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert(param_name.to_string(), "12345".to_string());
-        assert_eq!(p.validate(&req), RequestType::Invalid);
+        assert_eq!(p.validate(&req.into()), RequestType::Invalid);
 
         // Test a request with the secret param and the correct secret key
         // It should be validated
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.params.insert(param_name.to_string(), "abcde".to_string());
-        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
+        assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
 
         // Test a request with the secret header, but the wrong secret key
         // It should not be validated
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.headers.insert(header_name.to_string(), "12345".to_string());
-        assert_eq!(p.validate(&req), RequestType::Invalid);
+        assert_eq!(p.validate(&req.into()), RequestType::Invalid);
 
         // Test a request with the secret header and the correct secret key
         // It should be validated
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         req.headers.insert(header_name.to_string(), "abcde".to_string());
-        assert_eq!(p.validate(&req), RequestType::ExecuteHook);
+        assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
     }
 
     #[test]
@@ -170,7 +177,7 @@ mod tests {
         let p = StandaloneProvider::new(r#"{"secret": "abcde"}"#).unwrap();
 
         // The environment must always be empty
-        assert!(p.env(&dummy_request()) == HashMap::new());
+        assert!(p.env(&dummy_web_request().into()) == HashMap::new());
     }
 
 }

@@ -77,7 +77,14 @@ impl ProviderTrait for StatusProvider {
         Ok(inst)
     }
 
-    fn validate(&self, req: &Request) -> RequestType {
+    fn validate(&self, request: &Request) -> RequestType {
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return RequestType::Invalid;
+        }
+
         // There must be all (and only) the required parameters
         for param in req.params.keys() {
             if ! REQUIRED_ARGS.contains(&param.as_ref()) {
@@ -119,8 +126,15 @@ impl ProviderTrait for StatusProvider {
         RequestType::Internal
     }
 
-    fn env(&self, req: &Request) -> HashMap<String, String> {
+    fn env(&self, request: &Request) -> HashMap<String, String> {
         let mut env = HashMap::new();
+
+        let req;
+        if let &Request::Web(ref inner) = request {
+            req = inner;
+        } else {
+            return env;
+        }
 
         // Move all the params to the env
         for (key, value) in req.params.iter() {
@@ -158,6 +172,8 @@ impl ProviderTrait for StatusProvider {
 
     fn prepare_directory(&self, req: &Request, path: &PathBuf)
                          -> FisherResult<()> {
+        let req = try!(req.web());
+
         match req.params.get("event").unwrap().as_str() {
             "job_completed" | "job_failed" => {
                 macro_rules! new_file {
@@ -273,65 +289,91 @@ mod tests {
                 assert_eq!(provider.validate($req), $expect)
             }};
         }
-        let mut req = dummy_request();
 
         // Test without any of the required params
-        assert_validate!(&req,
+        let req = dummy_web_request();
+        assert_validate!(&req.into(),
             r#"{"events": ["job_completed"]}"#,
             RequestType::Invalid
         );
 
         // Test without the right request body
+        let mut req = dummy_web_request();
         req.params.insert("event".into(), "job_completed".into());
         req.params.insert("hook_name".into(), "test".into());
         req.body = r#"{}"#.into();
-        assert_validate!(&req,
+        assert_validate!(&req.into(),
             r#"{"events": ["job_completed"]}"#,
             RequestType::Invalid
         );
 
         // Test with the right request body for the event
+        let mut req = dummy_web_request();
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
         req.body = json::encode(&dummy_job_output()).unwrap();
-        assert_validate!(&req,
+        assert_validate!(&req.into(),
             r#"{"events": ["job_completed"]}"#,
             RequestType::Internal
         );
 
         // Test with some extra params
+        let mut req = dummy_web_request();
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
+        req.body = json::encode(&dummy_job_output()).unwrap();
         req.params.insert("test".into(), "invalid".into());
-        assert_validate!(&req,
+        assert_validate!(&req.into(),
             r#"{"events": ["job_completed"]}"#,
             RequestType::Invalid
         );
-        req.params.remove("test".into());
 
         // Test with a wrong allowed event
-        assert_validate!(&req,
+        let mut req = dummy_web_request();
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
+        req.body = json::encode(&dummy_job_output()).unwrap();
+        assert_validate!(&req.into(),
             r#"{"events": ["job_failed"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed event
-        assert_validate!(&req,
+        let mut req = dummy_web_request();
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
+        req.body = json::encode(&dummy_job_output()).unwrap();
+        assert_validate!(&req.into(),
             r#"{"events": ["job_completed"]}"#,
             RequestType::Internal
         );
 
         // Test with a wrong allowed hook
-        assert_validate!(&req,
+        let mut req = dummy_web_request();
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
+        req.body = json::encode(&dummy_job_output()).unwrap();
+        assert_validate!(&req.into(),
             r#"{"events": ["job_completed"], "hooks": ["invalid"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed hook
-        assert_validate!(&req,
+        let mut req = dummy_web_request();
+        req.params.insert("event".into(), "job_completed".into());
+        req.params.insert("hook_name".into(), "test".into());
+        req.body = json::encode(&dummy_job_output()).unwrap();
+        assert_validate!(&req.into(),
             r#"{"events": ["job_completed"], "hooks": ["test"]}"#,
             RequestType::Internal
         );
 
         // Test with a wrong event name
+        let mut req = dummy_web_request();
         req.params.insert("event".into(), "__invalid__".into());
-        assert_validate!(&req,
+        req.params.insert("hook_name".into(), "test".into());
+        req.body = json::encode(&dummy_job_output()).unwrap();
+        assert_validate!(&req.into(),
             r#"{"events": ["job_completed"]}"#,
             RequestType::Invalid
         );
@@ -340,17 +382,17 @@ mod tests {
 
     #[test]
     fn test_env() {
-        let mut req = dummy_request();
         let provider = StatusProvider::new(
             r#"{"events": ["job_completed", "job_failed"]}"#
         ).unwrap();
 
         // Try with a job_completed event
+        let mut req = dummy_web_request();
         req.params.insert("event".into(), "job_completed".into());
         req.params.insert("hook_name".into(), "test".into());
         req.body = json::encode(&dummy_job_output()).unwrap();
 
-        let env = provider.env(&req);
+        let env = provider.env(&req.into());
         assert_eq!(env.len(), 5);
         assert_eq!(env.get("EVENT").unwrap(), &"job_completed".to_string());
         assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
@@ -363,10 +405,13 @@ mod tests {
         output.success = false;
         output.exit_code = None;
         output.signal = Some(9);
+
+        let mut req = dummy_web_request();
         req.params.insert("event".into(), "job_failed".into());
+        req.params.insert("hook_name".into(), "test".into());
         req.body = json::encode(&output).unwrap();
 
-        let env = provider.env(&req);
+        let env = provider.env(&req.into());
         assert_eq!(env.len(), 5);
         assert_eq!(env.get("EVENT").unwrap(), &"job_failed".to_string());
         assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
@@ -393,7 +438,7 @@ mod tests {
             }};
         }
 
-        let mut req = dummy_request();
+        let mut req = dummy_web_request();
         let provider = StatusProvider::new(
             r#"{"events": ["job_completed"]}"#,
         ).unwrap();
@@ -403,7 +448,7 @@ mod tests {
         req.body = json::encode(&dummy_job_output()).unwrap();
 
         let tempdir = utils::create_temp_dir().unwrap();
-        provider.prepare_directory(&req, &tempdir).unwrap();
+        provider.prepare_directory(&req.into(), &tempdir).unwrap();
 
         assert_eq!(read!(tempdir, "stdout"), "hello world".to_string());
         assert_eq!(read!(tempdir, "stderr"), "something happened".to_string());
