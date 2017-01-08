@@ -16,8 +16,6 @@
 mod tempdir;
 mod net;
 
-pub mod compat;
-
 #[cfg(test)]
 mod parse_env;
 

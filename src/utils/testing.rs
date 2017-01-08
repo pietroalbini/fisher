@@ -31,8 +31,6 @@ use requests::Request;
 use processor::{ProcessorInput, HealthDetails};
 use utils;
 
-use utils::compat;
-
 
 #[macro_export]
 macro_rules! assert_err {
@@ -332,7 +330,7 @@ impl NextHealthCheck {
 
     pub fn check(&self) {
         let timeout = Duration::from_secs(5);
-        match compat::recv_timeout(&self.result_recv, timeout) {
+        match self.result_recv.recv_timeout(timeout) {
             Ok(result) => {
                 // Propagate panics
                 if let Some(message) = result {
