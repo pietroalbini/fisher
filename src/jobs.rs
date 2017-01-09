@@ -15,6 +15,7 @@
 
 use std::process;
 use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::CommandExt;
 use std::fs;
 use std::env;
 use std::path::PathBuf;
@@ -26,6 +27,7 @@ use utils;
 use requests::Request;
 use providers::Provider;
 use errors::FisherResult;
+use native;
 
 
 lazy_static! {
@@ -99,6 +101,12 @@ impl Job {
                 &self.request, &working_directory
             ));
         }
+
+        // Make sure the process is isolated
+        command.before_exec(|| {
+            native::isolate_process();
+            Ok(())
+        });
 
         // Execute the hook
         let output = try!(command.output());

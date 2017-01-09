@@ -20,6 +20,7 @@ rustc-serialize="^0.3"
 lazy_static="^0.2"
 rand="^0.3"
 tiny_http="^0.5"
+libc="^0.2"
 
 # Dependencies for the "provider-github" feature
 ring = { version=">=0.4, <=0.5", optional=true }

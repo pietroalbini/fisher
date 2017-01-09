@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@ extern crate chan_signal;
 extern crate url;
 extern crate rand;
 extern crate tiny_http;
+extern crate libc;
 #[macro_use] extern crate chan;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
@@ -36,6 +37,7 @@ mod jobs;
 mod web;
 mod app;
 mod requests;
+mod native;
 
 use chan_signal::Signal;
 use ansi_term::{Style, Colour};

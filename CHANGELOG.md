@@ -2,6 +2,10 @@
 
 This document contains what changed in each release of Fisher.
 
+### Not yet released
+
+* Don't kill the running jobs when a signal is received
+
 ### Fisher 1.0.0-beta.3
 
 *Released on January 5th, 2016.*
