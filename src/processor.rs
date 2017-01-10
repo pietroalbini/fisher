@@ -140,7 +140,7 @@ impl Processor {
                     self.should_stop = true;
 
                     // If no more jobs are left now, exit
-                    if self.jobs.is_empty() {
+                    if self.jobs.is_empty() && self.threads_count == 0 {
                         break;
                     }
                 },
