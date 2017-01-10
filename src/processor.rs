@@ -15,6 +15,9 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, mpsc};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::fmt;
 
 use rustc_serialize::json::{Json, ToJson};
 
@@ -95,12 +98,13 @@ pub enum ProcessorInput {
 }
 
 
+#[derive(Debug)]
 struct Processor {
     jobs: VecDeque<Job>,
     hooks: Arc<Hooks>,
 
     should_stop: bool,
-    threads_count: u16,
+    threads: Vec<Thread>,
     max_threads: u16,
 
     input_recv: mpsc::Receiver<ProcessorInput>,
@@ -119,7 +123,7 @@ impl Processor {
             hooks: hooks,
 
             should_stop: false,
-            threads_count: 0,
+            threads: Vec::new(),
             max_threads: max_threads,
 
             input_recv: input_recv,
@@ -131,88 +135,235 @@ impl Processor {
     }
 
     pub fn run(&mut self) {
+        // Create the needed threads
+        for _ in 0..self.max_threads {
+            self.spawn_thread();
+        }
+
         loop {
-            let input = self.input_recv.recv().unwrap();
+            match self.input_recv.recv() {
+                Ok(input) => match input {
+                    ProcessorInput::StopSignal => {
+                        self.should_stop = true;
+                        self.cleanup_threads();
 
-            match input {
-                ProcessorInput::StopSignal => {
-                    // It's time to stop when no more jobs are left
-                    self.should_stop = true;
-
-                    // If no more jobs are left now, exit
-                    if self.jobs.is_empty() && self.threads_count == 0 {
-                        break;
-                    }
-                },
-                ProcessorInput::Job(job) => {
-                    // Queue a new thread if there are too many threads
-                    if self.threads_count >= self.max_threads {
+                        // Exit if no more threads are left
+                        if self.threads.len() == 0 {
+                            break;
+                        }
+                    },
+                    ProcessorInput::Job(job) => {
                         self.jobs.push_back(job);
-                    } else {
-                        self.spawn_thread(job);
+                        self.run_jobs();
+                    },
+                    ProcessorInput::JobEnded => {
+                        self.run_jobs();
+                    },
+                    ProcessorInput::HealthStatus(return_to) => {
+                        return_to.send(HealthDetails {
+                            queue_size: self.jobs.len(),
+                            active_jobs: self.busy_threads(),
+                        }).unwrap();
                     }
                 },
-                ProcessorInput::HealthStatus(return_to) => {
-                    return_to.send(HealthDetails::of(&self)).unwrap();
-                },
-                ProcessorInput::JobEnded => {
-                    self.threads_count -= 1;
-
-                    match self.jobs.pop_front() {
-                        Some(job) => {
-                            self.spawn_thread(job);
-                        },
-                        None => {
-                            if self.should_stop {
-                                break;
-                            }
-                        },
-                    };
-                }
+                Err(..) => break,
             }
         }
     }
 
-    fn spawn_thread(&mut self, job: Job) {
-        let input_send = self.input_send.clone();
-        let hooks = self.hooks.clone();
+    pub fn busy_threads(&self) -> u16 {
+        let mut result = 0;
 
-        self.threads_count += 1;
+        for thread in &self.threads {
+            if thread.busy() {
+                result += 1;
+            }
+        }
 
-        ::std::thread::spawn(move || {
-            let result = job.process();
+        result
+    }
 
-            // Display the error if there is one
-            if let Err(mut error) = result {
-                error.set_hook(job.hook_name().into());
-                let _ = errors::print_err::<()>(Err(error));
-            } else {
-                let output = result.unwrap();
-                let req = Request::Web(output.into());
-                let event = req.web().unwrap().params.get("event").unwrap();
+    fn spawn_thread(&mut self) {
+        self.threads.push(Thread::new(
+            self.input_send.clone(), self.hooks.clone()
+        ));
+    }
 
-                let mut status_job;
-                let mut status_result;
-                for hook_provider in hooks.status_hooks_iter(event) {
-                    status_job = Job::new(
-                        hook_provider.hook.clone(),
-                        Some(hook_provider.provider.clone()),
-                        req.clone(),
-                    );
+    fn cleanup_threads(&mut self) {
+        // This is done in two steps: the list of threads to remove is
+        // computed, and then each marked thread is stopped
+        let mut to_remove = Vec::with_capacity(self.threads.len());
 
-                    status_result = status_job.process();
-                    if let Err(mut error) = status_result {
-                        error.set_hook(hook_provider.hook.name().into());
-                        let _ = errors::print_err::<()>(Err(error));
-                    }
+        let mut remaining = self.threads.len();
+        for (i, thread) in self.threads.iter().enumerate() {
+            if thread.busy() {
+                continue;
+            }
+
+            if self.should_stop || remaining > self.max_threads as usize {
+                to_remove.push(i);
+                remaining -= 1;
+            }
+        }
+
+        for one in &to_remove {
+            let thread = self.threads.remove(*one);
+            thread.stop();
+        }
+    }
+
+    fn run_jobs(&mut self) {
+        // Here there is a loop so if for some reason there are multiple
+        // threads available and there are enough elements in the queue,
+        // all of them are processed
+        loop {
+            // Don't try to add something if there are no busy threads
+            if self.busy_threads() as usize == self.threads.len() {
+                return;
+            }
+
+            if ! self.run_job() {
+                return;
+            }
+        }
+    }
+
+    fn run_job(&mut self) -> bool {
+        // The bool here indicates if it's recommended to run another job
+        if let Some(mut job) = self.jobs.pop_front() {
+            // Try to process the job in each thread
+            for thread in &self.threads {
+                // If Some(Job) is returned, the thread was busy
+                if let Some(j) = thread.process(job) {
+                    // Continue with the loop, moving ownership of the job
+                    job = j;
+                } else {
+                    return true;
                 }
             }
 
-            // Notify the end of this thread
-            input_send.send(ProcessorInput::JobEnded).unwrap();
+            // If the job wasn't processed at all, push it back to the
+            // front of the queue, and exit the function
+            self.jobs.push_front(job);
+            false
+        } else {
+            // No more jobs to dispatch
+            false
+        }
+    }
+}
+
+
+#[derive(Debug)]
+enum ThreadInput {
+    Process(Job),
+    StopSignal,
+}
+
+
+struct Thread {
+    should_stop: bool,
+    busy: Arc<AtomicBool>,
+
+    handle: thread::JoinHandle<()>,
+    input: mpsc::Sender<ThreadInput>,
+}
+
+impl Thread {
+
+    pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
+               hooks: Arc<Hooks>) -> Thread {
+        let (input_send, input_recv) = mpsc::channel();
+        let busy = Arc::new(AtomicBool::new(false));
+
+        let busy_inner = busy.clone();
+        let handle = thread::spawn(move || {
+            for input in input_recv.iter() {
+                match input {
+                    // A new job should be processed
+                    ThreadInput::Process(job) => {
+                        let result = job.process();
+
+                        // Display the error if there is one
+                        if let Err(mut error) = result {
+                            error.set_hook(job.hook_name().into());
+                            let _ = errors::print_err::<()>(Err(error));
+                        } else {
+                            let output = result.unwrap();
+                            let req = Request::Web(output.into());
+                            let event = req.web().unwrap()
+                                           .params.get("event").unwrap();
+
+                            let mut status_job;
+                            let mut status_result;
+                            for hook_provider in hooks.status_hooks_iter(event) {
+                                status_job = Job::new(
+                                    hook_provider.hook.clone(),
+                                    Some(hook_provider.provider.clone()),
+                                    req.clone(),
+                                );
+
+                                status_result = status_job.process();
+                                if let Err(mut error) = status_result {
+                                    error.set_hook(hook_provider.hook.name().into());
+                                    let _ = errors::print_err::<()>(Err(error));
+                                }
+                            }
+                        }
+
+                        busy_inner.store(false, Ordering::Relaxed);
+                        processor_input.send(
+                            ProcessorInput::JobEnded
+                        ).unwrap();
+                    },
+
+                    // Please stop, thanks!
+                    ThreadInput::StopSignal => break,
+                }
+            }
         });
+
+        Thread {
+            should_stop: false,
+            busy: busy,
+            handle: handle,
+            input: input_send,
+        }
     }
 
+    // Here, None equals to success, and Some(job) equals to failure
+    pub fn process(&self, job: Job) -> Option<Job> {
+        // Do some consistency checks
+        if self.should_stop || self.busy() {
+            return Some(job);
+        }
+
+        self.busy.store(true, Ordering::Relaxed);
+        self.input.send(ThreadInput::Process(job)).unwrap();
+
+        None
+    }
+
+    pub fn stop(mut self) {
+        self.should_stop = true;
+        self.input.send(ThreadInput::StopSignal).unwrap();
+
+        self.handle.join().unwrap();
+    }
+
+    #[inline]
+    pub fn busy(&self) -> bool {
+        self.busy.load(Ordering::Relaxed)
+    }
+}
+
+impl fmt::Debug for Thread {
+
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Thread {{ busy: {}, should_stop: {} }}",
+            self.busy(), self.should_stop,
+        )
+    }
 }
 
 
@@ -220,20 +371,6 @@ impl Processor {
 pub struct HealthDetails {
     pub queue_size: usize,
     pub active_jobs: u16,
-}
-
-impl HealthDetails {
-
-    fn of(processor: &Processor) -> Self {
-        // Collect some details of that processor
-        let queue_size = processor.jobs.len();
-        let active_jobs = processor.threads_count;
-
-        HealthDetails {
-            queue_size: queue_size,
-            active_jobs: active_jobs,
-        }
-    }
 }
 
 impl ToJson for HealthDetails {
