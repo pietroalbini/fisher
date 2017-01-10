@@ -100,7 +100,7 @@ impl ProviderTrait for TestingProvider {
         // Create a test file
         let mut dest = path.clone();
         dest.push("prepared");
-        try!(writeln!(try!(File::create(&dest)), "prepared"));
+        writeln!(File::create(&dest)?, "prepared")?;
 
         println!("Called");
 

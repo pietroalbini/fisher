@@ -34,7 +34,7 @@ impl ProxySupport {
     }
 
     pub fn source_ip(&self, req: &Request) -> FisherResult<IpAddr> {
-        let req = try!(req.web());
+        let req = req.web()?;
         let original = req.source;
 
         // Return the original IP if the proxy support is disabled
@@ -43,7 +43,7 @@ impl ProxySupport {
         }
 
         // Parse the X-Forwarded-For header
-        let mut forwarded_ips = try!(utils::parse_forwarded_for(&req.headers));
+        let mut forwarded_ips = utils::parse_forwarded_for(&req.headers)?;
 
         // Return an error if there was no header
         if forwarded_ips.is_empty() {
@@ -64,7 +64,7 @@ impl ProxySupport {
     }
 
     pub fn fix_request(&self, req: &mut Request) -> FisherResult<()> {
-        let fixed_ip = try!(self.source_ip(&req));
+        let fixed_ip = self.source_ip(&req)?;
 
         if let &mut Request::Web(ref mut req) = req {
             req.source = fixed_ip;

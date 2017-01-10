@@ -162,9 +162,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
 
         // This will move to the thread, and the server will be stopped when
         // the thread exits
-        let server = try!(tiny_http::Server::http(
-            try!(bind.parse::<SocketAddr>())
-        ));
+        let server = tiny_http::Server::http(bind.parse::<SocketAddr>()?)?;
 
         // Store the server address into the struct
         self.listening_to = Some(server.server_addr());

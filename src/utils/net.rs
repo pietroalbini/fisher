@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ pub fn parse_forwarded_for(headers: &Headers) -> FisherResult<Vec<IpAddr>> {
 
         // Convert everything to instances of IpAddr
         for address in &splitted {
-            result.push(try!(address.trim().parse::<IpAddr>()));
+            result.push(address.trim().parse::<IpAddr>()?);
         }
     }
 

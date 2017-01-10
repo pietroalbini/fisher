@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -55,13 +55,13 @@ fn create_cli<'a, 'b>() -> App<'a, 'b> {
 pub fn parse() -> FisherResult<FisherOptions> {
     let matches = create_cli().get_matches();
 
-    let max_threads = try!(
+    let max_threads = (
         matches.value_of("max_threads").unwrap_or("1").parse::<u16>()
-    );
+    )?;
 
     let mut behind_proxies = None;
     if let Some(count) = matches.value_of("behind_proxies") {
-        behind_proxies = Some(try!(count.parse::<u8>()));
+        behind_proxies = Some(count.parse::<u8>()?);
     }
 
     Ok(FisherOptions {

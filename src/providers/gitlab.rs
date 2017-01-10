@@ -40,7 +40,7 @@ pub struct GitLabProvider {
 impl ProviderTrait for GitLabProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
-        let inst: GitLabProvider = try!(json::decode(config));
+        let inst: GitLabProvider = json::decode(config)?;
 
         // Check the validity of the events
         if let Some(ref events) = inst.events {

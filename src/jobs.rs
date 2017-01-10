@@ -81,7 +81,7 @@ impl Job {
         self.prepare_env(&mut command);
 
         // Use a random working directory
-        let working_directory = try!(utils::create_temp_dir());
+        let working_directory = utils::create_temp_dir()?;
         command.current_dir(working_directory.to_str().unwrap());
         command.env("HOME".to_string(), working_directory.to_str().unwrap());
 
@@ -89,7 +89,7 @@ impl Job {
         command.env("FISHER_REQUEST_IP".to_string(), self.request_ip());
 
         // Save the request body
-        let request_body = try!(self.save_request_body(&working_directory));
+        let request_body = self.save_request_body(&working_directory)?;
         command.env(
             "FISHER_REQUEST_BODY".to_string(),
             request_body.to_str().unwrap().to_string()
@@ -97,9 +97,9 @@ impl Job {
 
         // Tell the provider to prepare the directory
         if let Some(ref provider) = self.provider {
-            try!(provider.prepare_directory(
+            provider.prepare_directory(
                 &self.request, &working_directory
-            ));
+            )?;
         }
 
         // Make sure the process is isolated
@@ -109,10 +109,10 @@ impl Job {
         });
 
         // Execute the hook
-        let output = try!(command.output());
+        let output = command.output()?;
 
         // Remove the temp directory
-        try!(fs::remove_dir_all(&working_directory));
+        fs::remove_dir_all(&working_directory)?;
 
         // Return the job output
         Ok((self, output).into())
@@ -150,11 +150,11 @@ impl Job {
         path.push("request_body");
 
         // Write the request body on disk
-        let mut file = try!(fs::File::create(&path));
-        try!(write!(file, "{}\n", match self.request {
+        let mut file = fs::File::create(&path)?;
+        write!(file, "{}\n", match self.request {
             Request::Web(ref req) => &req.body,
             _ => unreachable!(),
-        }));
+        })?;
 
         Ok(path)
     }

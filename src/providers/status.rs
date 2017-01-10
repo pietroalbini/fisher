@@ -63,7 +63,7 @@ impl StatusProvider {
 impl ProviderTrait for StatusProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
-        let inst: Self = try!(json::decode(config));
+        let inst: Self = json::decode(config)?;
 
         for event in &inst.events {
             if ! EVENTS.contains(&event.as_ref()) {
@@ -172,7 +172,7 @@ impl ProviderTrait for StatusProvider {
 
     fn prepare_directory(&self, req: &Request, path: &PathBuf)
                          -> FisherResult<()> {
-        let req = try!(req.web());
+        let req = req.web()?;
 
         match req.params.get("event").unwrap().as_str() {
             "job_completed" | "job_failed" => {
@@ -181,8 +181,8 @@ impl ProviderTrait for StatusProvider {
                         let mut path = $base.clone();
                         path.push($name);
 
-                        let mut file = try!(fs::File::create(&path));
-                        try!(write!(file, "{}", $content));
+                        let mut file = fs::File::create(&path)?;
+                        write!(file, "{}", $content)?;
                     }};
                 }
                 let data: JobOutput = json::decode(&req.body).unwrap();

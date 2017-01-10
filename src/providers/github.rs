@@ -47,7 +47,7 @@ pub struct GitHubProvider {
 impl ProviderTrait for GitHubProvider {
 
     fn new(input: &str) -> FisherResult<GitHubProvider> {
-        let inst: GitHubProvider = try!(json::decode(input));
+        let inst: GitHubProvider = json::decode(input)?;
 
         if let Some(ref events) = inst.events {
             // Check if the events exists

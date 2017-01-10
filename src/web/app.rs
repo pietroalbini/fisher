@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -59,7 +59,7 @@ impl WebApp {
             Box::new(WebApi::process_hook)
         );
 
-        let socket = try!(server.listen(&options.bind));
+        let socket = server.listen(&options.bind)?;
 
         self.server = Some(server);
         Ok(socket)

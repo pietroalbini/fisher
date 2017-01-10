@@ -47,7 +47,7 @@ impl ProviderTrait for StandaloneProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
         // Check if it's possible to create a new instance and return it
-        let inst = try!(json::decode(config));
+        let inst = json::decode(config)?;
         Ok(inst)
     }
 

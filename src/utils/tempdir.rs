@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ impl TempDirCreator {
 
     fn new(prefix: &str) -> FisherResult<Self> {
         // This might fail because it's not able to seed
-        let rng = try!(rand::StdRng::new());
+        let rng = rand::StdRng::new()?;
 
         Ok(TempDirCreator {
             prefix: prefix.to_string(),

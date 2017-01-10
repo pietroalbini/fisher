@@ -45,7 +45,7 @@ pub struct Hook {
 impl Hook {
 
     fn load(name: String, exec: String) -> FisherResult<Hook> {
-        let providers = try!(Hook::load_providers(&exec));
+        let providers = Hook::load_providers(&exec)?;
 
         Ok(Hook {
             name: name,
@@ -177,8 +177,8 @@ pub fn collect<T: AsRef<Path>>(base: T)
         -> FisherResult<HashMap<String, Hook>> {
     let mut hooks = HashMap::new();
 
-    for entry in try!(fs::read_dir(&base)) {
-        let pathbuf = try!(entry).path();
+    for entry in fs::read_dir(&base)? {
+        let pathbuf = entry?.path();
         let path = pathbuf.as_path();
 
         // Check if the file is actually a file
@@ -187,16 +187,16 @@ pub fn collect<T: AsRef<Path>>(base: T)
         }
 
         // Check if the file is executable and readable
-        let mode = try!(path.metadata()).permissions().mode();
+        let mode = path.metadata()?.permissions().mode();
         if ! ((mode & 0o111) != 0 && (mode & 0o444) != 0) {
             // Skip files with wrong permissions
             continue
         }
 
         let name = path.file_stem().unwrap().to_str().unwrap().to_string();
-        let exec = try!(fs::canonicalize(path)).to_str().unwrap().into();
+        let exec = fs::canonicalize(path)?.to_str().unwrap().into();
 
-        let hook = try!(Hook::load(name.clone(), exec));
+        let hook = Hook::load(name.clone(), exec)?;
         hooks.insert(name, hook);
     }
 
