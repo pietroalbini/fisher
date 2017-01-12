@@ -391,3 +391,106 @@ impl ToJson for HealthDetails {
         Json::Object(map)
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::io::Read;
+
+    use utils::testing::*;
+    use requests::Request;
+
+    use super::{ProcessorManager, ProcessorInput};
+
+
+    #[test]
+    fn test_processor_starting() {
+        let env = TestingEnv::new();
+
+        let mut processor = ProcessorManager::new();
+        processor.start(1, env.hooks());
+        processor.stop();
+
+        env.cleanup();
+    }
+
+
+    #[test]
+    fn test_processor_clean_stop() {
+        let mut env = TestingEnv::new();
+
+        let mut processor = ProcessorManager::new();
+        processor.start(1, env.hooks());
+
+        // Prepare a request
+        let mut out = env.tempdir();
+        out.push("ok");
+
+        let mut req = dummy_web_request();
+        req.params.insert("env".into(), out.to_str().unwrap().to_string());
+
+        // Queue a dummy job
+        let job = env.create_job("long", Request::Web(req));
+        processor.input().unwrap().send(ProcessorInput::Job(job)).unwrap();
+
+        // Exit immediately -- this forces the processor to wait since the job
+        // sleeps for half a second
+        processor.stop();
+
+        // Check if the job was not killed
+        assert!(out.exists(), "job was killed before it completed");
+
+        env.cleanup();
+    }
+
+
+    fn run_multiple_append(threads: u16) -> String {
+        let mut env = TestingEnv::new();
+
+        let mut processor = ProcessorManager::new();
+        processor.start(threads, env.hooks());
+
+        let input = processor.input().unwrap();
+        let mut out = env.tempdir();
+        out.push("out");
+
+        // Queue ten different jobs
+        let mut req;
+        let mut job;
+        for chr in 0..10 {
+            req = dummy_web_request();
+            req.params.insert("env".into(), format!("{}>{}",
+                out.to_str().unwrap(), chr,
+            ));
+
+            job = env.create_job("append-val", Request::Web(req));
+            input.send(ProcessorInput::Job(job)).unwrap();
+        }
+
+        processor.stop();
+
+        // Read the content of the file
+        let mut file = File::open(&out).unwrap();
+        let mut output = String::new();
+        file.read_to_string(&mut output).unwrap();
+
+        env.cleanup();
+
+        output.replace("\n", "")
+    }
+
+
+    #[test]
+    fn test_processor_one_thread_correct_order() {
+        let output = run_multiple_append(1);
+        assert_eq!(output.as_str(), "0123456789");
+    }
+
+
+    #[test]
+    fn test_processor_multiple_threads() {
+        let output = run_multiple_append(4);
+        assert_eq!(output.len(), 10);
+    }
+}
