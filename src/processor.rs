@@ -153,11 +153,12 @@ impl Processor {
                         }
                     },
                     ProcessorInput::Job(job) => {
-                        self.jobs.push_back(job);
-                        self.run_jobs();
+                        self.run_jobs(job, false);
                     },
                     ProcessorInput::JobEnded => {
-                        self.run_jobs();
+                        if let Some(job) = self.jobs.pop_front() {
+                            self.run_jobs(job, true);
+                        }
                     },
                     ProcessorInput::HealthStatus(return_to) => {
                         return_to.send(HealthDetails {
@@ -212,44 +213,43 @@ impl Processor {
         }
     }
 
-    fn run_jobs(&mut self) {
+    fn run_jobs(&mut self, mut job: Job, push_front: bool) {
         // Here there is a loop so if for some reason there are multiple
         // threads available and there are enough elements in the queue,
         // all of them are processed
         loop {
-            // Don't try to add something if there are no busy threads
-            if self.busy_threads() as usize == self.threads.len() {
+            // If the job *failed*
+            if let Some(job) = self.run_job(job) {
+                if push_front {
+                    self.jobs.push_front(job);
+                } else {
+                    self.jobs.push_back(job);
+                }
                 return;
             }
 
-            if ! self.run_job() {
+            if let Some(j) = self.jobs.pop_front() {
+                job = j;
+            } else {
                 return;
             }
         }
     }
 
-    fn run_job(&mut self) -> bool {
-        // The bool here indicates if it's recommended to run another job
-        if let Some(mut job) = self.jobs.pop_front() {
-            // Try to process the job in each thread
-            for thread in &self.threads {
-                // If Some(Job) is returned, the thread was busy
-                if let Some(j) = thread.process(job) {
-                    // Continue with the loop, moving ownership of the job
-                    job = j;
-                } else {
-                    return true;
-                }
+    // Here, None equals to success, and Some(job) equals to failure
+    fn run_job(&mut self, mut job: Job) -> Option<Job> {
+        // Try to process the job in each thread
+        for thread in &self.threads {
+            // If Some(Job) is returned, the thread was busy
+            if let Some(j) = thread.process(job) {
+                // Continue with the loop, moving ownership of the job
+                job = j;
+            } else {
+                return None;
             }
-
-            // If the job wasn't processed at all, push it back to the
-            // front of the queue, and exit the function
-            self.jobs.push_front(job);
-            false
-        } else {
-            // No more jobs to dispatch
-            false
         }
+
+        Some(job)
     }
 }
 
