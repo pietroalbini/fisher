@@ -215,9 +215,12 @@ impl Processor {
             }
         }
 
+        let mut removed = 0;
         for one in &to_remove {
-            let thread = self.threads.remove(*one);
+            let thread = self.threads.remove(*one - removed);
             thread.stop();
+
+            removed += 1;
         }
     }
 
