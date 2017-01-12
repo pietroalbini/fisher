@@ -158,6 +158,14 @@ impl Processor {
                     ProcessorInput::JobEnded => {
                         if let Some(job) = self.jobs.pop_front() {
                             self.run_jobs(job, true);
+                        } else if self.should_stop {
+                            // Clean up remaining threads
+                            self.cleanup_threads();
+
+                            // Exit if no more threads are left
+                            if self.threads.len() == 0 {
+                                break;
+                            }
                         }
                     },
                     ProcessorInput::HealthStatus(return_to) => {
