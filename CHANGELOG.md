@@ -5,6 +5,8 @@ This document contains what changed in each release of Fisher.
 ### Not yet released
 
 * Don't kill the running jobs when a signal is received
+* Replace the old processor with a faster one
+* Improve testing coverage of the project
 
 ### Fisher 1.0.0-beta.3
 
