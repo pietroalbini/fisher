@@ -400,6 +400,7 @@ impl ToJson for HealthDetails {
 mod tests {
     use std::fs::File;
     use std::io::Read;
+    use std::sync::mpsc;
 
     use utils::testing::*;
     use requests::Request;
@@ -495,5 +496,51 @@ mod tests {
     fn test_processor_multiple_threads() {
         let output = run_multiple_append(4);
         assert_eq!(output.len(), 10);
+    }
+
+    #[test]
+    fn test_health_status() {
+        let mut env = TestingEnv::new();
+
+        let mut processor = ProcessorManager::new();
+        processor.start(1, env.hooks());
+
+        let input = processor.input().unwrap();
+        let mut out = env.tempdir();
+        out.push("ok");
+
+        // Queue a wait job
+        let mut req = dummy_web_request();
+        req.params.insert("env".into(), out.to_str().unwrap().to_string());
+        let job = env.create_job("wait", Request::Web(req));
+        input.send(ProcessorInput::Job(job)).unwrap();
+
+        // Queue ten extra jobs
+        let mut req;
+        let mut job;
+        for _ in 0..10 {
+            req = Request::Web(dummy_web_request());
+            job = env.create_job("example", req);
+            input.send(ProcessorInput::Job(job)).unwrap();
+        }
+
+        // Get the health status of the processor
+        let (status_send, status_recv) = mpsc::channel();
+        input.send(ProcessorInput::HealthStatus(status_send)).unwrap();
+        let status = status_recv.recv().unwrap();
+
+        // Check if the health details are correct
+        assert_eq!(status.active_jobs, 1);
+        assert_eq!(status.queue_size, 10);
+
+        // Create the file the first job is waiting for
+        File::create(&out).unwrap();
+
+        processor.stop();
+
+        // The file should not exist -- the first job removes it
+        assert!(! out.exists());
+
+        env.cleanup();
     }
 }

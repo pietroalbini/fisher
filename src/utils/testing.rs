@@ -128,6 +128,17 @@ pub fn sample_hooks() -> PathBuf {
         r#"echo "ok" > ${FISHER_TESTING_ENV}"#
     );
 
+    create_hook!(tempdir, "wait.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"while true; do"#,
+        r#"    if [[ -f "${FISHER_TESTING_ENV}" ]]; then"#,
+        r#"        break"#,
+        r#"    fi"#,
+        r#"done"#,
+        r#"rm "${FISHER_TESTING_ENV}""#
+    );
+
     create_hook!(tempdir, "append-val.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
