@@ -170,8 +170,9 @@ impl Processor {
                     },
                     ProcessorInput::HealthStatus(return_to) => {
                         return_to.send(HealthDetails {
-                            queue_size: self.jobs.len(),
-                            active_jobs: self.busy_threads(),
+                            queued_jobs: self.jobs.len(),
+                            busy_threads: self.busy_threads(),
+                            max_threads: self.max_threads,
                         }).unwrap();
                     }
                 },
@@ -380,16 +381,18 @@ impl fmt::Debug for Thread {
 
 #[derive(Clone, Debug)]
 pub struct HealthDetails {
-    pub queue_size: usize,
-    pub active_jobs: u16,
+    pub queued_jobs: usize,
+    pub busy_threads: u16,
+    pub max_threads: u16,
 }
 
 impl ToJson for HealthDetails {
 
     fn to_json(&self) -> Json {
         let mut map = BTreeMap::new();
-        map.insert("queue_size".to_string(), self.queue_size.to_json());
-        map.insert("active_jobs".to_string(), self.active_jobs.to_json());
+        map.insert("queued_jobs".to_string(), self.queued_jobs.to_json());
+        map.insert("busy_threads".to_string(), self.busy_threads.to_json());
+        map.insert("max_threads".to_string(), self.max_threads.to_json());
 
         Json::Object(map)
     }
@@ -530,8 +533,9 @@ mod tests {
         let status = status_recv.recv().unwrap();
 
         // Check if the health details are correct
-        assert_eq!(status.active_jobs, 1);
-        assert_eq!(status.queue_size, 10);
+        assert_eq!(status.queued_jobs, 10);
+        assert_eq!(status.busy_threads, 1);
+        assert_eq!(status.max_threads, 1);
 
         // Create the file the first job is waiting for
         File::create(&out).unwrap();

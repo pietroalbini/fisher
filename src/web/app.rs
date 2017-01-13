@@ -180,8 +180,9 @@ mod tests {
         let mut inst = testing_env.start_web(true, None);
 
         let check_after = inst.next_health(HealthDetails {
-            queue_size: 1,
-            active_jobs: 2,
+            queued_jobs: 1,
+            busy_threads: 2,
+            max_threads: 3,
         });
 
         // Assert the request is OK
@@ -197,12 +198,16 @@ mod tests {
         // Check the content of the returned JSON
         let result = data_obj.get("result").unwrap().as_object().unwrap();
         assert_eq!(
-            result.get("queue_size").unwrap().as_u64().unwrap(),
+            result.get("queued_jobs").unwrap().as_u64().unwrap(),
             1 as u64
         );
         assert_eq!(
-            result.get("active_jobs").unwrap().as_u64().unwrap(),
+            result.get("busy_threads").unwrap().as_u64().unwrap(),
             2 as u64
+        );
+        assert_eq!(
+            result.get("max_threads").unwrap().as_u64().unwrap(),
+            3 as u64
         );
 
         // Check if there were any problems into the next_health thread

@@ -2,11 +2,27 @@
 
 This document contains what changed in each release of Fisher.
 
-### Not yet released
+### Next release
 
-* Don't kill the running jobs when a signal is received
+*Not yet released.*
+
+**New features:**
+
+* Add the `busy_threads` field to the `GET /health` result
+
+**Changes and improvements:**
+
+* **BREAKING:** Rename fields in the `GET /health` output for consistency:
+
+ * Rename `queue_size` to `queued_jobs`
+ * Rename `active_jobs` to `busy_threads`
+
 * Replace the old processor with a faster one
 * Improve testing coverage of the project
+
+**Bug fixes:**
+
+* Avoid killing the running jobs when a signal is received
 
 ### Fisher 1.0.0-beta.3
 
