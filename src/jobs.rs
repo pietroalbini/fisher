@@ -43,7 +43,7 @@ lazy_static! {
 }
 
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Job {
     hook: Arc<Hook>,
     provider: Option<Arc<Provider>>,

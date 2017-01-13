@@ -15,6 +15,9 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, mpsc};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::fmt;
 
 use rustc_serialize::json::{Json, ToJson};
 
@@ -95,12 +98,13 @@ pub enum ProcessorInput {
 }
 
 
+#[derive(Debug)]
 struct Processor {
     jobs: VecDeque<Job>,
     hooks: Arc<Hooks>,
 
     should_stop: bool,
-    threads_count: u16,
+    threads: Vec<Thread>,
     max_threads: u16,
 
     input_recv: mpsc::Receiver<ProcessorInput>,
@@ -119,7 +123,7 @@ impl Processor {
             hooks: hooks,
 
             should_stop: false,
-            threads_count: 0,
+            threads: Vec::new(),
             max_threads: max_threads,
 
             input_recv: input_recv,
@@ -131,88 +135,246 @@ impl Processor {
     }
 
     pub fn run(&mut self) {
+        // Create the needed threads
+        for _ in 0..self.max_threads {
+            self.spawn_thread();
+        }
+
         loop {
-            let input = self.input_recv.recv().unwrap();
+            match self.input_recv.recv() {
+                Ok(input) => match input {
+                    ProcessorInput::StopSignal => {
+                        self.should_stop = true;
+                        self.cleanup_threads();
 
-            match input {
-                ProcessorInput::StopSignal => {
-                    // It's time to stop when no more jobs are left
-                    self.should_stop = true;
+                        // Exit if no more threads are left
+                        if self.threads.len() == 0 {
+                            break;
+                        }
+                    },
+                    ProcessorInput::Job(job) => {
+                        self.run_jobs(job, false);
+                    },
+                    ProcessorInput::JobEnded => {
+                        if let Some(job) = self.jobs.pop_front() {
+                            self.run_jobs(job, true);
+                        } else if self.should_stop {
+                            // Clean up remaining threads
+                            self.cleanup_threads();
 
-                    // If no more jobs are left now, exit
-                    if self.jobs.is_empty() && self.threads_count == 0 {
-                        break;
-                    }
-                },
-                ProcessorInput::Job(job) => {
-                    // Queue a new thread if there are too many threads
-                    if self.threads_count >= self.max_threads {
-                        self.jobs.push_back(job);
-                    } else {
-                        self.spawn_thread(job);
-                    }
-                },
-                ProcessorInput::HealthStatus(return_to) => {
-                    return_to.send(HealthDetails::of(&self)).unwrap();
-                },
-                ProcessorInput::JobEnded => {
-                    self.threads_count -= 1;
-
-                    match self.jobs.pop_front() {
-                        Some(job) => {
-                            self.spawn_thread(job);
-                        },
-                        None => {
-                            if self.should_stop {
+                            // Exit if no more threads are left
+                            if self.threads.len() == 0 {
                                 break;
                             }
-                        },
-                    };
-                }
+                        }
+                    },
+                    ProcessorInput::HealthStatus(return_to) => {
+                        return_to.send(HealthDetails {
+                            queue_size: self.jobs.len(),
+                            active_jobs: self.busy_threads(),
+                        }).unwrap();
+                    }
+                },
+                Err(..) => break,
             }
         }
     }
 
-    fn spawn_thread(&mut self, job: Job) {
-        let input_send = self.input_send.clone();
-        let hooks = self.hooks.clone();
+    pub fn busy_threads(&self) -> u16 {
+        let mut result = 0;
 
-        self.threads_count += 1;
-
-        ::std::thread::spawn(move || {
-            let result = job.process();
-
-            // Display the error if there is one
-            if let Err(mut error) = result {
-                error.set_hook(job.hook_name().into());
-                let _ = errors::print_err::<()>(Err(error));
-            } else {
-                let output = result.unwrap();
-                let req = Request::Web(output.into());
-                let event = req.web().unwrap().params.get("event").unwrap();
-
-                let mut status_job;
-                let mut status_result;
-                for hook_provider in hooks.status_hooks_iter(event) {
-                    status_job = Job::new(
-                        hook_provider.hook.clone(),
-                        Some(hook_provider.provider.clone()),
-                        req.clone(),
-                    );
-
-                    status_result = status_job.process();
-                    if let Err(mut error) = status_result {
-                        error.set_hook(hook_provider.hook.name().into());
-                        let _ = errors::print_err::<()>(Err(error));
-                    }
-                }
+        for thread in &self.threads {
+            if thread.busy() {
+                result += 1;
             }
+        }
 
-            // Notify the end of this thread
-            input_send.send(ProcessorInput::JobEnded).unwrap();
-        });
+        result
     }
 
+    fn spawn_thread(&mut self) {
+        self.threads.push(Thread::new(
+            self.input_send.clone(), self.hooks.clone()
+        ));
+    }
+
+    fn cleanup_threads(&mut self) {
+        // This is done in two steps: the list of threads to remove is
+        // computed, and then each marked thread is stopped
+        let mut to_remove = Vec::with_capacity(self.threads.len());
+
+        let mut remaining = self.threads.len();
+        for (i, thread) in self.threads.iter().enumerate() {
+            if thread.busy() {
+                continue;
+            }
+
+            if self.should_stop || remaining > self.max_threads as usize {
+                to_remove.push(i);
+                remaining -= 1;
+            }
+        }
+
+        let mut removed = 0;
+        for one in &to_remove {
+            let thread = self.threads.remove(*one - removed);
+            thread.stop();
+
+            removed += 1;
+        }
+    }
+
+    fn run_jobs(&mut self, mut job: Job, push_front: bool) {
+        // Here there is a loop so if for some reason there are multiple
+        // threads available and there are enough elements in the queue,
+        // all of them are processed
+        loop {
+            // If the job *failed*
+            if let Some(job) = self.run_job(job) {
+                if push_front {
+                    self.jobs.push_front(job);
+                } else {
+                    self.jobs.push_back(job);
+                }
+                return;
+            }
+
+            if let Some(j) = self.jobs.pop_front() {
+                job = j;
+            } else {
+                return;
+            }
+        }
+    }
+
+    // Here, None equals to success, and Some(job) equals to failure
+    fn run_job(&mut self, mut job: Job) -> Option<Job> {
+        // Try to process the job in each thread
+        for thread in &self.threads {
+            // If Some(Job) is returned, the thread was busy
+            if let Some(j) = thread.process(job) {
+                // Continue with the loop, moving ownership of the job
+                job = j;
+            } else {
+                return None;
+            }
+        }
+
+        Some(job)
+    }
+}
+
+
+#[derive(Debug)]
+enum ThreadInput {
+    Process(Job),
+    StopSignal,
+}
+
+
+struct Thread {
+    should_stop: bool,
+    busy: Arc<AtomicBool>,
+
+    handle: thread::JoinHandle<()>,
+    input: mpsc::Sender<ThreadInput>,
+}
+
+impl Thread {
+
+    pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
+               hooks: Arc<Hooks>) -> Thread {
+        let (input_send, input_recv) = mpsc::channel();
+        let busy = Arc::new(AtomicBool::new(false));
+
+        let busy_inner = busy.clone();
+        let handle = thread::spawn(move || {
+            for input in input_recv.iter() {
+                match input {
+                    // A new job should be processed
+                    ThreadInput::Process(job) => {
+                        let result = job.process();
+
+                        // Display the error if there is one
+                        if let Err(mut error) = result {
+                            error.set_hook(job.hook_name().into());
+                            let _ = errors::print_err::<()>(Err(error));
+                        } else {
+                            let output = result.unwrap();
+                            let req = Request::Web(output.into());
+                            let event = req.web().unwrap()
+                                           .params.get("event").unwrap();
+
+                            let mut status_job;
+                            let mut status_result;
+                            for hook_provider in hooks.status_hooks_iter(event) {
+                                status_job = Job::new(
+                                    hook_provider.hook.clone(),
+                                    Some(hook_provider.provider.clone()),
+                                    req.clone(),
+                                );
+
+                                status_result = status_job.process();
+                                if let Err(mut error) = status_result {
+                                    error.set_hook(hook_provider.hook.name().into());
+                                    let _ = errors::print_err::<()>(Err(error));
+                                }
+                            }
+                        }
+
+                        busy_inner.store(false, Ordering::Relaxed);
+                        processor_input.send(
+                            ProcessorInput::JobEnded
+                        ).unwrap();
+                    },
+
+                    // Please stop, thanks!
+                    ThreadInput::StopSignal => break,
+                }
+            }
+        });
+
+        Thread {
+            should_stop: false,
+            busy: busy,
+            handle: handle,
+            input: input_send,
+        }
+    }
+
+    // Here, None equals to success, and Some(job) equals to failure
+    pub fn process(&self, job: Job) -> Option<Job> {
+        // Do some consistency checks
+        if self.should_stop || self.busy() {
+            return Some(job);
+        }
+
+        self.busy.store(true, Ordering::Relaxed);
+        self.input.send(ThreadInput::Process(job)).unwrap();
+
+        None
+    }
+
+    pub fn stop(mut self) {
+        self.should_stop = true;
+        self.input.send(ThreadInput::StopSignal).unwrap();
+
+        self.handle.join().unwrap();
+    }
+
+    #[inline]
+    pub fn busy(&self) -> bool {
+        self.busy.load(Ordering::Relaxed)
+    }
+}
+
+impl fmt::Debug for Thread {
+
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Thread {{ busy: {}, should_stop: {} }}",
+            self.busy(), self.should_stop,
+        )
+    }
 }
 
 
@@ -220,20 +382,6 @@ impl Processor {
 pub struct HealthDetails {
     pub queue_size: usize,
     pub active_jobs: u16,
-}
-
-impl HealthDetails {
-
-    fn of(processor: &Processor) -> Self {
-        // Collect some details of that processor
-        let queue_size = processor.jobs.len();
-        let active_jobs = processor.threads_count;
-
-        HealthDetails {
-            queue_size: queue_size,
-            active_jobs: active_jobs,
-        }
-    }
 }
 
 impl ToJson for HealthDetails {
@@ -244,5 +392,155 @@ impl ToJson for HealthDetails {
         map.insert("active_jobs".to_string(), self.active_jobs.to_json());
 
         Json::Object(map)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::io::Read;
+    use std::sync::mpsc;
+
+    use utils::testing::*;
+    use requests::Request;
+
+    use super::{ProcessorManager, ProcessorInput};
+
+
+    #[test]
+    fn test_processor_starting() {
+        let env = TestingEnv::new();
+
+        let mut processor = ProcessorManager::new();
+        processor.start(1, env.hooks());
+        processor.stop();
+
+        env.cleanup();
+    }
+
+
+    #[test]
+    fn test_processor_clean_stop() {
+        let mut env = TestingEnv::new();
+
+        let mut processor = ProcessorManager::new();
+        processor.start(1, env.hooks());
+
+        // Prepare a request
+        let mut out = env.tempdir();
+        out.push("ok");
+
+        let mut req = dummy_web_request();
+        req.params.insert("env".into(), out.to_str().unwrap().to_string());
+
+        // Queue a dummy job
+        let job = env.create_job("long", Request::Web(req));
+        processor.input().unwrap().send(ProcessorInput::Job(job)).unwrap();
+
+        // Exit immediately -- this forces the processor to wait since the job
+        // sleeps for half a second
+        processor.stop();
+
+        // Check if the job was not killed
+        assert!(out.exists(), "job was killed before it completed");
+
+        env.cleanup();
+    }
+
+
+    fn run_multiple_append(threads: u16) -> String {
+        let mut env = TestingEnv::new();
+
+        let mut processor = ProcessorManager::new();
+        processor.start(threads, env.hooks());
+
+        let input = processor.input().unwrap();
+        let mut out = env.tempdir();
+        out.push("out");
+
+        // Queue ten different jobs
+        let mut req;
+        let mut job;
+        for chr in 0..10 {
+            req = dummy_web_request();
+            req.params.insert("env".into(), format!("{}>{}",
+                out.to_str().unwrap(), chr,
+            ));
+
+            job = env.create_job("append-val", Request::Web(req));
+            input.send(ProcessorInput::Job(job)).unwrap();
+        }
+
+        processor.stop();
+
+        // Read the content of the file
+        let mut file = File::open(&out).unwrap();
+        let mut output = String::new();
+        file.read_to_string(&mut output).unwrap();
+
+        env.cleanup();
+
+        output.replace("\n", "")
+    }
+
+
+    #[test]
+    fn test_processor_one_thread_correct_order() {
+        let output = run_multiple_append(1);
+        assert_eq!(output.as_str(), "0123456789");
+    }
+
+
+    #[test]
+    fn test_processor_multiple_threads() {
+        let output = run_multiple_append(4);
+        assert_eq!(output.len(), 10);
+    }
+
+    #[test]
+    fn test_health_status() {
+        let mut env = TestingEnv::new();
+
+        let mut processor = ProcessorManager::new();
+        processor.start(1, env.hooks());
+
+        let input = processor.input().unwrap();
+        let mut out = env.tempdir();
+        out.push("ok");
+
+        // Queue a wait job
+        let mut req = dummy_web_request();
+        req.params.insert("env".into(), out.to_str().unwrap().to_string());
+        let job = env.create_job("wait", Request::Web(req));
+        input.send(ProcessorInput::Job(job)).unwrap();
+
+        // Queue ten extra jobs
+        let mut req;
+        let mut job;
+        for _ in 0..10 {
+            req = Request::Web(dummy_web_request());
+            job = env.create_job("example", req);
+            input.send(ProcessorInput::Job(job)).unwrap();
+        }
+
+        // Get the health status of the processor
+        let (status_send, status_recv) = mpsc::channel();
+        input.send(ProcessorInput::HealthStatus(status_send)).unwrap();
+        let status = status_recv.recv().unwrap();
+
+        // Check if the health details are correct
+        assert_eq!(status.active_jobs, 1);
+        assert_eq!(status.queue_size, 10);
+
+        // Create the file the first job is waiting for
+        File::create(&out).unwrap();
+
+        processor.stop();
+
+        // The file should not exist -- the first job removes it
+        assert!(! out.exists());
+
+        env.cleanup();
     }
 }

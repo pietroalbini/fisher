@@ -121,6 +121,31 @@ pub fn sample_hooks() -> PathBuf {
         r#"cat "prepared" > "${b}/prepared""#
     );
 
+    create_hook!(tempdir, "long.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"sleep 0.5"#,
+        r#"echo "ok" > ${FISHER_TESTING_ENV}"#
+    );
+
+    create_hook!(tempdir, "wait.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"while true; do"#,
+        r#"    if [[ -f "${FISHER_TESTING_ENV}" ]]; then"#,
+        r#"        break"#,
+        r#"    fi"#,
+        r#"done"#,
+        r#"rm "${FISHER_TESTING_ENV}""#
+    );
+
+    create_hook!(tempdir, "append-val.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"data=(${FISHER_TESTING_ENV//>/ })"#,
+        r#"echo "${data[1]}" >> "${data[0]}""#
+    );
+
     create_hook!(tempdir, "trigger-status.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
@@ -296,6 +321,18 @@ impl TestingEnv {
         for dir in &self.remove_dirs {
             let _ = fs::remove_dir_all(dir);
         }
+    }
+
+    // UTILITIES
+
+    pub fn hooks(&self) -> Arc<Hooks> {
+        self.hooks.clone()
+    }
+
+    pub fn tempdir(&mut self) -> PathBuf {
+        let dir = utils::create_temp_dir().unwrap();
+        self.delete_also(dir.to_str().unwrap());
+        dir
     }
 
     // JOBS UTILITIES

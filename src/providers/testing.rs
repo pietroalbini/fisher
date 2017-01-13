@@ -102,8 +102,6 @@ impl ProviderTrait for TestingProvider {
         dest.push("prepared");
         writeln!(File::create(&dest)?, "prepared")?;
 
-        println!("Called");
-
         Ok(())
     }
 }
