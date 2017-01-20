@@ -99,10 +99,10 @@ macro_rules! ProviderEnum {
             }
 
             pub fn validate(&self, req: &Request) -> RequestType {
-                match self {
+                match *self {
                     $(
                         #[cfg($cfg)]
-                        &Provider::$name(ref prov) => {
+                        Provider::$name(ref prov) => {
                             (prov as &ProviderTrait).validate(req)
                         },
                     )*
@@ -110,10 +110,10 @@ macro_rules! ProviderEnum {
             }
 
             pub fn env(&self, req: &Request) -> HashMap<String, String> {
-                match self {
+                match *self {
                     $(
                         #[cfg($cfg)]
-                        &Provider::$name(ref prov) => {
+                        Provider::$name(ref prov) => {
                             (prov as &ProviderTrait).env(req)
                         },
                     )*
@@ -122,10 +122,10 @@ macro_rules! ProviderEnum {
 
             pub fn prepare_directory(&self, req: &Request, path: &PathBuf)
                                     -> FisherResult<()> {
-                match self {
+                match *self {
                     $(
                         #[cfg($cfg)]
-                        &Provider::$name(ref prov) => {
+                        Provider::$name(ref prov) => {
                             (prov as &ProviderTrait)
                                 .prepare_directory(req, path)
                         },
@@ -134,10 +134,10 @@ macro_rules! ProviderEnum {
             }
 
             pub fn name(&self) -> &str {
-                match self {
+                match *self {
                     $(
                         #[cfg($cfg)]
-                        &Provider::$name(..) => stringify!($name),
+                        Provider::$name(..) => stringify!($name),
                     )*
                 }
             }

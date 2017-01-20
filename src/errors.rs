@@ -173,7 +173,7 @@ impl fmt::Display for FisherError {
                             format!("{}", io_error),
 
                         ParserError::SyntaxError(ref code, ref r, ref c) => {
-                            let msg = json::error_str(code.clone());
+                            let msg = json::error_str(*code);
                             format!("{} (line {}, column {})", msg, r, c)
                         },
 
@@ -255,11 +255,7 @@ pub fn print_err<T>(result: Result<T, FisherError>) -> Result<T, FisherError> {
 pub fn unwrap<T>(result: Result<T, FisherError>) -> T {
     // Print the error message if necessary
     match print_err(result) {
-        Err(..) => {
-            ::std::process::exit(1);
-        },
-        Ok(t) => {
-            return t;
-        }
+        Err(..) => ::std::process::exit(1),
+        Ok(t) => t,
     }
 }

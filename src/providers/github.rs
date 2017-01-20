@@ -66,7 +66,7 @@ impl ProviderTrait for GitHubProvider {
 
     fn validate(&self, request: &Request) -> RequestType {
         let req;
-        if let &Request::Web(ref inner) = request {
+        if let Request::Web(ref inner) = *request {
             req = inner;
         } else {
             return RequestType::Invalid;
@@ -82,24 +82,24 @@ impl ProviderTrait for GitHubProvider {
         // Check the signature only if a secret key was provided
         if let Some(ref secret) = self.secret {
             // Check if the signature is valid
-            let signature = req.headers.get("X-Hub-Signature").unwrap();
-            if ! verify_signature(secret, &req.body, &signature) {
+            let signature = &req.headers["X-Hub-Signature"];
+            if ! verify_signature(secret, &req.body, signature) {
                 return RequestType::Invalid;
             }
         }
 
         // Check if the event is valid
-        let event = req.headers.get("X-GitHub-Event").unwrap();
+        let event = &req.headers["X-GitHub-Event"];
         if !(
             GITHUB_EVENTS.contains(&event.as_ref())
-            || *event == "ping".to_string()
+            || *event == "ping"
         ) {
             return RequestType::Invalid;
         }
 
         // Check if the event should be accepted
         if let Some(ref events) = self.events {
-            if ! events.contains(&event) {
+            if ! events.contains(event) {
                 return RequestType::Invalid;
             }
         }
@@ -122,7 +122,7 @@ impl ProviderTrait for GitHubProvider {
         let mut res = HashMap::new();
 
         let req;
-        if let &Request::Web(ref inner) = request {
+        if let Request::Web(ref inner) = *request {
             req = inner;
         } else {
             return res;
@@ -130,12 +130,12 @@ impl ProviderTrait for GitHubProvider {
 
         res.insert(
             "EVENT".to_string(),
-            req.headers.get("X-GitHub-Event").unwrap().clone()
+            req.headers["X-GitHub-Event"].clone()
         );
 
         res.insert(
             "DELIVERY_ID".to_string(),
-            req.headers.get("X-GitHub-Delivery").unwrap().clone()
+            req.headers["X-GitHub-Delivery"].clone()
         );
 
         res
@@ -145,13 +145,13 @@ impl ProviderTrait for GitHubProvider {
 
 fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
     // The signature must have a =
-    if ! raw_signature.contains("=") {
+    if ! raw_signature.contains('=') {
         return false;
     }
 
     // Split the raw signature to get the algorithm and the signature
-    let splitted: Vec<&str> = raw_signature.split("=").collect();
-    let algorithm = splitted.get(0).unwrap();
+    let splitted: Vec<&str> = raw_signature.split('=').collect();
+    let algorithm = &splitted[0];
     let hex_signature = splitted.iter().skip(1).map(|i| *i)
                                 .collect::<Vec<&str>>().join("=");
 
@@ -174,7 +174,7 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
     };
 
     // Verify the HMAC signature
-    let key = ring::hmac::VerificationKey::new(&digest, secret.as_bytes());
+    let key = ring::hmac::VerificationKey::new(digest, secret.as_bytes());
     ring::hmac::verify(&key, payload.as_bytes(), &signature).is_ok()
 }
 

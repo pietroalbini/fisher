@@ -67,20 +67,14 @@ impl ProcessorManager {
     }
 
     pub fn stop(&self) {
-        match self.input {
-            Some(ref input) => {
-                // Tell the processor to exit as soon as possible
-                input.send(ProcessorInput::StopSignal).unwrap();
+        if let Some(ref input) = self.input {
+            // Tell the processor to exit as soon as possible
+            input.send(ProcessorInput::StopSignal).unwrap();
 
-                // Wait until the processor did its work
-                match self.stop_wait {
-                    Some(ref stop_wait) => {
-                        stop_wait.recv().unwrap();
-                    },
-                    None => {},
-                }
-            },
-            None => {},
+            // Wait until the processor did its work
+            if let Some(ref stop_wait) = self.stop_wait {
+                stop_wait.recv().unwrap();
+            }
         }
     }
 
@@ -141,43 +135,40 @@ impl Processor {
             self.spawn_thread();
         }
 
-        loop {
-            match self.input_recv.recv() {
-                Ok(input) => match input {
-                    ProcessorInput::StopSignal => {
-                        self.should_stop = true;
+        while let Ok(input) = self.input_recv.recv() {
+            match input {
+                ProcessorInput::StopSignal => {
+                    self.should_stop = true;
+                    self.cleanup_threads();
+
+                    // Exit if no more threads are left
+                    if self.threads.is_empty() {
+                        break;
+                    }
+                },
+                ProcessorInput::Job(job) => {
+                    self.run_jobs(job, false);
+                },
+                ProcessorInput::JobEnded => {
+                    if let Some(job) = self.jobs.pop_front() {
+                        self.run_jobs(job, true);
+                    } else if self.should_stop {
+                        // Clean up remaining threads
                         self.cleanup_threads();
 
                         // Exit if no more threads are left
-                        if self.threads.len() == 0 {
+                        if self.threads.is_empty() {
                             break;
                         }
-                    },
-                    ProcessorInput::Job(job) => {
-                        self.run_jobs(job, false);
-                    },
-                    ProcessorInput::JobEnded => {
-                        if let Some(job) = self.jobs.pop_front() {
-                            self.run_jobs(job, true);
-                        } else if self.should_stop {
-                            // Clean up remaining threads
-                            self.cleanup_threads();
-
-                            // Exit if no more threads are left
-                            if self.threads.len() == 0 {
-                                break;
-                            }
-                        }
-                    },
-                    ProcessorInput::HealthStatus(return_to) => {
-                        return_to.send(HealthDetails {
-                            queued_jobs: self.jobs.len(),
-                            busy_threads: self.busy_threads(),
-                            max_threads: self.max_threads,
-                        }).unwrap();
                     }
                 },
-                Err(..) => break,
+                ProcessorInput::HealthStatus(return_to) => {
+                    return_to.send(HealthDetails {
+                        queued_jobs: self.jobs.len(),
+                        busy_threads: self.busy_threads(),
+                        max_threads: self.max_threads,
+                    }).unwrap();
+                }
             }
         }
     }
@@ -217,12 +208,9 @@ impl Processor {
             }
         }
 
-        let mut removed = 0;
-        for one in &to_remove {
-            let thread = self.threads.remove(*one - removed);
+        for (one, removed) in to_remove.iter().enumerate() {
+            let thread = self.threads.remove(one - removed);
             thread.stop();
-
-            removed += 1;
         }
     }
 
@@ -300,12 +288,11 @@ impl Thread {
                         // Display the error if there is one
                         match result {
                             Ok(output) => {
-                                let event;
-                                if output.success {
-                                    event = StatusEvent::JobCompleted(output);
+                                let event = if output.success {
+                                    StatusEvent::JobCompleted(output)
                                 } else {
-                                    event = StatusEvent::JobFailed(output);
-                                }
+                                    StatusEvent::JobFailed(output)
+                                };
                                 let kind = event.kind();
 
                                 let mut status_job;

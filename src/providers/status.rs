@@ -44,7 +44,7 @@ impl StatusEvent {
     #[inline]
     pub fn hook_name(&self) -> &String {
         match *self {
-            StatusEvent::JobCompleted(ref output) => &output.hook_name,
+            StatusEvent::JobCompleted(ref output) |
             StatusEvent::JobFailed(ref output) => &output.hook_name,
         }
     }
@@ -52,7 +52,7 @@ impl StatusEvent {
     #[inline]
     pub fn source_ip(&self) -> IpAddr {
         match *self {
-            StatusEvent::JobCompleted(ref output) => output.request_ip,
+            StatusEvent::JobCompleted(ref output) |
             StatusEvent::JobFailed(ref output) => output.request_ip,
         }
     }
@@ -92,10 +92,10 @@ pub struct StatusProvider {
 impl StatusProvider {
 
     #[inline]
-    pub fn hook_allowed(&self, name: &String) -> bool {
+    pub fn hook_allowed(&self, name: &str) -> bool {
         // Check if it's allowed only if a whitelist was provided
         if let Some(ref hooks) = self.hooks {
-            if ! hooks.contains(name) {
+            if ! hooks.contains(&name.into()) {
                 return false;
             }
         }
@@ -135,7 +135,7 @@ impl ProviderTrait for StatusProvider {
 
     fn validate(&self, request: &Request) -> RequestType {
         let req;
-        if let &Request::Status(ref inner) = request {
+        if let Request::Status(ref inner) = *request {
             req = inner;
         } else {
             return RequestType::Invalid;
@@ -158,7 +158,7 @@ impl ProviderTrait for StatusProvider {
         let mut env = HashMap::new();
 
         let req;
-        if let &Request::Status(ref inner) = request {
+        if let Request::Status(ref inner) = *request {
             req = inner;
         } else {
             return env;
@@ -168,13 +168,13 @@ impl ProviderTrait for StatusProvider {
         env.insert("HOOK_NAME".into(), req.hook_name().clone());
 
         // Event-specific env
-        match req {
-            &StatusEvent::JobCompleted(..) => {
+        match *req {
+            StatusEvent::JobCompleted(..) => {
                 env.insert("SUCCESS".into(), "1".into());
                 env.insert("EXIT_CODE".into(), "0".into());
                 env.insert("SIGNAL".into(), String::new());
             },
-            &StatusEvent::JobFailed(ref output) => {
+            StatusEvent::JobFailed(ref output) => {
                 env.insert("SUCCESS".into(), "0".into());
                 env.insert(
                     "EXIT_CODE".into(),
@@ -208,12 +208,12 @@ impl ProviderTrait for StatusProvider {
             }};
         }
 
-        match req {
-            &StatusEvent::JobCompleted(ref output) => {
+        match *req {
+            StatusEvent::JobCompleted(ref output) => {
                 new_file!(path, "stdout", output.stdout);
                 new_file!(path, "stderr", output.stderr);
             },
-            &StatusEvent::JobFailed(ref output) => {
+            StatusEvent::JobFailed(ref output) => {
                 new_file!(path, "stdout", output.stdout);
                 new_file!(path, "stderr", output.stderr);
             },

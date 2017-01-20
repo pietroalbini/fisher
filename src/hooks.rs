@@ -54,7 +54,7 @@ impl Hook {
         })
     }
 
-    fn load_providers(file: &String) -> FisherResult<Vec<Arc<Provider>>> {
+    fn load_providers(file: &str) -> FisherResult<Vec<Arc<Provider>>> {
         let f = fs::File::open(file).unwrap();
         let reader = BufReader::new(f);
 
@@ -75,12 +75,12 @@ impl Hook {
                 let name = cap.at(1).unwrap();
                 let data = cap.at(2).unwrap();
 
-                match Provider::new(&name, &data) {
+                match Provider::new(name, data) {
                     Ok(provider) => {
                         result.push(Arc::new(provider));
                     },
                     Err(mut error) => {
-                        error.set_file(file.clone());
+                        error.set_file(file.into());
                         error.set_line(line_number);
                         return Err(error);
                     }
@@ -93,10 +93,10 @@ impl Hook {
 
     pub fn validate(&self, req: &Request)
                    -> (RequestType, Option<Arc<Provider>>) {
-        if self.providers.len() > 0 {
+        if ! self.providers.is_empty() {
             // Check every provider if they're present
             for provider in &self.providers {
-                return (provider.validate(&req), Some(provider.clone()))
+                return (provider.validate(req), Some(provider.clone()))
             }
             (RequestType::Invalid, None)
         } else {
@@ -141,11 +141,11 @@ impl Hooks {
         self.hooks.insert(name, hook.clone());
 
         for provider in &hook.providers {
-            if let &Provider::Status(ref status) = provider.as_ref() {
+            if let Provider::Status(ref status) = *provider.as_ref() {
                 // Load all the kinds of events
                 for event in status.events() {
-                    self.status_hooks.entry(event.clone())
-                        .or_insert(Vec::new())
+                    self.status_hooks.entry(*event)
+                        .or_insert_with(Vec::new)
                         .push(HookProvider {
                             hook: hook.clone(),
                             provider: provider.clone(),
@@ -155,7 +155,7 @@ impl Hooks {
         }
     }
 
-    pub fn get(&self, name: &String) -> Option<Arc<Hook>> {
+    pub fn get(&self, name: &str) -> Option<Arc<Hook>> {
         match self.hooks.get(name) {
             Some(hook) => Some(hook.clone()),
             None => None,
@@ -163,7 +163,7 @@ impl Hooks {
     }
 
     pub fn status_hooks_iter(&self, kind: StatusEventKind) -> SliceIter<HookProvider> {
-        if let Some(ref hook_providers) = self.status_hooks.get(&kind) {
+        if let Some(hook_providers) = self.status_hooks.get(&kind) {
             hook_providers.iter()
         } else {
             // Return an empty iterator if there is no hook for this kind

@@ -55,7 +55,7 @@ impl Route {
         let mut result = "^".to_string();
 
         let mut first = true;
-        for part in url.split("/") {
+        for part in url.split('?') {
             // Add a slash at the start
             if first {
                 first = false;
@@ -153,7 +153,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
         );
     }
 
-    pub fn listen(&mut self, bind: &String) -> FisherResult<SocketAddr> {
+    pub fn listen(&mut self, bind: &str) -> FisherResult<SocketAddr> {
         macro_rules! header {
             ($value:expr) => {
                 $value.parse::<tiny_http::Header>().unwrap()
@@ -176,7 +176,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
         let should_stop = self.should_stop.clone();
         thread::spawn(move || {
             // Get a reference to the handlers
-            let ref handlers = *handlers_arc.lock().unwrap();
+            let handlers = &*handlers_arc.lock().unwrap();
 
             // Prepare some headers which will be sent everytime
             let server_header = header!(
@@ -197,25 +197,30 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
                 // Convert the request to a Fisher request
                 let mut req = Request::Web((&mut request).into());
 
-                let mut response = Response::NotFound;
-
-                if *request.method() == ignored_method {
+                let response = if *request.method() == ignored_method {
                     // This request comes with the non-standard method used to
                     // shut the server down -- no client should be using it
-                    response = Response::Forbidden;
+                    Response::Forbidden
                 } else if let Err(e) = proxy_support.fix_request(&mut req) {
-                    response = Response::BadRequest(e);
+                    Response::BadRequest(e)
                 } else {
                     let method = request.method();
                     let url = request.url();
 
+                    let mut res = None;
                     for handler in handlers {
                         if let Some(args) = handler.matches(method, url) {
-                            response = handler.call(&app, &req, args);
+                            res = Some(handler.call(&app, &req, args));
                             break;
                         }
                     }
-                }
+
+                    if let Some(r) = res {
+                        r
+                    } else {
+                        Response::NotFound
+                    }
+                };
 
                 let mut tiny_response = tiny_http::Response::from_data(
                     response.to_json().to_string().into_bytes()

@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -51,8 +51,7 @@ impl ToJson for Response {
             Response::NotFound => "not_found",
             Response::Forbidden => "forbidden",
             Response::BadRequest(..) => "bad_request",
-            Response::Ok => "ok",
-            Response::HealthStatus(..) => "ok"
+            Response::Ok | Response::HealthStatus(..) => "ok",
         }.to_string().to_json());
 
         if let Response::HealthStatus(ref details) = *self {

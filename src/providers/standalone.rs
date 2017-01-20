@@ -53,7 +53,7 @@ impl ProviderTrait for StandaloneProvider {
 
     fn validate(&self, request: &Request) -> RequestType {
         let req;
-        if let &Request::Web(ref inner) = request {
+        if let Request::Web(ref inner) = *request {
             req = inner;
         } else {
             return RequestType::Invalid;

@@ -60,7 +60,7 @@ impl ProviderTrait for GitLabProvider {
 
     fn validate(&self, request: &Request) -> RequestType {
         let req;
-        if let &Request::Web(ref inner) = request {
+        if let Request::Web(ref inner) = *request {
             req = inner;
         } else {
             return RequestType::Invalid;
@@ -87,7 +87,7 @@ impl ProviderTrait for GitLabProvider {
         }
 
         let event = normalize_event_name(
-            req.headers.get("X-Gitlab-Event").unwrap()
+            &*req.headers["X-Gitlab-Event"]
         );
 
         // Check if the event should be accepted
@@ -108,7 +108,7 @@ impl ProviderTrait for GitLabProvider {
 
     fn env(&self, request: &Request) -> HashMap<String, String> {
         let req;
-        if let &Request::Web(ref inner) = request {
+        if let Request::Web(ref inner) = *request {
             req = inner;
         } else {
             return HashMap::new();
@@ -116,7 +116,7 @@ impl ProviderTrait for GitLabProvider {
 
         // Get the current event name
         let event_header = normalize_event_name(
-            &req.headers.get("X-Gitlab-Event").unwrap()
+            &*req.headers["X-Gitlab-Event"]
         );
 
         let mut res = HashMap::new();
@@ -130,12 +130,12 @@ impl ProviderTrait for GitLabProvider {
 fn normalize_event_name(input: &str) -> &str {
     // Strip the ending " Hook"
     if input.ends_with(" Hook") {
-        let split: Vec<&str> = input.rsplitn(2, " ").collect();
+        let split: Vec<&str> = input.rsplitn(2, ' ').collect();
 
-        return split.get(1).unwrap();
+        split[1]
+    } else {
+        input
     }
-
-    input
 }
 
 

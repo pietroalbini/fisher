@@ -25,9 +25,9 @@ pub type Headers = HashMap<String, String>;
 pub fn parse_forwarded_for(headers: &Headers) -> FisherResult<Vec<IpAddr>> {
     let mut result = vec![];
 
-    if let Some(ref header) = headers.get("X-Forwarded-For".into()) {
+    if let Some(header) = headers.get("X-Forwarded-For".into()) {
         // Parse the header content
-        let splitted: Vec<&str> = header.split(",").collect();
+        let splitted: Vec<&str> = header.split(',').collect();
 
         // Convert everything to instances of IpAddr
         for address in &splitted {

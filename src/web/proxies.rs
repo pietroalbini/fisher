@@ -57,16 +57,16 @@ impl ProxySupport {
         // there are too few
         let index = (self.behind.unwrap() - 1) as usize;
         if let Some(ip) = forwarded_ips.get(index) {
-            Ok(ip.clone())
+            Ok(*ip)
         } else {
             Err(ErrorKind::NotBehindProxy.into())
         }
     }
 
     pub fn fix_request(&self, req: &mut Request) -> FisherResult<()> {
-        let fixed_ip = self.source_ip(&req)?;
+        let fixed_ip = self.source_ip(req)?;
 
-        if let &mut Request::Web(ref mut req) = req {
+        if let Request::Web(ref mut req) = *req {
             req.source = fixed_ip;
             Ok(())
         } else {

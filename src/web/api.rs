@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -42,7 +42,7 @@ impl WebApi {
     }
 
     pub fn process_hook(&self, req: &Request, args: Vec<String>) -> Response {
-        let hook_name = args.get(0).unwrap();
+        let hook_name = &args[0];
 
         // Check if the hook exists
         let hook;
@@ -53,7 +53,7 @@ impl WebApi {
         }
 
         // Validate the hook
-        let (request_type, provider) = hook.validate(&req);
+        let (request_type, provider) = hook.validate(req);
 
         // Change behavior based on the request type
         match request_type {

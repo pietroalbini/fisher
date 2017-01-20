@@ -33,7 +33,7 @@ impl<'a> From<&'a mut tiny_http::Request> for WebRequest {
 
     fn from(origin: &'a mut tiny_http::Request) -> WebRequest {
         // Get the source IP
-        let source = origin.remote_addr().ip().clone();
+        let source = origin.remote_addr().ip();
 
         // Get the headers
         let mut headers = HashMap::new();
@@ -50,13 +50,12 @@ impl<'a> From<&'a mut tiny_http::Request> for WebRequest {
 
         // Get the querystring
         let url = origin.url();
-        let params;
-        if url.contains("?") {
-            let query = url.rsplitn(2, "?").nth(0).unwrap();
-            params = params_from_query(query);
+        let params = if url.contains('?') {
+            let query = url.rsplitn(2, '?').nth(0).unwrap();
+            params_from_query(query)
         } else {
-            params = HashMap::new();
-        }
+            HashMap::new()
+        };
 
         WebRequest {
             source: source,

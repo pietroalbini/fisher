@@ -20,7 +20,7 @@ use app::FisherOptions;
 
 
 fn create_cli<'a, 'b>() -> App<'a, 'b> {
-    let app = App::new("Fisher")
+    App::new("Fisher")
         .about("Simple webhooks catcher")
         .version(crate_version!())
 
@@ -46,9 +46,6 @@ fn create_cli<'a, 'b>() -> App<'a, 'b> {
              .long("behind-proxies")
              .value_name("PROXIES_COUNT")
              .help("How much proxies are behind the app"))
-    ;
-
-    app
 }
 
 

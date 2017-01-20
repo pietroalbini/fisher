@@ -35,7 +35,7 @@ pub enum Request {
 impl Request {
 
     pub fn web(&self) -> FisherResult<&WebRequest> {
-        if let &Request::Web(ref req) = self {
+        if let Request::Web(ref req) = *self {
             Ok(req)
         } else {
             Err(ErrorKind::WrongRequestKind.into())
@@ -43,7 +43,7 @@ impl Request {
     }
 
     pub fn status(&self) -> FisherResult<&StatusEvent> {
-        if let &Request::Status(ref req) = self {
+        if let Request::Status(ref req) = *self {
             Ok(req)
         } else {
             Err(ErrorKind::WrongRequestKind.into())
