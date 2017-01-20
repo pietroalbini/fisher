@@ -18,9 +18,6 @@ use std::collections::HashMap;
 
 use tiny_http;
 use url::form_urlencoded;
-use rustc_serialize::json;
-
-use jobs::JobOutput;
 
 
 #[derive(Debug, Clone)]
@@ -77,24 +74,4 @@ pub fn params_from_query(query: &str) -> HashMap<String, String> {
         hashmap.insert(a, b);
     }
     hashmap
-}
-
-
-impl From<JobOutput> for WebRequest {
-
-    fn from(output: JobOutput) -> WebRequest {
-        let mut params = HashMap::new();
-        params.insert("hook_name".into(), output.hook_name.clone());
-        params.insert(
-            "event".into(),
-            if output.success { "job_completed" } else { "job_failed" }.into()
-        );
-
-        WebRequest {
-            source: output.request_ip.parse().unwrap(),
-            headers: HashMap::new(),
-            params: params,
-            body: json::encode(&output).unwrap(),
-        }
-    }
 }

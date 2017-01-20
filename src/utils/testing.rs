@@ -25,7 +25,7 @@ use hyper::method::Method;
 
 use app::FisherOptions;
 use hooks::{self, Hooks};
-use jobs::Job;
+use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
 use processor::{ProcessorInput, HealthDetails};
@@ -63,6 +63,21 @@ pub fn dummy_web_request() -> WebRequest {
         params: HashMap::new(),
         source: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
         body: String::new(),
+    }
+}
+
+
+pub fn dummy_job_output() -> JobOutput {
+    JobOutput {
+        stdout: "hello world".into(),
+        stderr: "something happened".into(),
+
+        success: true,
+        exit_code: Some(0),
+        signal: None,
+
+        hook_name: "test".into(),
+        request_ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
     }
 }
 

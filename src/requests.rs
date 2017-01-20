@@ -15,13 +15,13 @@
 
 use errors::{FisherResult, ErrorKind};
 use web::WebRequest;
+use providers::StatusEvent;
 
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum RequestType {
     ExecuteHook,
     Ping,
-    Internal,
     Invalid,
 }
 
@@ -29,13 +29,21 @@ pub enum RequestType {
 #[derive(Debug, Clone)]
 pub enum Request {
     Web(WebRequest),
-    __IHateIrrefutablePatterns(()),
+    Status(StatusEvent),
 }
 
 impl Request {
 
     pub fn web(&self) -> FisherResult<&WebRequest> {
         if let &Request::Web(ref req) = self {
+            Ok(req)
+        } else {
+            Err(ErrorKind::WrongRequestKind.into())
+        }
+    }
+
+    pub fn status(&self) -> FisherResult<&StatusEvent> {
+        if let &Request::Status(ref req) = self {
             Ok(req)
         } else {
             Err(ErrorKind::WrongRequestKind.into())
@@ -48,5 +56,13 @@ impl From<WebRequest> for Request {
 
     fn from(from: WebRequest) -> Request {
         Request::Web(from)
+    }
+}
+
+
+impl From<StatusEvent> for Request {
+
+    fn from(from: StatusEvent) -> Request {
+        Request::Status(from)
     }
 }

@@ -12,10 +12,13 @@ This document contains what changed in each release of Fisher.
 
 * **Changes and improvements:**
 
+ * **BREAKING:** `$FISHER_REQUEST_BODY` is not available anymore on status
+   hooks
  * **BREAKING:** Rename `queue_size` to `queued_jobs` in `GET /health` for
    consistency
  * **BREAKING:** Rename `active_jobs` to `busy_threads` in `GET /health` for
   consistency
+ * Speed up status hooks processing
  * Replace the old processor with a faster one
  * Improve testing coverage of the project
 

@@ -31,6 +31,9 @@ pub mod prelude {
 }
 
 
+pub use self::status::{StatusEvent, StatusEventKind};
+
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 

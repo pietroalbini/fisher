@@ -24,6 +24,7 @@ use rustc_serialize::json::{Json, ToJson};
 use jobs::Job;
 use hooks::Hooks;
 use requests::Request;
+use providers::StatusEvent;
 use errors;
 
 
@@ -297,29 +298,35 @@ impl Thread {
                         let result = job.process();
 
                         // Display the error if there is one
-                        if let Err(mut error) = result {
-                            error.set_hook(job.hook_name().into());
-                            let _ = errors::print_err::<()>(Err(error));
-                        } else {
-                            let output = result.unwrap();
-                            let req = Request::Web(output.into());
-                            let event = req.web().unwrap()
-                                           .params.get("event").unwrap();
-
-                            let mut status_job;
-                            let mut status_result;
-                            for hook_provider in hooks.status_hooks_iter(event) {
-                                status_job = Job::new(
-                                    hook_provider.hook.clone(),
-                                    Some(hook_provider.provider.clone()),
-                                    req.clone(),
-                                );
-
-                                status_result = status_job.process();
-                                if let Err(mut error) = status_result {
-                                    error.set_hook(hook_provider.hook.name().into());
-                                    let _ = errors::print_err::<()>(Err(error));
+                        match result {
+                            Ok(output) => {
+                                let event;
+                                if output.success {
+                                    event = StatusEvent::JobCompleted(output);
+                                } else {
+                                    event = StatusEvent::JobFailed(output);
                                 }
+                                let kind = event.kind();
+
+                                let mut status_job;
+                                let mut status_result;
+                                for hp in hooks.status_hooks_iter(kind) {
+                                    status_job = Job::new(
+                                        hp.hook.clone(),
+                                        Some(hp.provider.clone()),
+                                        Request::Status(event.clone()),
+                                    );
+                                    status_result = status_job.process();
+
+                                    if let Err(mut error) = status_result {
+                                        error.set_hook(hp.hook.name().into());
+                                        let _ = errors::print_err::<()>(Err(error));
+                                    }
+                                }
+                            },
+                            Err(mut error) => {
+                                error.set_hook(job.hook_name().into());
+                                let _ = errors::print_err::<()>(Err(error));
                             }
                         }
 

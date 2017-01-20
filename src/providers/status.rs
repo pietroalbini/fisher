@@ -16,6 +16,7 @@
 use std::fs;
 use std::io::Write;
 use std::slice::Iter as SliceIter;
+use std::net::IpAddr;
 
 use rustc_serialize::json;
 
@@ -24,19 +25,67 @@ use errors::ErrorKind;
 use jobs::JobOutput;
 
 
-lazy_static! {
-    static ref EVENTS: Vec<&'static str> = vec![
-        "job_completed", "job_failed",
-    ];
-    static ref REQUIRED_ARGS: Vec<&'static str> = vec![
-        "event", "hook_name",
-    ];
+#[derive(Debug, Clone)]
+pub enum StatusEvent {
+    JobCompleted(JobOutput),
+    JobFailed(JobOutput),
+}
+
+impl StatusEvent {
+
+    #[inline]
+    pub fn kind(&self) -> StatusEventKind {
+        match *self {
+            StatusEvent::JobCompleted(..) => StatusEventKind::JobCompleted,
+            StatusEvent::JobFailed(..) => StatusEventKind::JobFailed,
+        }
+    }
+
+    #[inline]
+    pub fn hook_name(&self) -> &String {
+        match *self {
+            StatusEvent::JobCompleted(ref output) => &output.hook_name,
+            StatusEvent::JobFailed(ref output) => &output.hook_name,
+        }
+    }
+
+    #[inline]
+    pub fn source_ip(&self) -> IpAddr {
+        match *self {
+            StatusEvent::JobCompleted(ref output) => output.request_ip,
+            StatusEvent::JobFailed(ref output) => output.request_ip,
+        }
+    }
+}
+
+
+#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, RustcDecodable)]
+pub enum StatusEventKind {
+    JobCompleted,
+    JobFailed,
+}
+
+impl StatusEventKind {
+
+    fn name(&self) -> &str {
+        match *self {
+            StatusEventKind::JobCompleted => "job_completed",
+            StatusEventKind::JobFailed => "job_failed",
+        }
+    }
 }
 
 
 #[derive(Debug, RustcDecodable)]
-pub struct StatusProvider {
+struct TemporaryStatusProviderDeserializerUntilSerdeComesOutREPLACEME {
     events: Vec<String>,
+    hooks: Option<Vec<String>>,
+}
+
+
+#[derive(Debug)]
+pub struct StatusProvider {
+    events: Vec<StatusEventKind>,
     hooks: Option<Vec<String>>,
 }
 
@@ -55,7 +104,7 @@ impl StatusProvider {
     }
 
     #[inline]
-    pub fn events(&self) -> SliceIter<String> {
+    pub fn events(&self) -> SliceIter<StatusEventKind> {
         self.events.iter()
     }
 }
@@ -63,108 +112,83 @@ impl StatusProvider {
 impl ProviderTrait for StatusProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
-        let inst: Self = json::decode(config)?;
+        let decoded = json::decode::<
+            TemporaryStatusProviderDeserializerUntilSerdeComesOutREPLACEME
+        >(config)?;
 
-        for event in &inst.events {
-            if ! EVENTS.contains(&event.as_ref()) {
-                // Return an error if the event doesn't exist
-                return Err(ErrorKind::InvalidInput(format!(
+        let mut events = Vec::new();
+        for event in &decoded.events {
+            match event.as_str() {
+                "job_completed" => events.push(StatusEventKind::JobCompleted),
+                "job_failed" => events.push(StatusEventKind::JobFailed),
+                _ => return Err(ErrorKind::InvalidInput(format!(
                     r#""{}" is not a Fisher status event"#, event
-                )).into());
+                )).into()),
             }
         }
 
-        Ok(inst)
+        Ok(StatusProvider {
+            hooks: decoded.hooks,
+            events: events,
+        })
     }
 
     fn validate(&self, request: &Request) -> RequestType {
         let req;
-        if let &Request::Web(ref inner) = request {
+        if let &Request::Status(ref inner) = request {
             req = inner;
         } else {
             return RequestType::Invalid;
         }
 
-        // There must be all (and only) the required parameters
-        for param in req.params.keys() {
-            if ! REQUIRED_ARGS.contains(&param.as_ref()) {
-                return RequestType::Invalid;
-            }
-        }
-        if req.params.len() != REQUIRED_ARGS.len() {
-            return RequestType::Invalid;
-        }
-
-        // Events must exist
-        let event = req.params.get("event").unwrap().as_str();
-        if ! EVENTS.contains(&event) {
-            return RequestType::Invalid;
-        }
-
-        // Event-specific validation
-        match event {
-            "job_completed" | "job_failed" => {
-                // The request body must be a serialized JobOutput
-                if json::decode::<JobOutput>(&req.body).is_err() {
-                    return RequestType::Invalid;
-                }
-            }
-            _ => unreachable!(),
-        }
-
         // The hook name must be allowed
-        if ! self.hook_allowed(req.params.get("hook_name").unwrap()) {
+        if ! self.hook_allowed(req.hook_name()) {
             return RequestType::Invalid;
         }
 
         // The event must be allowed
-        if ! self.events.contains(req.params.get("event").unwrap()) {
+        if ! self.events.contains(&req.kind()) {
             return RequestType::Invalid;
         }
 
-        // Requests for this provider are internal
-        RequestType::Internal
+        RequestType::ExecuteHook
     }
 
     fn env(&self, request: &Request) -> HashMap<String, String> {
         let mut env = HashMap::new();
 
         let req;
-        if let &Request::Web(ref inner) = request {
+        if let &Request::Status(ref inner) = request {
             req = inner;
         } else {
             return env;
         }
 
-        // Move all the params to the env
-        for (key, value) in req.params.iter() {
-            env.insert(key.to_uppercase(), value.clone());
-        }
+        env.insert("EVENT".into(), req.kind().name().into());
+        env.insert("HOOK_NAME".into(), req.hook_name().clone());
 
         // Event-specific env
-        match req.params.get("event").unwrap().as_str() {
-            "job_completed" | "job_failed" => {
-                let data = json::decode::<JobOutput>(&req.body).unwrap();
-
-                env.insert(
-                    "SUCCESS".into(), if data.success {
-                        "1"
-                    } else { "0" }.into()
-                );
+        match req {
+            &StatusEvent::JobCompleted(..) => {
+                env.insert("SUCCESS".into(), "1".into());
+                env.insert("EXIT_CODE".into(), "0".into());
+                env.insert("SIGNAL".into(), String::new());
+            },
+            &StatusEvent::JobFailed(ref output) => {
+                env.insert("SUCCESS".into(), "0".into());
                 env.insert(
                     "EXIT_CODE".into(),
-                    if let Some(code) = data.exit_code {
+                    if let Some(code) = output.exit_code {
                         format!("{}", code)
-                    } else { "".into() }
+                    } else { String::new() }
                 );
                 env.insert(
                     "SIGNAL".into(),
-                    if let Some(signal) = data.signal {
+                    if let Some(signal) = output.signal {
                         format!("{}", signal)
-                    } else { "".into() }
+                    } else { String::new() }
                 );
             },
-            _ => unreachable!(),
         }
 
         env
@@ -172,25 +196,27 @@ impl ProviderTrait for StatusProvider {
 
     fn prepare_directory(&self, req: &Request, path: &PathBuf)
                          -> FisherResult<()> {
-        let req = req.web()?;
+        let req = req.status()?;
 
-        match req.params.get("event").unwrap().as_str() {
-            "job_completed" | "job_failed" => {
-                macro_rules! new_file {
-                    ($base:expr, $name:expr, $content:expr) => {{
-                        let mut path = $base.clone();
-                        path.push($name);
+        macro_rules! new_file {
+            ($base:expr, $name:expr, $content:expr) => {{
+                let mut path = $base.clone();
+                path.push($name);
 
-                        let mut file = fs::File::create(&path)?;
-                        write!(file, "{}", $content)?;
-                    }};
-                }
-                let data: JobOutput = json::decode(&req.body).unwrap();
+                let mut file = fs::File::create(&path)?;
+                write!(file, "{}", $content)?;
+            }};
+        }
 
-                new_file!(path, "stdout", data.stdout);
-                new_file!(path, "stderr", data.stderr);
+        match req {
+            &StatusEvent::JobCompleted(ref output) => {
+                new_file!(path, "stdout", output.stdout);
+                new_file!(path, "stderr", output.stderr);
             },
-            _ => unreachable!(),
+            &StatusEvent::JobFailed(ref output) => {
+                new_file!(path, "stdout", output.stdout);
+                new_file!(path, "stderr", output.stderr);
+            },
         }
 
         Ok(())
@@ -201,30 +227,13 @@ impl ProviderTrait for StatusProvider {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use rustc_serialize::json;
 
     use utils::testing::*;
     use utils;
     use requests::RequestType;
-    use jobs::JobOutput;
     use providers::ProviderTrait;
 
-    use super::StatusProvider;
-
-
-    fn dummy_job_output() -> JobOutput {
-        JobOutput {
-            stdout: "hello world".into(),
-            stderr: "something happened".into(),
-
-            success: true,
-            exit_code: Some(0),
-            signal: None,
-
-            hook_name: "example".into(),
-            request_ip: "127.0.0.1".into(),
-        }
-    }
+    use super::{StatusEvent, StatusProvider};
 
 
     #[test]
@@ -290,92 +299,28 @@ mod tests {
             }};
         }
 
-        // Test without any of the required params
-        let req = dummy_web_request();
-        assert_validate!(&req.into(),
-            r#"{"events": ["job_completed"]}"#,
-            RequestType::Invalid
-        );
-
-        // Test without the right request body
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = r#"{}"#.into();
-        assert_validate!(&req.into(),
-            r#"{"events": ["job_completed"]}"#,
-            RequestType::Invalid
-        );
-
-        // Test with the right request body for the event
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-        assert_validate!(&req.into(),
-            r#"{"events": ["job_completed"]}"#,
-            RequestType::Internal
-        );
-
-        // Test with some extra params
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-        req.params.insert("test".into(), "invalid".into());
-        assert_validate!(&req.into(),
-            r#"{"events": ["job_completed"]}"#,
-            RequestType::Invalid
-        );
-
         // Test with a wrong allowed event
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-        assert_validate!(&req.into(),
+        assert_validate!(&StatusEvent::JobCompleted(dummy_job_output()).into(),
             r#"{"events": ["job_failed"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed event
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-        assert_validate!(&req.into(),
+        assert_validate!(&StatusEvent::JobCompleted(dummy_job_output()).into(),
             r#"{"events": ["job_completed"]}"#,
-            RequestType::Internal
+            RequestType::ExecuteHook
         );
 
         // Test with a wrong allowed hook
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-        assert_validate!(&req.into(),
+        assert_validate!(&StatusEvent::JobCompleted(dummy_job_output()).into(),
             r#"{"events": ["job_completed"], "hooks": ["invalid"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed hook
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-        assert_validate!(&req.into(),
+        assert_validate!(&StatusEvent::JobCompleted(dummy_job_output()).into(),
             r#"{"events": ["job_completed"], "hooks": ["test"]}"#,
-            RequestType::Internal
-        );
-
-        // Test with a wrong event name
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "__invalid__".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-        assert_validate!(&req.into(),
-            r#"{"events": ["job_completed"]}"#,
-            RequestType::Invalid
+            RequestType::ExecuteHook
         );
     }
 
@@ -387,12 +332,8 @@ mod tests {
         ).unwrap();
 
         // Try with a job_completed event
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-
-        let env = provider.env(&req.into());
+        let event = StatusEvent::JobCompleted(dummy_job_output());
+        let env = provider.env(&event.into());
         assert_eq!(env.len(), 5);
         assert_eq!(env.get("EVENT").unwrap(), &"job_completed".to_string());
         assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
@@ -406,12 +347,7 @@ mod tests {
         output.exit_code = None;
         output.signal = Some(9);
 
-        let mut req = dummy_web_request();
-        req.params.insert("event".into(), "job_failed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&output).unwrap();
-
-        let env = provider.env(&req.into());
+        let env = provider.env(&StatusEvent::JobFailed(output).into());
         assert_eq!(env.len(), 5);
         assert_eq!(env.get("EVENT").unwrap(), &"job_failed".to_string());
         assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
@@ -438,17 +374,13 @@ mod tests {
             }};
         }
 
-        let mut req = dummy_web_request();
         let provider = StatusProvider::new(
             r#"{"events": ["job_completed"]}"#,
         ).unwrap();
 
-        req.params.insert("event".into(), "job_completed".into());
-        req.params.insert("hook_name".into(), "test".into());
-        req.body = json::encode(&dummy_job_output()).unwrap();
-
+        let event = StatusEvent::JobCompleted(dummy_job_output());
         let tempdir = utils::create_temp_dir().unwrap();
-        provider.prepare_directory(&req.into(), &tempdir).unwrap();
+        provider.prepare_directory(&event.into(), &tempdir).unwrap();
 
         assert_eq!(read!(tempdir, "stdout"), "hello world".to_string());
         assert_eq!(read!(tempdir, "stderr"), "something happened".to_string());

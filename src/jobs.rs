@@ -21,6 +21,7 @@ use std::env;
 use std::path::PathBuf;
 use std::io::Write;
 use std::sync::Arc;
+use std::net::IpAddr;
 
 use hooks::Hook;
 use utils;
@@ -67,11 +68,11 @@ impl Job {
     }
 
     #[inline]
-    pub fn request_ip(&self) -> String {
-        format!("{}", match self.request {
+    pub fn request_ip(&self) -> IpAddr {
+        match self.request {
             Request::Web(ref req) => req.source,
-            _ => unreachable!(),
-        })
+            Request::Status(ref req) => req.source_ip(),
+        }
     }
 
     pub fn process(&self) -> FisherResult<JobOutput> {
@@ -86,14 +87,19 @@ impl Job {
         command.env("HOME".to_string(), working_directory.to_str().unwrap());
 
         // Set the request IP
-        command.env("FISHER_REQUEST_IP".to_string(), self.request_ip());
+        command.env(
+            "FISHER_REQUEST_IP".to_string(),
+            format!("{}", self.request_ip())
+        );
 
         // Save the request body
         let request_body = self.save_request_body(&working_directory)?;
-        command.env(
-            "FISHER_REQUEST_BODY".to_string(),
-            request_body.to_str().unwrap().to_string()
-        );
+        if let Some(path) = request_body {
+            command.env(
+                "FISHER_REQUEST_BODY".to_string(),
+                path.to_str().unwrap().to_string()
+            );
+        }
 
         // Tell the provider to prepare the directory
         if let Some(ref provider) = self.provider {
@@ -145,23 +151,27 @@ impl Job {
         }
     }
 
-    fn save_request_body(&self, base: &PathBuf) -> FisherResult<PathBuf> {
+    fn save_request_body(&self, base: &PathBuf)
+                        -> FisherResult<Option<PathBuf>> {
+        // Get the request body, even if some request kinds don't have one
+        let body = match self.request {
+            Request::Web(ref req) => &req.body,
+            Request::Status(..) => return Ok(None),
+        };
+
         let mut path = base.clone();
         path.push("request_body");
 
         // Write the request body on disk
         let mut file = fs::File::create(&path)?;
-        write!(file, "{}\n", match self.request {
-            Request::Web(ref req) => &req.body,
-            _ => unreachable!(),
-        })?;
+        write!(file, "{}\n", body)?;
 
-        Ok(path)
+        Ok(Some(path))
     }
 }
 
 
-#[derive(Clone, RustcEncodable, RustcDecodable)]
+#[derive(Debug, Clone)]
 pub struct JobOutput {
     pub stdout: String,
     pub stderr: String,
@@ -171,7 +181,7 @@ pub struct JobOutput {
     pub signal: Option<i32>,
 
     pub hook_name: String,
-    pub request_ip: String,
+    pub request_ip: IpAddr,
 }
 
 impl<'a> From<(&'a Job, process::Output)> for JobOutput {

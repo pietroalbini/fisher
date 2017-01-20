@@ -69,9 +69,6 @@ impl WebApi {
                 Response::Ok
             },
 
-            // Return a "forbidden" if the request is meant to be internal
-            RequestType::Internal => Response::Forbidden,
-
             RequestType::Invalid => Response::Forbidden,
         }
     }

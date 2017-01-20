@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use regex::Regex;
 
-use providers::Provider;
+use providers::{Provider, StatusEventKind};
 use requests::{Request, RequestType};
 use errors::FisherResult;
 
@@ -124,7 +124,7 @@ pub struct HookProvider {
 #[derive(Debug, Clone)]
 pub struct Hooks {
     hooks: HashMap<String, Arc<Hook>>,
-    status_hooks: HashMap<String, Vec<HookProvider>>,
+    status_hooks: HashMap<StatusEventKind, Vec<HookProvider>>,
 }
 
 impl Hooks {
@@ -162,8 +162,8 @@ impl Hooks {
         }
     }
 
-    pub fn status_hooks_iter(&self, name: &str) -> SliceIter<HookProvider> {
-        if let Some(ref hook_providers) = self.status_hooks.get(name.into()) {
+    pub fn status_hooks_iter(&self, kind: StatusEventKind) -> SliceIter<HookProvider> {
+        if let Some(ref hook_providers) = self.status_hooks.get(&kind) {
             hook_providers.iter()
         } else {
             // Return an empty iterator if there is no hook for this kind
@@ -213,6 +213,7 @@ mod tests {
     use utils::testing::*;
     use utils;
     use errors::ErrorKind;
+    use providers::StatusEventKind;
 
     use super::{Hook, Hooks, collect};
 
@@ -387,12 +388,14 @@ mod tests {
         hooks.insert("status2".into(), assert_hook!(base, "status2"));
 
         assert_eq!(
-            hooks.status_hooks_iter("job_completed").map(|hp| hp.hook.name())
+            hooks.status_hooks_iter(StatusEventKind::JobCompleted)
+                 .map(|hp| hp.hook.name())
                  .collect::<Vec<&str>>(),
             vec!["status1"]
         );
         assert_eq!(
-            hooks.status_hooks_iter("job_failed").map(|hp| hp.hook.name())
+            hooks.status_hooks_iter(StatusEventKind::JobFailed)
+                 .map(|hp| hp.hook.name())
                  .collect::<Vec<&str>>(),
             vec!["status1", "status2"]
         );
