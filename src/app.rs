@@ -46,46 +46,9 @@ impl FisherOptions {
 }
 
 
-enum HooksContainer {
-    Mutable(Hooks),
-    Immutable(Arc<Hooks>),
-}
-
-impl HooksContainer {
-
-    fn new() -> HooksContainer {
-        HooksContainer::Mutable(Hooks::new())
-    }
-
-    fn insert(&mut self, name: String, value: Hook) {
-        if let HooksContainer::Mutable(ref mut hooks) = *self {
-            hooks.insert(name, value);
-        } else {
-            panic!("You can't add hooks at runtime");
-        }
-    }
-
-    fn finalize(&self) -> HooksContainer {
-        if let &HooksContainer::Mutable(ref hooks) = self {
-            HooksContainer::Immutable(Arc::new(hooks.clone()))
-        } else {
-            panic!("Already finalized!")
-        }
-    }
-
-    fn reference(&self) -> Arc<Hooks> {
-        if let HooksContainer::Immutable(ref hooks) = *self {
-            hooks.clone()
-        } else {
-            panic!("You can't get a reference before finalizing");
-        }
-    }
-}
-
-
 pub struct AppFactory<'a> {
     options: &'a FisherOptions,
-    hooks: HooksContainer,
+    hooks: Hooks,
 }
 
 impl<'a> AppFactory<'a> {
@@ -93,7 +56,7 @@ impl<'a> AppFactory<'a> {
     pub fn new(options: &'a FisherOptions) -> Self {
         AppFactory {
             options: options,
-            hooks: HooksContainer::new(),
+            hooks: Hooks::new(),
         }
     }
 
@@ -101,22 +64,22 @@ impl<'a> AppFactory<'a> {
         self.hooks.insert(name, hook);
     }
 
-    pub fn start(&'a mut self) -> FisherResult<RunningApp> {
+    pub fn start(self) -> FisherResult<RunningApp> {
         // Finalize the hooks
-        self.hooks = self.hooks.finalize();
+        let hooks = Arc::new(self.hooks);
 
         // Initialize the state
         let mut processor = ProcessorManager::new();
         let mut web_api = WebApp::new();
 
         // Start the processor
-        processor.start(self.options.max_threads, self.hooks.reference());
+        processor.start(self.options.max_threads, hooks.clone());
         let processor_input = processor.input().unwrap();
 
         // Start the Web API
         let listening;
         match web_api.listen(
-            self.hooks.reference(), self.options, processor_input
+            hooks.clone(), self.options, processor_input
         ) {
             Ok(socket) => {
                 listening = socket;

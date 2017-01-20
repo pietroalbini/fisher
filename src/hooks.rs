@@ -114,14 +114,14 @@ impl Hook {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HookProvider {
     pub hook: Arc<Hook>,
     pub provider: Arc<Provider>,
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Hooks {
     hooks: HashMap<String, Arc<Hook>>,
     status_hooks: HashMap<StatusEventKind, Vec<HookProvider>>,
