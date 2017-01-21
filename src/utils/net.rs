@@ -49,7 +49,10 @@ mod tests {
     #[test]
     fn test_parse_forwarded_for() {
         // Test with no headers
-        assert_eq!(parse_forwarded_for(&Headers::new()).unwrap(), vec![]);
+        assert_eq!(
+            parse_forwarded_for(&Headers::new()).unwrap(),
+            Vec::<IpAddr>::new()
+        );
 
         // Test with a single IP address
         let mut headers = Headers::new();
