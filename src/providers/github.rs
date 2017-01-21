@@ -14,10 +14,10 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use rustc_serialize::json::{self, Json};
-use rustc_serialize::hex::FromHex;
 use ring;
 
 use providers::prelude::*;
+use utils;
 use errors::ErrorKind;
 
 
@@ -156,13 +156,12 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
                                 .collect::<Vec<&str>>().join("=");
 
     // Convert the signature from hex
-    let signature;
-    if let Ok(converted) = hex_signature.from_hex() {
-        signature = converted;
+    let signature = if let Ok(converted) = utils::from_hex(&hex_signature) {
+        converted
     } else {
         // This is not hex
         return false;
-    }
+    };
 
     // Get the correct digest
     let digest = match *algorithm {

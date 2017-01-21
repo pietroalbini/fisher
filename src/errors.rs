@@ -32,6 +32,10 @@ pub enum ErrorKind {
     NotBehindProxy,
     WrongRequestKind,
 
+    // Hex decoding errors
+    InvalidHexChar(char),
+    InvalidHexLength,
+
     // Derived errors
     IoError(io::Error),
     JsonError(json::DecoderError),
@@ -111,6 +115,10 @@ impl Error for FisherError {
                 "not behind the proxies",
             ErrorKind::WrongRequestKind =>
                 "wrong request kind",
+            ErrorKind::InvalidHexChar(..) =>
+                "invalid character in hex",
+            ErrorKind::InvalidHexLength =>
+                "invalid length of the hex",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -150,6 +158,12 @@ impl fmt::Display for FisherError {
 
             ErrorKind::WrongRequestKind =>
                 "wrong request kind".into(),
+
+            ErrorKind::InvalidHexChar(chr) =>
+                format!("{} is not valid hex", chr),
+
+            ErrorKind::InvalidHexLength =>
+                "invalid length of the hex".into(),
 
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),

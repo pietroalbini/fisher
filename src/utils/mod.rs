@@ -13,18 +13,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#[cfg(test)]
+#[macro_use] pub mod testing;
+
 mod tempdir;
 mod net;
+mod hex;
 
 #[cfg(test)]
 mod parse_env;
 
-#[cfg(test)]
-#[macro_use] pub mod testing;
-
 
 pub use utils::tempdir::create_temp_dir;
 pub use utils::net::parse_forwarded_for;
+pub use utils::hex::from_hex;
 
 #[cfg(test)]
 pub use utils::parse_env::parse_env;
