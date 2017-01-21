@@ -55,7 +55,7 @@ impl Route {
         let mut result = "^".to_string();
 
         let mut first = true;
-        for part in url.split('?') {
+        for part in url.split('/') {
             // Add a slash at the start
             if first {
                 first = false;
@@ -197,30 +197,27 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
                 // Convert the request to a Fisher request
                 let mut req = Request::Web((&mut request).into());
 
-                let response = if *request.method() == ignored_method {
-                    // This request comes with the non-standard method used to
-                    // shut the server down -- no client should be using it
-                    Response::Forbidden
-                } else if let Err(e) = proxy_support.fix_request(&mut req) {
-                    Response::BadRequest(e)
-                } else {
-                    let method = request.method();
-                    let url = request.url();
-
-                    let mut res = None;
-                    for handler in handlers {
-                        if let Some(args) = handler.matches(method, url) {
-                            res = Some(handler.call(&app, &req, args));
-                            break;
-                        }
-                    }
-
-                    if let Some(r) = res {
-                        r
+                let response = (|| {
+                    if *request.method() == ignored_method {
+                        // This request comes with the non-standard method used
+                        // to shut the server down -- no client should be using
+                        // it
+                        Response::Forbidden
+                    } else if let Err(e) = proxy_support.fix_request(&mut req) {
+                        Response::BadRequest(e)
                     } else {
+                        let method = request.method();
+                        let url = request.url();
+
+                        for handler in handlers {
+                            if let Some(args) = handler.matches(method, url) {
+                                return handler.call(&app, &req, args);
+                            }
+                        }
+
                         Response::NotFound
                     }
-                };
+                })();
 
                 let mut tiny_response = tiny_http::Response::from_data(
                     response.to_json().to_string().into_bytes()
@@ -386,7 +383,7 @@ mod tests {
         server.add_route(Method::Get, "/?", Box::new(dummy_handler_fn));
 
         // Start the server
-        let addr = server.listen(&"127.0.0.1:0".into()).unwrap();
+        let addr = server.listen("127.0.0.1:0").unwrap();
 
         let url = format!("http://{}", addr);
         let mut client = hyper::Client::new();

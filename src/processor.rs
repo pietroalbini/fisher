@@ -73,7 +73,7 @@ impl ProcessorManager {
 
             // Wait until the processor did its work
             if let Some(ref stop_wait) = self.stop_wait {
-                stop_wait.recv().unwrap();
+                let _ = stop_wait.recv();
             }
         }
     }
@@ -208,7 +208,7 @@ impl Processor {
             }
         }
 
-        for (one, removed) in to_remove.iter().enumerate() {
+        for (removed, one) in to_remove.iter().enumerate() {
             let thread = self.threads.remove(one - removed);
             thread.stop();
         }
