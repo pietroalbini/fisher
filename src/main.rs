@@ -20,12 +20,11 @@
 extern crate rustc_serialize;
 extern crate regex;
 extern crate ansi_term;
-extern crate chan_signal;
 extern crate url;
 extern crate rand;
 extern crate tiny_http;
 extern crate libc;
-#[macro_use] extern crate chan;
+extern crate signal;
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate clap;
 #[cfg(feature = "provider-github")] extern crate ring;
@@ -43,12 +42,17 @@ mod app;
 mod requests;
 mod native;
 
-use chan_signal::Signal;
+use std::time::{Instant, Duration};
+
+use libc::{SIGINT, SIGTERM};
 use ansi_term::{Style, Colour};
 
 
 fn main() {
-    let exit_signal = chan_signal::notify(&[Signal::INT, Signal::TERM]);
+    let signal_trap = signal::trap::Trap::trap(&[
+        SIGINT,  // Interrupt the program
+        SIGTERM,  // Interrupt the program
+    ]);
 
     // Load the options from the CLI arguments
     let options = errors::unwrap(cli::parse());
@@ -106,8 +110,14 @@ fn main() {
         Colour::Green.bold().paint("Web API listening"), app.web_address(),
     );
 
-    // Wait until SIGINT or SIGTERM is received
-    exit_signal.recv().unwrap();
+    // Wait for signals
+    loop {
+        match signal_trap.wait(Instant::now()) {
+            Some(SIGINT) | Some(SIGTERM) => break,
+            _ => {},
+        }
+        ::std::thread::sleep(Duration::new(0, 100));
+    }
 
     // Stop Fisher
     app.stop();

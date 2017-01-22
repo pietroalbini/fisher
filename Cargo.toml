@@ -14,13 +14,12 @@ url="^1.2"
 ansi_term="^0.9"
 regex="^0.1"
 clap="^2.11"
-chan="^0.1"
-chan-signal="^0.2"
 rustc-serialize="^0.3"
 lazy_static="^0.2"
 rand="^0.3"
 tiny_http="^0.5"
 libc="^0.2"
+signal="^0.3"
 
 # Dependencies for the "provider-github" feature
 ring = { version="^0.6", optional=true }
