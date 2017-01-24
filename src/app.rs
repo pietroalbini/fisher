@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2016-2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,10 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::path::Path;
 use std::net;
 use std::sync::Arc;
 
-use hooks::{Hooks, Hook};
+use hooks::{self, HookNamesIter, Hooks, Hook};
 use processor::ProcessorManager;
 use web::WebApp;
 use errors::FisherResult;
@@ -46,15 +47,15 @@ impl FisherOptions {
 }
 
 
-pub struct AppFactory<'a> {
+pub struct Fisher<'a> {
     options: &'a FisherOptions,
     hooks: Hooks,
 }
 
-impl<'a> AppFactory<'a> {
+impl<'a> Fisher<'a> {
 
     pub fn new(options: &'a FisherOptions) -> Self {
-        AppFactory {
+        Fisher {
             options: options,
             hooks: Hooks::new(),
         }
@@ -64,7 +65,20 @@ impl<'a> AppFactory<'a> {
         self.hooks.insert(name, hook);
     }
 
-    pub fn start(self) -> FisherResult<RunningApp> {
+    pub fn collect_hooks<P: AsRef<Path>>(&mut self, path: P) -> FisherResult<()> {
+        let mut hooks = hooks::collect(path)?;
+        for (name, hook) in hooks.drain() {
+            self.add_hook(name, hook);
+        }
+
+        Ok(())
+    }
+
+    pub fn hook_names<'b>(&'b self) -> HookNamesIter<'b> {
+        self.hooks.names()
+    }
+
+    pub fn start(self) -> FisherResult<RunningFisher> {
         // Finalize the hooks
         let hooks = Arc::new(self.hooks);
 
@@ -92,7 +106,7 @@ impl<'a> AppFactory<'a> {
             },
         }
 
-        Ok(RunningApp::new(
+        Ok(RunningFisher::new(
             processor,
             web_api,
             listening,
@@ -101,17 +115,17 @@ impl<'a> AppFactory<'a> {
 }
 
 
-pub struct RunningApp {
+pub struct RunningFisher {
     processor: ProcessorManager,
     web_api: WebApp,
     web_address: net::SocketAddr,
 }
 
-impl RunningApp {
+impl RunningFisher {
 
     fn new(processor: ProcessorManager, web_api: WebApp,
            web_address: net::SocketAddr) -> Self {
-        RunningApp {
+        RunningFisher {
             processor: processor,
             web_api: web_api,
             web_address: web_address,

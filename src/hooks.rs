@@ -16,6 +16,7 @@
 use std::fs;
 use std::path::Path;
 use std::collections::HashMap;
+use std::collections::hash_map::Keys as HashMapKeys;
 use std::slice::Iter as SliceIter;
 use std::os::unix::fs::PermissionsExt;
 use std::io::{BufReader, BufRead};
@@ -114,6 +115,19 @@ impl Hook {
 }
 
 
+pub struct HookNamesIter<'a> {
+    iter: HashMapKeys<'a, String, Arc<Hook>>,
+}
+
+impl<'a> Iterator for HookNamesIter<'a> {
+    type Item = &'a String;
+
+    fn next(&mut self) -> Option<&'a String> {
+        self.iter.next()
+    }
+}
+
+
 #[derive(Debug)]
 pub struct HookProvider {
     pub hook: Arc<Hook>,
@@ -159,6 +173,12 @@ impl Hooks {
         match self.hooks.get(name) {
             Some(hook) => Some(hook.clone()),
             None => None,
+        }
+    }
+
+    pub fn names(&self) -> HookNamesIter {
+        HookNamesIter {
+            iter: self.hooks.keys()
         }
     }
 

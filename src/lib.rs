@@ -1,0 +1,46 @@
+// Copyright (C) 2017 Pietro Albini
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+// Optional support for compiling with clippy
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
+
+extern crate rustc_serialize;
+extern crate regex;
+extern crate ansi_term;
+extern crate url;
+extern crate rand;
+extern crate tiny_http;
+extern crate libc;
+#[macro_use] extern crate lazy_static;
+#[cfg(feature = "provider-github")] extern crate ring;
+#[cfg(test)] extern crate hyper;
+
+#[macro_use] mod utils;
+mod providers;
+mod hooks;
+mod errors;
+mod processor;
+mod jobs;
+mod web;
+mod app;
+mod requests;
+mod native;
+
+// Public API
+pub use app::{Fisher, RunningFisher, FisherOptions};
+pub use errors::FisherResult as Result;
+pub use errors::FisherError as Error;
+pub use errors::ErrorKind;

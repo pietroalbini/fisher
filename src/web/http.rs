@@ -180,7 +180,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
 
             // Prepare some headers which will be sent everytime
             let server_header = header!(
-                format!("Server: Fisher/{}", crate_version!())
+                format!("Server: Fisher/{}", env!("CARGO_PKG_VERSION"))
             );
             let content_type = header!("Content-Type: application/json");
 
