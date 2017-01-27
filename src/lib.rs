@@ -17,13 +17,14 @@
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
-extern crate rustc_serialize;
 extern crate regex;
 extern crate ansi_term;
 extern crate url;
 extern crate rand;
 extern crate tiny_http;
 extern crate libc;
+#[macro_use] extern crate serde_json;
+#[macro_use] extern crate serde_derive;
 #[macro_use] extern crate lazy_static;
 #[cfg(feature = "provider-github")] extern crate ring;
 #[cfg(test)] extern crate hyper;

@@ -19,8 +19,7 @@ use std::net;
 use std::num;
 use std::error::Error;
 
-use rustc_serialize::json;
-
+use serde_json;
 
 pub type FisherResult<T> = Result<T, FisherError>;
 
@@ -38,7 +37,7 @@ pub enum ErrorKind {
 
     // Derived errors
     IoError(io::Error),
-    JsonError(json::DecoderError),
+    JsonError(serde_json::Error),
     AddrParseError(net::AddrParseError),
     ParseIntError(num::ParseIntError),
     GenericError(Box<Error + Send + Sync>),
@@ -168,36 +167,8 @@ impl fmt::Display for FisherError {
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),
 
-            // The default errors of rustc_serialize are really ugly btw
-            ErrorKind::JsonError(ref error) => {
-                use rustc_serialize::json::DecoderError;
-                use rustc_serialize::json::ParserError;
-
-                let message = match *error {
-
-                    DecoderError::MissingFieldError(ref field) =>
-                        format!("missing required field: {}", field),
-
-                    DecoderError::ExpectedError(ref expected, ref found) =>
-                        format!("expected {}, found {}", expected, found),
-
-                    DecoderError::ParseError(ref pe) => match *pe {
-
-                        ParserError::IoError(ref io_error) =>
-                            format!("{}", io_error),
-
-                        ParserError::SyntaxError(ref code, ref r, ref c) => {
-                            let msg = json::error_str(*code);
-                            format!("{} (line {}, column {})", msg, r, c)
-                        },
-
-                    },
-
-                    _ => format!("{}", error),
-                };
-
-                format!("JSON error: {}", message)
-            },
+            ErrorKind::JsonError(ref error) =>
+                format!("{}", error),
 
             ErrorKind::AddrParseError(ref error) =>
                 format!("{}", error),
@@ -235,7 +206,7 @@ impl From<ErrorKind> for FisherError {
 
 
 derive_error!(io::Error, ErrorKind::IoError);
-derive_error!(json::DecoderError, ErrorKind::JsonError);
+derive_error!(serde_json::Error, ErrorKind::JsonError);
 derive_error!(net::AddrParseError, ErrorKind::AddrParseError);
 derive_error!(num::ParseIntError, ErrorKind::ParseIntError);
 derive_error!(Box<Error + Send + Sync>, ErrorKind::GenericError);

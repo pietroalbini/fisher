@@ -79,10 +79,10 @@ impl WebApp {
 mod tests {
     use std::io::Read;
 
+    use serde_json;
     use hyper::status::StatusCode;
     use hyper::method::Method;
     use hyper::header::Headers;
-    use rustc_serialize::json::Json;
 
     use utils::testing::*;
     use processor::{HealthDetails, ProcessorInput};
@@ -192,7 +192,9 @@ mod tests {
         // Decode the output
         let mut content = String::new();
         res.read_to_string(&mut content).unwrap();
-        let data = Json::from_str(&content).unwrap();
+        let data = serde_json::from_str::<serde_json::Value>(
+            &content
+        ).unwrap();
         let data_obj = data.as_object().unwrap();
 
         // Check the content of the returned JSON

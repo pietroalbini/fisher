@@ -13,9 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::{BTreeMap};
-
-use rustc_serialize::json::{Json, ToJson};
+use serde_json;
 
 use errors::FisherError;
 use processor::HealthDetails;
@@ -40,40 +38,49 @@ impl Response {
             _ => 200,
         }
     }
-}
 
-impl ToJson for Response {
-
-    fn to_json(&self) -> Json {
-        let mut map = BTreeMap::new();
-
-        map.insert("status".to_string(), match *self {
-            Response::NotFound => "not_found",
-            Response::Forbidden => "forbidden",
-            Response::BadRequest(..) => "bad_request",
-            Response::Ok | Response::HealthStatus(..) => "ok",
-        }.to_string().to_json());
-
-        if let Response::HealthStatus(ref details) = *self {
-            map.insert("result".to_string(), details.to_json());
-        }
-
-        if let Response::BadRequest(ref error) = *self {
-            map.insert("error_msg".into(), format!("{}", error).to_json());
-        }
-
-        Json::Object(map)
+    pub fn json(&self) -> String {
+        serde_json::to_string(&match *self {
+            Response::HealthStatus(ref details) => {
+                json!({
+                    "status": "ok",
+                    "result": details,
+                })
+            },
+            Response::BadRequest(ref error) => {
+                json!({
+                    "status": "bad_request",
+                    "error_msg": format!("{}", error),
+                })
+            },
+            _ => {
+                json!({
+                    "status": match *self {
+                        Response::NotFound => "not_found",
+                        Response::Forbidden => "forbidden",
+                        Response::BadRequest(..) => "bad_request",
+                        Response::Ok | Response::HealthStatus(..) => "ok",
+                    },
+                })
+            }
+        }).unwrap()
     }
 }
 
 
 #[cfg(test)]
 mod tests {
-    use rustc_serialize::json::ToJson;
+    use serde_json;
 
     use processor::HealthDetails;
     use errors::{FisherError, ErrorKind};
     use super::Response;
+
+
+    #[inline]
+    fn j(input: String) -> serde_json::Value {
+        serde_json::from_str(&input).unwrap()
+    }
 
 
     #[test]
@@ -82,13 +89,13 @@ mod tests {
         assert_eq!(response.status(), 404);
 
         // The result must be an object
-        let json = response.to_json();
+        let json = j(response.json());
         let obj = json.as_object().unwrap();
 
         // The status must be "not_found"
         assert_eq!(
-            obj.get("status").unwrap().as_string().unwrap(),
-            "not_found".to_string()
+            obj.get("status").unwrap().as_str().unwrap(),
+            "not_found"
         );
     }
 
@@ -99,13 +106,13 @@ mod tests {
         assert_eq!(response.status(), 403);
 
         // The result must be an object
-        let json = response.to_json();
+        let json = j(response.json());
         let obj = json.as_object().unwrap();
 
         // The status must be "forbidden"
         assert_eq!(
-            obj.get("status").unwrap().as_string().unwrap(),
-            "forbidden".to_string()
+            obj.get("status").unwrap().as_str().unwrap(),
+            "forbidden"
         );
     }
 
@@ -120,19 +127,19 @@ mod tests {
         assert_eq!(response.status(), 400);
 
         // The result must be an object
-        let json = response.to_json();
+        let json = j(response.json());
         let obj = json.as_object().unwrap();
 
         // The status must be "forbidden"
         assert_eq!(
-            obj.get("status").unwrap().as_string().unwrap(),
-            "bad_request".to_string()
+            obj.get("status").unwrap().as_str().unwrap(),
+            "bad_request"
         );
 
         // The error_msg must be the error's message
         assert_eq!(
-            obj.get("error_msg").unwrap().as_string().unwrap(),
-            error_msg
+            obj.get("error_msg").unwrap().as_str().unwrap(),
+            error_msg.as_str()
         );
     }
 
@@ -143,13 +150,13 @@ mod tests {
         assert_eq!(response.status(), 200);
 
         // The result must be an object
-        let json = response.to_json();
+        let json = j(response.json());
         let obj = json.as_object().unwrap();
 
         // The status must be "ok"
         assert_eq!(
-            obj.get("status").unwrap().as_string().unwrap(),
-            "ok".to_string()
+            obj.get("status").unwrap().as_str().unwrap(),
+            "ok"
         );
     }
 
@@ -163,15 +170,15 @@ mod tests {
         });
 
         // The result must be an object
-        let json = response.to_json();
+        let json = j(response.json());
         let obj = json.as_object().unwrap();
         assert_eq!(response.status(), 200);
 
 
         // The status must be "ok"
         assert_eq!(
-            obj.get("status").unwrap().as_string().unwrap(),
-            "ok".to_string()
+            obj.get("status").unwrap().as_str().unwrap(),
+            "ok"
         );
 
         // It must have an object called "result"

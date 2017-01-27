@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use rustc_serialize::json::{self, Json};
+use serde_json;
 
 use providers::prelude::*;
 use errors::ErrorKind;
@@ -31,7 +31,7 @@ lazy_static! {
 }
 
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 pub struct GitLabProvider {
     secret: Option<String>,
     events: Option<Vec<String>>,
@@ -40,7 +40,7 @@ pub struct GitLabProvider {
 impl ProviderTrait for GitLabProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
-        let inst: GitLabProvider = json::decode(config)?;
+        let inst: GitLabProvider = serde_json::from_str(config)?;
 
         // Check the validity of the events
         if let Some(ref events) = inst.events {
@@ -99,7 +99,7 @@ impl ProviderTrait for GitLabProvider {
         }
 
         // Check if the JSON body is valid
-        if ! Json::from_str(&req.body).is_ok() {
+        if ! serde_json::from_str::<serde_json::Value>(&req.body).is_ok() {
             return RequestType::Invalid;
         }
 

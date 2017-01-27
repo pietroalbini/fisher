@@ -22,7 +22,6 @@ use std::thread;
 
 use regex::{self, Regex};
 use tiny_http::{self, Method};
-use rustc_serialize::json::ToJson;
 
 use errors::FisherResult;
 use requests::Request;
@@ -220,7 +219,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
                 })();
 
                 let mut tiny_response = tiny_http::Response::from_data(
-                    response.to_json().to_string().into_bytes()
+                    response.json().into_bytes()
                 ).with_status_code(response.status());
 
                 tiny_response.add_header(server_header.clone());

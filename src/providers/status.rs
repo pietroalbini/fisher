@@ -18,10 +18,9 @@ use std::io::Write;
 use std::slice::Iter as SliceIter;
 use std::net::IpAddr;
 
-use rustc_serialize::json;
+use serde_json;
 
 use providers::prelude::*;
-use errors::ErrorKind;
 use jobs::JobOutput;
 
 
@@ -59,9 +58,11 @@ impl StatusEvent {
 }
 
 
-#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, RustcDecodable)]
+#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, Deserialize)]
 pub enum StatusEventKind {
+    #[serde(rename = "job_completed")]
     JobCompleted,
+    #[serde(rename = "job_failed")]
     JobFailed,
 }
 
@@ -76,14 +77,7 @@ impl StatusEventKind {
 }
 
 
-#[derive(Debug, RustcDecodable)]
-struct TemporaryStatusProviderDeserializerUntilSerdeComesOutREPLACEME {
-    events: Vec<String>,
-    hooks: Option<Vec<String>>,
-}
-
-
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct StatusProvider {
     events: Vec<StatusEventKind>,
     hooks: Option<Vec<String>>,
@@ -112,25 +106,7 @@ impl StatusProvider {
 impl ProviderTrait for StatusProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
-        let decoded = json::decode::<
-            TemporaryStatusProviderDeserializerUntilSerdeComesOutREPLACEME
-        >(config)?;
-
-        let mut events = Vec::new();
-        for event in &decoded.events {
-            match event.as_str() {
-                "job_completed" => events.push(StatusEventKind::JobCompleted),
-                "job_failed" => events.push(StatusEventKind::JobFailed),
-                _ => return Err(ErrorKind::InvalidInput(format!(
-                    r#""{}" is not a Fisher status event"#, event
-                )).into()),
-            }
-        }
-
-        Ok(StatusProvider {
-            hooks: decoded.hooks,
-            events: events,
-        })
+        Ok(serde_json::from_str(config)?)
     }
 
     fn validate(&self, request: &Request) -> RequestType {

@@ -13,12 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use rustc_serialize::json;
+use serde_json;
 
 use providers::prelude::*;
 
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 pub struct StandaloneProvider {
     secret: String,
 
@@ -47,7 +47,7 @@ impl ProviderTrait for StandaloneProvider {
 
     fn new(config: &str) -> FisherResult<Self> {
         // Check if it's possible to create a new instance and return it
-        let inst = json::decode(config)?;
+        let inst = serde_json::from_str(config)?;
         Ok(inst)
     }
 

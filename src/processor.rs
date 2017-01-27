@@ -13,13 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::{Arc, mpsc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::fmt;
-
-use rustc_serialize::json::{Json, ToJson};
 
 use jobs::Job;
 use hooks::Hooks;
@@ -373,23 +371,11 @@ impl fmt::Debug for Thread {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct HealthDetails {
     pub queued_jobs: usize,
     pub busy_threads: u16,
     pub max_threads: u16,
-}
-
-impl ToJson for HealthDetails {
-
-    fn to_json(&self) -> Json {
-        let mut map = BTreeMap::new();
-        map.insert("queued_jobs".to_string(), self.queued_jobs.to_json());
-        map.insert("busy_threads".to_string(), self.busy_threads.to_json());
-        map.insert("max_threads".to_string(), self.max_threads.to_json());
-
-        Json::Object(map)
-    }
 }
 
 

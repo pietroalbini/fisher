@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use rustc_serialize::json::{self, Json};
+use serde_json;
 use ring;
 
 use providers::prelude::*;
@@ -38,7 +38,7 @@ lazy_static! {
 }
 
 
-#[derive(Debug, RustcDecodable)]
+#[derive(Debug, Deserialize)]
 pub struct GitHubProvider {
     secret: Option<String>,
     events: Option<Vec<String>>,
@@ -47,7 +47,7 @@ pub struct GitHubProvider {
 impl ProviderTrait for GitHubProvider {
 
     fn new(input: &str) -> FisherResult<GitHubProvider> {
-        let inst: GitHubProvider = json::decode(input)?;
+        let inst: GitHubProvider = serde_json::from_str(input)?;
 
         if let Some(ref events) = inst.events {
             // Check if the events exists
@@ -105,7 +105,7 @@ impl ProviderTrait for GitHubProvider {
         }
 
         // Check if the JSON in the body is valid
-        if ! Json::from_str(&req.body).is_ok() {
+        if serde_json::from_str::<serde_json::Value>(&req.body).is_err() {
             return RequestType::Invalid;
         }
 
