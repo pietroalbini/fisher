@@ -152,7 +152,7 @@ fn app() -> fisher::Result<()> {
         );
         ::std::process::exit(1);
     }
-    let mut app = app_result.unwrap();
+    let app = app_result.unwrap();
 
     println!("{} on {}",
         Colour::Green.bold().paint("Web API listening"), app.web_address(),
@@ -168,7 +168,7 @@ fn app() -> fisher::Result<()> {
     }
 
     // Stop Fisher
-    app.stop();
+    app.stop()?;
 
     Ok(())
 }

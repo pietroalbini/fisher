@@ -18,7 +18,7 @@ use std::net;
 use std::sync::Arc;
 
 use hooks::{self, HookNamesIter, Hooks, Hook};
-use processor::ProcessorManager;
+use processor::Processor;
 use web::WebApp;
 use errors::FisherResult;
 
@@ -82,15 +82,14 @@ impl<'a> Fisher<'a> {
         // Finalize the hooks
         let hooks = Arc::new(self.hooks);
 
-        // Initialize the state
-        let mut processor = ProcessorManager::new();
-        let mut web_api = WebApp::new();
-
         // Start the processor
-        processor.start(self.options.max_threads, hooks.clone());
-        let processor_input = processor.input().unwrap();
+        let processor = Processor::new(
+            self.options.max_threads, hooks.clone(),
+        )?;
+        let processor_input = processor.input();
 
         // Start the Web API
+        let mut web_api = WebApp::new();
         let listening;
         match web_api.listen(
             hooks.clone(), self.options, processor_input
@@ -100,7 +99,7 @@ impl<'a> Fisher<'a> {
             },
             Err(error) => {
                 // Be sure to stop the processor
-                processor.stop();
+                processor.stop()?;
 
                 return Err(error);
             },
@@ -116,14 +115,14 @@ impl<'a> Fisher<'a> {
 
 
 pub struct RunningFisher {
-    processor: ProcessorManager,
+    processor: Processor,
     web_api: WebApp,
     web_address: net::SocketAddr,
 }
 
 impl RunningFisher {
 
-    fn new(processor: ProcessorManager, web_api: WebApp,
+    fn new(processor: Processor, web_api: WebApp,
            web_address: net::SocketAddr) -> Self {
         RunningFisher {
             processor: processor,
@@ -136,8 +135,10 @@ impl RunningFisher {
         &self.web_address
     }
 
-    pub fn stop(&mut self) {
+    pub fn stop(mut self) -> FisherResult<()> {
         self.web_api.stop();
-        self.processor.stop();
+        self.processor.stop()?;
+
+        Ok(())
     }
 }

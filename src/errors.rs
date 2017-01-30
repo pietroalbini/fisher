@@ -18,6 +18,7 @@ use std::fmt;
 use std::net;
 use std::num;
 use std::error::Error;
+use std::sync::mpsc;
 
 use serde_json;
 
@@ -36,6 +37,7 @@ pub enum ErrorKind {
     InvalidHexLength,
 
     // Derived errors
+    BrokenChannel,
     IoError(io::Error),
     JsonError(serde_json::Error),
     AddrParseError(net::AddrParseError),
@@ -118,6 +120,8 @@ impl Error for FisherError {
                 "invalid character in hex",
             ErrorKind::InvalidHexLength =>
                 "invalid length of the hex",
+            ErrorKind::BrokenChannel =>
+                "internal communication channel crashed",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -164,6 +168,9 @@ impl fmt::Display for FisherError {
             ErrorKind::InvalidHexLength =>
                 "invalid length of the hex".into(),
 
+            ErrorKind::BrokenChannel =>
+                "an internal communication channel crashed".into(),
+
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),
 
@@ -201,6 +208,22 @@ impl From<ErrorKind> for FisherError {
 
     fn from(error: ErrorKind) -> Self {
         FisherError::new(error)
+    }
+}
+
+
+impl From<mpsc::RecvError> for FisherError {
+
+    fn from(_: mpsc::RecvError) -> Self {
+        FisherError::new(ErrorKind::BrokenChannel)
+    }
+}
+
+
+impl<T> From<mpsc::SendError<T>> for FisherError {
+
+    fn from(_: mpsc::SendError<T>) -> Self {
+        FisherError::new(ErrorKind::BrokenChannel)
     }
 }
 

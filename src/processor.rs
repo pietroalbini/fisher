@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+
 use std::collections::VecDeque;
 use std::sync::{Arc, mpsc};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,169 +24,155 @@ use jobs::Job;
 use hooks::Hooks;
 use requests::Request;
 use providers::StatusEvent;
-use errors;
+use errors::{self, FisherResult};
 
 
-pub struct ProcessorManager {
-    input: Option<mpsc::Sender<ProcessorInput>>,
-    stop_wait: Option<mpsc::Receiver<()>>,
+#[derive(Clone)]
+pub enum ProcessorInput {
+    Job(Job),
+    HealthStatus(mpsc::Sender<HealthDetails>),
+
+    _StopSignal,
+    _JobEnded,
 }
 
-impl ProcessorManager {
 
-    pub fn new() -> ProcessorManager {
-        ProcessorManager {
-            input: None,
-            stop_wait: None,
-        }
-    }
+#[derive(Debug)]
+pub struct Processor {
+    input: mpsc::Sender<ProcessorInput>,
+    wait: mpsc::Receiver<()>,
+}
 
-    pub fn start(&mut self, max_threads: u16, hooks: Arc<Hooks>) {
-        // This is used to retrieve the input we want from the child thread
+impl Processor {
+
+    pub fn new(max_threads: u16, hooks: Arc<Hooks>) -> FisherResult<Self> {
+        // Retrieve wanted information from the spawned thread
         let (input_send, input_recv) = mpsc::sync_channel(0);
-
-        // This is used by the thread to notify the processor it completed its
-        // work, in order to block execution when stopping fisher
-        let (stop_wait_send, stop_wait_recv) = mpsc::sync_channel(0);
+        let (wait_send, wait_recv) = mpsc::channel();
 
         ::std::thread::spawn(move || {
-            let (mut processor, input) = Processor::new(max_threads, hooks);
+            let inner = InnerProcessor::new(
+                max_threads, hooks
+            );
+            input_send.send(inner.input()).unwrap();
 
-            // Send the input back to the parent thread
-            input_send.send(input).unwrap();
+            inner.run().unwrap();
 
-            processor.run();
-
-            // Notify ProcessorManager the thread did its work
-            stop_wait_send.send(()).unwrap();
+            // Notify the main thread this exited
+            wait_send.send(()).unwrap();
         });
 
-        self.input = Some(input_recv.recv().unwrap());
-        self.stop_wait = Some(stop_wait_recv);
+        Ok(Processor {
+            input: input_recv.recv()?,
+            wait: wait_recv,
+        })
     }
 
-    pub fn stop(&self) {
-        if let Some(ref input) = self.input {
-            // Tell the processor to exit as soon as possible
-            input.send(ProcessorInput::StopSignal).unwrap();
+    pub fn stop(self) -> FisherResult<()> {
+        // Ask the processor to stop
+        self.input.send(ProcessorInput::_StopSignal)?;
+        self.wait.recv()?;
 
-            // Wait until the processor did its work
-            if let Some(ref stop_wait) = self.stop_wait {
-                let _ = stop_wait.recv();
-            }
-        }
+        Ok(())
     }
 
-    pub fn input(&self) -> Option<mpsc::Sender<ProcessorInput>> {
+    pub fn input(&self) -> mpsc::Sender<ProcessorInput> {
         self.input.clone()
     }
 }
 
 
-#[derive(Clone)]
-pub enum ProcessorInput {
-    StopSignal,
-    Job(Job),
-    HealthStatus(mpsc::Sender<HealthDetails>),
-    JobEnded,
-}
-
-
 #[derive(Debug)]
-struct Processor {
-    jobs: VecDeque<Job>,
+struct InnerProcessor {
+    max_threads: u16,
     hooks: Arc<Hooks>,
 
     should_stop: bool,
+    queue: VecDeque<Job>,
     threads: Vec<Thread>,
-    max_threads: u16,
 
-    input_recv: mpsc::Receiver<ProcessorInput>,
     input_send: mpsc::Sender<ProcessorInput>,
+    input_recv: mpsc::Receiver<ProcessorInput>,
 }
 
-impl Processor {
+impl InnerProcessor {
 
-    pub fn new(max_threads: u16, hooks: Arc<Hooks>)
-               -> (Processor, mpsc::Sender<ProcessorInput>) {
-        // Create the channel for the input
+    fn new(max_threads: u16, hooks: Arc<Hooks>) -> Self {
         let (input_send, input_recv) = mpsc::channel();
 
-        let processor = Processor {
-            jobs: VecDeque::new(),
+        InnerProcessor {
+            max_threads: max_threads,
             hooks: hooks,
 
             should_stop: false,
+            queue: VecDeque::new(),
             threads: Vec::new(),
-            max_threads: max_threads,
 
+            input_send: input_send,
             input_recv: input_recv,
-            input_send: input_send.clone(),
-        };
-
-        // Return both the processor and the input_send
-        (processor, input_send)
+        }
     }
 
-    pub fn run(&mut self) {
-        // Create the needed threads
+    fn input(&self) -> mpsc::Sender<ProcessorInput> {
+        self.input_send.clone()
+    }
+
+    fn run(mut self) -> FisherResult<()> {
         for _ in 0..self.max_threads {
             self.spawn_thread();
         }
 
         while let Ok(input) = self.input_recv.recv() {
             match input {
-                ProcessorInput::StopSignal => {
-                    self.should_stop = true;
-                    self.cleanup_threads();
 
-                    // Exit if no more threads are left
-                    if self.threads.is_empty() {
-                        break;
-                    }
-                },
                 ProcessorInput::Job(job) => {
-                    self.run_jobs(job, false);
+                    self.queue.push_back(job);
+                    self.run_jobs();
                 },
-                ProcessorInput::JobEnded => {
-                    if let Some(job) = self.jobs.pop_front() {
-                        self.run_jobs(job, true);
-                    } else if self.should_stop {
-                        // Clean up remaining threads
+
+                ProcessorInput::HealthStatus(return_to) => {
+                    // Count the busy threads
+                    let busy_threads = self.threads.iter()
+                        .filter(|thread| thread.busy())
+                        .count();
+
+                    return_to.send(HealthDetails {
+                        queued_jobs: self.queue.len(),
+                        busy_threads: busy_threads as u16,
+                        max_threads: self.max_threads,
+                    })?;
+                },
+
+                ProcessorInput::_JobEnded => {
+                    self.run_jobs();
+
+                    if self.should_stop {
                         self.cleanup_threads();
 
-                        // Exit if no more threads are left
                         if self.threads.is_empty() {
                             break;
                         }
                     }
                 },
-                ProcessorInput::HealthStatus(return_to) => {
-                    return_to.send(HealthDetails {
-                        queued_jobs: self.jobs.len(),
-                        busy_threads: self.busy_threads(),
-                        max_threads: self.max_threads,
-                    }).unwrap();
-                }
-            }
-        }
-    }
 
-    pub fn busy_threads(&self) -> u16 {
-        let mut result = 0;
+                ProcessorInput::_StopSignal => {
+                    self.should_stop = true;
+                    self.cleanup_threads();
 
-        for thread in &self.threads {
-            if thread.busy() {
-                result += 1;
+                    if self.threads.is_empty() {
+                        break;
+                    }
+                },
             }
         }
 
-        result
+        Ok(())
     }
 
+    #[inline]
     fn spawn_thread(&mut self) {
         self.threads.push(Thread::new(
-            self.input_send.clone(), self.hooks.clone()
+            self.input_send.clone(), self.hooks.clone(),
         ));
     }
 
@@ -212,43 +199,26 @@ impl Processor {
         }
     }
 
-    fn run_jobs(&mut self, mut job: Job, push_front: bool) {
+    fn run_jobs(&mut self) {
         // Here there is a loop so if for some reason there are multiple
         // threads available and there are enough elements in the queue,
         // all of them are processed
-        loop {
-            // If the job *failed*
-            if let Some(job) = self.run_job(job) {
-                if push_front {
-                    self.jobs.push_front(job);
-                } else {
-                    self.jobs.push_back(job);
+        'main: loop {
+            if let Some(mut job) = self.queue.pop_front() {
+                // Try to run the job in a thread
+                for thread in &self.threads {
+                    // The process() method returns Some(Job) if
+                    // *IT'S BUSY* working on another job
+                    if let Some(j) = thread.process(job) {
+                        job = j;
+                    } else {
+                        continue 'main;
+                    }
                 }
-                return;
+                self.queue.push_front(job);
             }
-
-            if let Some(j) = self.jobs.pop_front() {
-                job = j;
-            } else {
-                return;
-            }
+            break;
         }
-    }
-
-    // Here, None equals to success, and Some(job) equals to failure
-    fn run_job(&mut self, mut job: Job) -> Option<Job> {
-        // Try to process the job in each thread
-        for thread in &self.threads {
-            // If Some(Job) is returned, the thread was busy
-            if let Some(j) = thread.process(job) {
-                // Continue with the loop, moving ownership of the job
-                job = j;
-            } else {
-                return None;
-            }
-        }
-
-        Some(job)
     }
 }
 
@@ -317,7 +287,7 @@ impl Thread {
 
                         busy_inner.store(false, Ordering::Relaxed);
                         processor_input.send(
-                            ProcessorInput::JobEnded
+                            ProcessorInput::_JobEnded
                         ).unwrap();
                     },
 
@@ -388,16 +358,15 @@ mod tests {
     use utils::testing::*;
     use requests::Request;
 
-    use super::{ProcessorManager, ProcessorInput};
+    use super::{Processor, ProcessorInput};
 
 
     #[test]
     fn test_processor_starting() {
         let env = TestingEnv::new();
 
-        let mut processor = ProcessorManager::new();
-        processor.start(1, env.hooks());
-        processor.stop();
+        let processor = Processor::new(1, env.hooks()).unwrap();
+        processor.stop().unwrap();
 
         env.cleanup();
     }
@@ -407,8 +376,7 @@ mod tests {
     fn test_processor_clean_stop() {
         let mut env = TestingEnv::new();
 
-        let mut processor = ProcessorManager::new();
-        processor.start(1, env.hooks());
+        let processor = Processor::new(1, env.hooks()).unwrap();
 
         // Prepare a request
         let mut out = env.tempdir();
@@ -419,11 +387,11 @@ mod tests {
 
         // Queue a dummy job
         let job = env.create_job("long", Request::Web(req));
-        processor.input().unwrap().send(ProcessorInput::Job(job)).unwrap();
+        processor.input().send(ProcessorInput::Job(job)).unwrap();
 
         // Exit immediately -- this forces the processor to wait since the job
         // sleeps for half a second
-        processor.stop();
+        processor.stop().unwrap();
 
         // Check if the job was not killed
         assert!(out.exists(), "job was killed before it completed");
@@ -435,10 +403,9 @@ mod tests {
     fn run_multiple_append(threads: u16) -> String {
         let mut env = TestingEnv::new();
 
-        let mut processor = ProcessorManager::new();
-        processor.start(threads, env.hooks());
+        let processor = Processor::new(threads, env.hooks()).unwrap();
 
-        let input = processor.input().unwrap();
+        let input = processor.input();
         let mut out = env.tempdir();
         out.push("out");
 
@@ -455,7 +422,7 @@ mod tests {
             input.send(ProcessorInput::Job(job)).unwrap();
         }
 
-        processor.stop();
+        processor.stop().unwrap();
 
         // Read the content of the file
         let mut file = File::open(&out).unwrap();
@@ -485,10 +452,9 @@ mod tests {
     fn test_health_status() {
         let mut env = TestingEnv::new();
 
-        let mut processor = ProcessorManager::new();
-        processor.start(1, env.hooks());
+        let processor = Processor::new(1, env.hooks()).unwrap();
 
-        let input = processor.input().unwrap();
+        let input = processor.input();
         let mut out = env.tempdir();
         out.push("ok");
 
@@ -520,7 +486,7 @@ mod tests {
         // Create the file the first job is waiting for
         File::create(&out).unwrap();
 
-        processor.stop();
+        processor.stop().unwrap();
 
         // The file should not exist -- the first job removes it
         assert!(! out.exists());
