@@ -198,10 +198,10 @@ pub struct WebAppInstance {
 
 impl WebAppInstance {
 
-    pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: Option<u8>)
-               -> Self {
+    pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: Option<u8>,
+               logger: Logger) -> Self {
         // Create a new instance of WebApp
-        let mut inst = WebApp::new();
+        let mut inst = WebApp::new(logger);
 
         // Create the input channel for the fake processor
         let (input_send, input_recv) = mpsc::channel();
@@ -372,7 +372,9 @@ impl TestingEnv {
 
     pub fn start_web(&self, health: bool, behind_proxies: Option<u8>)
                      -> WebAppInstance {
-        WebAppInstance::new(self.hooks.clone(), health, behind_proxies)
+        WebAppInstance::new(
+            self.hooks.clone(), health, behind_proxies, self.logger()
+        )
     }
 }
 

@@ -58,6 +58,10 @@ pub enum LogEvent {
     /// An error occured inside of Fisher. The value contains all the details
     /// about the error, such as where it happened and why.
     Error(FisherError),
+
+    /// A ping was received for the provided hook. This usually means the hook
+    /// is configured properly.
+    PingReceived(String),
 }
 
 impl LogEvent {
@@ -69,6 +73,9 @@ impl LogEvent {
 
         match *self {
             Error(ref error) => format!("{}", error),
+            PingReceived(ref hook) => {
+                format!("Ping received for hook {}", hook)
+            },
         }
     }
 }

@@ -24,17 +24,20 @@ use hooks::Hooks;
 use processor::ProcessorInput;
 use web::http::HttpServer;
 use web::api::WebApi;
+use logger::Logger;
 
 
 pub struct WebApp {
     server: Option<HttpServer<WebApi>>,
+    logger: Logger,
 }
 
 impl WebApp {
 
-    pub fn new() -> Self {
+    pub fn new(logger: Logger) -> Self {
         WebApp {
             server: None,
+            logger: logger,
         }
     }
 
@@ -42,7 +45,9 @@ impl WebApp {
                   input: mpsc::Sender<ProcessorInput>)
                  -> FisherResult<SocketAddr> {
         // Create the web api
-        let api = WebApi::new(input, hooks, options.enable_health);
+        let api = WebApi::new(
+            input, hooks, options.enable_health, self.logger.clone(),
+        );
 
         // Create the HTTP server
         let mut server = HttpServer::new(api, options.behind_proxies);

@@ -131,6 +131,13 @@ fn app() -> fisher::Result<()> {
 
         match *event {
             Error(ref err) => print_err(err),
+            PingReceived(ref hook) => {
+                println!(
+                    "{} for the {} hook",
+                    ::ansi_term::Colour::Green.bold().paint("Ping received"),
+                    hook
+                );
+            }
         }
     });
 

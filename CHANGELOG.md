@@ -9,6 +9,7 @@ This document contains what changed in each release of Fisher.
 * **New features:**
 
  * Add the `max_threads` field to `GET /health`
+ * Pings received are now logged to the console
 
 * **Changes and improvements:**
 

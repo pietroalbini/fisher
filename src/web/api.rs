@@ -20,12 +20,14 @@ use hooks::Hooks;
 use jobs::Job;
 use processor::ProcessorInput;
 use web::responses::Response;
+use logger::{Logger, LogEvent};
 
 
 #[derive(Clone)]
 pub struct WebApi {
     processor_input: Arc<Mutex<mpsc::Sender<ProcessorInput>>>,
     hooks: Arc<Hooks>,
+    logger: Arc<Mutex<Logger>>,
 
     health_enabled: bool,
 }
@@ -33,11 +35,13 @@ pub struct WebApi {
 impl WebApi {
 
     pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
-               hooks: Arc<Hooks>, health_enabled: bool) -> Self {
+               hooks: Arc<Hooks>, health_enabled: bool, logger: Logger)
+               -> Self {
         WebApi {
             processor_input: Arc::new(Mutex::new(processor_input)),
             hooks: hooks,
             health_enabled: health_enabled,
+            logger: Arc::new(Mutex::new(logger)),
         }
     }
 
@@ -57,8 +61,13 @@ impl WebApi {
 
         // Change behavior based on the request type
         match request_type {
-            // Don't do anything if it's only a ping
-            RequestType::Ping => Response::Ok,
+
+            RequestType::Ping => {
+                self.logger.lock().unwrap()
+                           .log(LogEvent::PingReceived(hook.name().into()));
+
+                Response::Ok
+            },
 
             // Queue a job if the hook should be executed
             RequestType::ExecuteHook => {

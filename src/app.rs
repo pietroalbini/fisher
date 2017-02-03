@@ -102,7 +102,7 @@ impl<'a> Fisher<'a> {
         let processor_input = processor.input();
 
         // Start the Web API
-        let mut web_api = WebApp::new();
+        let mut web_api = WebApp::new(logger.clone());
         let listening;
         match web_api.listen(
             hooks.clone(), self.options, processor_input
