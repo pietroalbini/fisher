@@ -24,8 +24,8 @@ use jobs::Job;
 use hooks::Hooks;
 use requests::Request;
 use providers::StatusEvent;
-use errors::{self, FisherResult};
-
+use errors::FisherResult;
+use logger::{Logger, LogEvent};
 
 #[derive(Clone)]
 pub enum ProcessorInput {
@@ -41,18 +41,20 @@ pub enum ProcessorInput {
 pub struct Processor {
     input: mpsc::Sender<ProcessorInput>,
     wait: mpsc::Receiver<()>,
+    logger: Logger,
 }
 
 impl Processor {
 
-    pub fn new(max_threads: u16, hooks: Arc<Hooks>) -> FisherResult<Self> {
+    pub fn new(max_threads: u16, hooks: Arc<Hooks>, logger: Logger) -> FisherResult<Self> {
         // Retrieve wanted information from the spawned thread
         let (input_send, input_recv) = mpsc::sync_channel(0);
         let (wait_send, wait_recv) = mpsc::channel();
 
+        let logger_clone = logger.clone();
         ::std::thread::spawn(move || {
             let inner = InnerProcessor::new(
-                max_threads, hooks
+                max_threads, hooks, logger_clone,
             );
             input_send.send(inner.input()).unwrap();
 
@@ -65,6 +67,7 @@ impl Processor {
         Ok(Processor {
             input: input_recv.recv()?,
             wait: wait_recv,
+            logger: logger,
         })
     }
 
@@ -86,6 +89,7 @@ impl Processor {
 struct InnerProcessor {
     max_threads: u16,
     hooks: Arc<Hooks>,
+    logger: Logger,
 
     should_stop: bool,
     queue: VecDeque<Job>,
@@ -97,12 +101,13 @@ struct InnerProcessor {
 
 impl InnerProcessor {
 
-    fn new(max_threads: u16, hooks: Arc<Hooks>) -> Self {
+    fn new(max_threads: u16, hooks: Arc<Hooks>, logger: Logger) -> Self {
         let (input_send, input_recv) = mpsc::channel();
 
         InnerProcessor {
             max_threads: max_threads,
             hooks: hooks,
+            logger: logger,
 
             should_stop: false,
             queue: VecDeque::new(),
@@ -172,7 +177,7 @@ impl InnerProcessor {
     #[inline]
     fn spawn_thread(&mut self) {
         self.threads.push(Thread::new(
-            self.input_send.clone(), self.hooks.clone(),
+            self.logger.clone(), self.input_send.clone(), self.hooks.clone()
         ));
     }
 
@@ -240,7 +245,7 @@ struct Thread {
 
 impl Thread {
 
-    pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
+    pub fn new(logger: Logger, processor_input: mpsc::Sender<ProcessorInput>,
                hooks: Arc<Hooks>) -> Thread {
         let (input_send, input_recv) = mpsc::channel();
         let busy = Arc::new(AtomicBool::new(false));
@@ -275,13 +280,13 @@ impl Thread {
 
                                     if let Err(mut error) = status_result {
                                         error.set_hook(hp.hook.name().into());
-                                        let _ = errors::print_err::<()>(Err(error));
+                                        logger.log(LogEvent::Error(error));
                                     }
                                 }
                             },
                             Err(mut error) => {
                                 error.set_hook(job.hook_name().into());
-                                let _ = errors::print_err::<()>(Err(error));
+                                logger.log(LogEvent::Error(error));
                             }
                         }
 
@@ -365,7 +370,7 @@ mod tests {
     fn test_processor_starting() {
         let env = TestingEnv::new();
 
-        let processor = Processor::new(1, env.hooks()).unwrap();
+        let processor = Processor::new(1, env.hooks(), env.logger()).unwrap();
         processor.stop().unwrap();
 
         env.cleanup();
@@ -376,7 +381,7 @@ mod tests {
     fn test_processor_clean_stop() {
         let mut env = TestingEnv::new();
 
-        let processor = Processor::new(1, env.hooks()).unwrap();
+        let processor = Processor::new(1, env.hooks(), env.logger()).unwrap();
 
         // Prepare a request
         let mut out = env.tempdir();
@@ -403,7 +408,7 @@ mod tests {
     fn run_multiple_append(threads: u16) -> String {
         let mut env = TestingEnv::new();
 
-        let processor = Processor::new(threads, env.hooks()).unwrap();
+        let processor = Processor::new(threads, env.hooks(), env.logger()).unwrap();
 
         let input = processor.input();
         let mut out = env.tempdir();
@@ -452,7 +457,7 @@ mod tests {
     fn test_health_status() {
         let mut env = TestingEnv::new();
 
-        let processor = Processor::new(1, env.hooks()).unwrap();
+        let processor = Processor::new(1, env.hooks(), env.logger()).unwrap();
 
         let input = processor.input();
         let mut out = env.tempdir();

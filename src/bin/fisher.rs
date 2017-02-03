@@ -75,28 +75,23 @@ pub fn parse_cli() -> fisher::Result<fisher::FisherOptions> {
 }
 
 
-fn print_err<T>(result: fisher::Result<T>) -> fisher::Result<T> {
-    // Show a nice error message
-    if let Err(ref error) = result {
+fn print_err(error: &fisher::Error) {
+    println!("{} {}",
+        ::ansi_term::Colour::Red.bold().paint("Error:"),
+        error,
+    );
+    if let Some(location) = error.location() {
         println!("{} {}",
-            ::ansi_term::Colour::Red.bold().paint("Error:"),
-            error,
+            ::ansi_term::Colour::Yellow.bold().paint("Location:"),
+            location,
         );
-        if let Some(location) = error.location() {
-            println!("{} {}",
-                ::ansi_term::Colour::Yellow.bold().paint("Location:"),
-                location,
-            );
-        }
-        if let Some(hook) = error.processing() {
-            println!("{} {}",
-                ::ansi_term::Colour::Yellow.bold().paint("While processing:"),
-                hook,
-            );
-        }
     }
-
-    result
+    if let Some(hook) = error.processing() {
+        println!("{} {}",
+            ::ansi_term::Colour::Yellow.bold().paint("While processing:"),
+            hook,
+        );
+    }
 }
 
 
@@ -129,8 +124,18 @@ fn app() -> fisher::Result<()> {
 
     // Create a new Fisher instance
     let mut factory = fisher::Fisher::new(&options);
-    factory.collect_hooks(&options.hooks_dir)?;
 
+    // Listen for incoming logs
+    factory.listen_logs(|event: &fisher::logger::LogEvent| {
+        use fisher::logger::LogEvent::*;
+
+        match *event {
+            Error(ref err) => print_err(err),
+        }
+    });
+
+    // Collect the hooks
+    factory.collect_hooks(&options.hooks_dir)?;
     {
         let mut hook_names = factory.hook_names().collect::<Vec<&String>>();
         hook_names.sort();
@@ -175,8 +180,11 @@ fn app() -> fisher::Result<()> {
 
 
 fn main() {
-    ::std::process::exit(match print_err(app()) {
+    ::std::process::exit(match app() {
         Ok(..) => 0,
-        Err(..) => 1,
+        Err(error) => {
+            print_err(&error);
+            1
+        },
     });
 }

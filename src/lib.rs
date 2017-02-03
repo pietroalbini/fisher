@@ -29,6 +29,7 @@ extern crate libc;
 #[cfg(feature = "provider-github")] extern crate ring;
 #[cfg(test)] extern crate hyper;
 
+// Internal modules
 #[macro_use] mod utils;
 mod providers;
 mod hooks;
@@ -39,6 +40,9 @@ mod web;
 mod app;
 mod requests;
 mod native;
+
+// Public modules
+pub mod logger;
 
 // Public API
 pub use app::{Fisher, RunningFisher, FisherOptions};

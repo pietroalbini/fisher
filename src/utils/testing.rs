@@ -29,6 +29,7 @@ use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
 use processor::{ProcessorInput, HealthDetails};
+use logger::Logger;
 use utils;
 
 
@@ -306,6 +307,7 @@ impl WebAppInstance {
 pub struct TestingEnv {
     hooks: Arc<Hooks>,
     remove_dirs: Vec<String>,
+    logger: Logger,
 }
 
 impl TestingEnv {
@@ -322,6 +324,7 @@ impl TestingEnv {
         TestingEnv {
             hooks: Arc::new(hooks),
             remove_dirs: vec![hooks_dir],
+            logger: Logger::new(),
         }
     }
 
@@ -348,6 +351,12 @@ impl TestingEnv {
         let dir = utils::create_temp_dir().unwrap();
         self.delete_also(dir.to_str().unwrap());
         dir
+    }
+
+    // LOGGING UTILITIES
+
+    pub fn logger(&self) -> Logger {
+        self.logger.clone()
     }
 
     // JOBS UTILITIES

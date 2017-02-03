@@ -21,6 +21,7 @@ use hooks::{self, HookNamesIter, Hooks, Hook};
 use processor::Processor;
 use web::WebApp;
 use errors::FisherResult;
+use logger::{Logger, LogHandler, IntoLogHandler};
 
 
 #[derive(Debug, Clone)]
@@ -50,6 +51,7 @@ impl FisherOptions {
 pub struct Fisher<'a> {
     options: &'a FisherOptions,
     hooks: Hooks,
+    log_listeners: Vec<LogHandler>,
 }
 
 impl<'a> Fisher<'a> {
@@ -58,6 +60,7 @@ impl<'a> Fisher<'a> {
         Fisher {
             options: options,
             hooks: Hooks::new(),
+            log_listeners: Vec::new(),
         }
     }
 
@@ -78,13 +81,23 @@ impl<'a> Fisher<'a> {
         self.hooks.names()
     }
 
-    pub fn start(self) -> FisherResult<RunningFisher> {
+    pub fn listen_logs<F: IntoLogHandler>(&mut self, func: F) {
+        self.log_listeners.push(func.into_handler());
+    }
+
+    pub fn start(mut self) -> FisherResult<RunningFisher> {
+        // Setup the logger
+        let logger = Logger::new();
+        for listener in self.log_listeners.drain(..)  {
+            logger.listen(listener);
+        }
+
         // Finalize the hooks
         let hooks = Arc::new(self.hooks);
 
         // Start the processor
         let processor = Processor::new(
-            self.options.max_threads, hooks.clone(),
+            self.options.max_threads, hooks.clone(), logger.clone()
         )?;
         let processor_input = processor.input();
 
