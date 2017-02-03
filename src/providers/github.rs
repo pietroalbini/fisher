@@ -99,7 +99,7 @@ impl ProviderTrait for GitHubProvider {
 
         // Check if the event should be accepted
         if let Some(ref events) = self.events {
-            if ! events.contains(event) {
+            if !( events.contains(event) || *event == "ping") {
                 return RequestType::Invalid;
             }
         }
