@@ -8,8 +8,7 @@ HTTP request. Being a single binary, you can deploy it easily wherever you
 want.
 
 Fisher is released under the GNU GPL v3+ license, see LICENSE for more details.
-In order to build it, you need to have Rust 1.15.0 (currently in beta) or
-greater installed.
+In order to build it, you need to have Rust 1.15.0 or greater installed.
 
 ### Usage
 
