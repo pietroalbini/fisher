@@ -9,6 +9,8 @@ This document contains what changed in each release of Fisher.
 * **New features:**
 
  * Add the `max_threads` field to `GET /health`
+ * Add the `label`, `milestone`, `organization`, `project_card`,
+   `project_column`, `project`, `pull_request_review`, `team` GitHub events
 
 * **Changes and improvements:**
 

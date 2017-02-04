@@ -25,9 +25,10 @@ lazy_static! {
     static ref GITHUB_EVENTS: Vec<&'static str> = vec![
         "commit_comment", "create", "delete", "deployment",
         "deployment_status", "fork", "gollum", "issue_comment", "issues",
-        "member", "membership", "page_build", "public",
-        "pull_reques_review_comment", "pull_request", "push", "repository",
-        "release", "status", "team_add", "watch",
+        "label", "member", "membership", "milestone", "organization",
+        "page_build", "project_card", "project_column", "project", "public",
+        "pull_reques_review_comment", "pull_request_review", "pull_request",
+        "push", "repository", "release", "status", "team", "team_add", "watch",
     ];
 
     static ref GITHUB_HEADERS: Vec<&'static str> = vec![
