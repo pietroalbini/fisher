@@ -107,19 +107,19 @@ mod tests {
         let mut inst = testing_env.start_web(true, None);
 
         // It shouldn't be possible to call a non-existing hook
-        let res = inst.request(Method::Get, "/hook/invalid")
+        let res = inst.request(Method::Get, "/hook/invalid.sh")
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::NotFound);
         assert!(inst.processor_input().is_none());
 
         // Call the example hook without authorization
-        let res = inst.request(Method::Get, "/hook/example?secret=invalid")
+        let res = inst.request(Method::Get, "/hook/example.sh?secret=invalid")
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::Forbidden);
         assert!(inst.processor_input().is_none());
 
         // Call the example hook with authorization
-        let res = inst.request(Method::Get, "/hook/example?secret=testing")
+        let res = inst.request(Method::Get, "/hook/example.sh?secret=testing")
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::Ok);
 
@@ -129,13 +129,13 @@ mod tests {
 
         // Assert the right job is queued
         if let ProcessorInput::Job(job) = input.unwrap() {
-            assert_eq!(job.hook_name(), "example");
+            assert_eq!(job.hook_name(), "example.sh");
         } else {
             panic!("Wrong processor input received");
         }
 
         // Call the example hook simulating a Ping
-        let res = inst.request(Method::Get, "/hook/example?request_type=ping")
+        let res = inst.request(Method::Get, "/hook/example.sh?request_type=ping")
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::Ok);
 
@@ -144,7 +144,7 @@ mod tests {
 
         // Try to call an internal hook (in this case with the Status provider)
         let res = inst.request(Method::Get, concat!(
-            "/hook/status-example",
+            "/hook/status-example.sh",
             "?event=job_completed",
             "&hook_name=trigger-status",
             "&exit_code=0",
@@ -226,7 +226,7 @@ mod tests {
         let mut inst = testing_env.start_web(true, Some(1));
 
         // Call the example hook without a proxy
-        let res = inst.request(Method::Get, "/hook/example?ip=127.1.1.1")
+        let res = inst.request(Method::Get, "/hook/example.sh?ip=127.1.1.1")
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::BadRequest);
         assert!(inst.processor_input().is_none());
@@ -236,7 +236,7 @@ mod tests {
         headers.set_raw("X-Forwarded-For", vec![b"127.1.1.1".to_vec()]);
 
         // Make an example request
-        let res = inst.request(Method::Get, "/hook/example?ip=127.1.1.1")
+        let res = inst.request(Method::Get, "/hook/example.sh?ip=127.1.1.1")
                       .headers(headers).send().unwrap();
 
         // The hook should be queued

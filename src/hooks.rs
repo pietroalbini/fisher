@@ -213,7 +213,7 @@ pub fn collect<T: AsRef<Path>>(base: T)
             continue
         }
 
-        let name = path.file_stem().unwrap().to_str().unwrap().to_string();
+        let name = path.file_name().unwrap().to_str().unwrap().to_string();
         let exec = fs::canonicalize(path)?.to_str().unwrap().into();
 
         let hook = Hook::load(name.clone(), exec)?;
@@ -242,7 +242,7 @@ mod tests {
         ($base:expr, $name:expr) => {{
             // Get the hook path
             let mut path = $base.clone();
-            path.push(concat!($name, ".sh"));
+            path.push($name);
             let path_str = path.to_str().unwrap().to_string();
 
             let hook = Hook::load(
@@ -266,7 +266,7 @@ mod tests {
             r#"#!/bin/bash"#,
             r#"echo "Hello world"#
         );
-        let hook = assert_hook!(base, "naked");
+        let hook = assert_hook!(base, "naked.sh");
         assert!(hook.providers.is_empty());
 
         // Try to load an hook with a provider
@@ -275,7 +275,7 @@ mod tests {
             r#"## Fisher-Testing: {}"#,
             r#"echo "Hello world"#
         );
-        let hook = assert_hook!(base, "one-provider");
+        let hook = assert_hook!(base, "one-provider.sh");
         assert_eq!(hook.providers.len(), 1);
         assert_eq!(
             hook.providers.get(0).unwrap().name(), "Testing".to_string()
@@ -288,7 +288,7 @@ mod tests {
             r#"## Fisher-Testing: {}"#,
             r#"echo "Hello world"#
         );
-        let hook = assert_hook!(base, "two-providers");
+        let hook = assert_hook!(base, "two-providers.sh");
         assert_eq!(hook.providers.len(), 2);
         assert_eq!(
             hook.providers.get(0).unwrap().name(), "Standalone".to_string()
@@ -403,21 +403,21 @@ mod tests {
         );
 
         let mut hooks = Hooks::new();
-        hooks.insert("test".into(), assert_hook!(base, "test"));
-        hooks.insert("status1".into(), assert_hook!(base, "status1"));
-        hooks.insert("status2".into(), assert_hook!(base, "status2"));
+        hooks.insert("test.sh".into(), assert_hook!(base, "test.sh"));
+        hooks.insert("status1.sh".into(), assert_hook!(base, "status1.sh"));
+        hooks.insert("status2.sh".into(), assert_hook!(base, "status2.sh"));
 
         assert_eq!(
             hooks.status_hooks_iter(StatusEventKind::JobCompleted)
                  .map(|hp| hp.hook.name())
                  .collect::<Vec<&str>>(),
-            vec!["status1"]
+            vec!["status1.sh"]
         );
         assert_eq!(
             hooks.status_hooks_iter(StatusEventKind::JobFailed)
                  .map(|hp| hp.hook.name())
                  .collect::<Vec<&str>>(),
-            vec!["status1", "status2"]
+            vec!["status1.sh", "status2.sh"]
         );
 
         fs::remove_dir_all(base).unwrap();
@@ -472,8 +472,8 @@ mod tests {
 
         // There should be only two collected hooks
         assert_eq!(hooks.len(), 2);
-        assert!(hooks.contains_key("test-hook"));
-        assert!(hooks.contains_key("another-test"));
+        assert!(hooks.contains_key("test-hook.sh"));
+        assert!(hooks.contains_key("another-test.sh"));
 
         // Then add an hook with an invalid provider
         create_hook!(base, "invalid.sh",

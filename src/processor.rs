@@ -386,7 +386,7 @@ mod tests {
         req.params.insert("env".into(), out.to_str().unwrap().to_string());
 
         // Queue a dummy job
-        let job = env.create_job("long", Request::Web(req));
+        let job = env.create_job("long.sh", Request::Web(req));
         processor.input().send(ProcessorInput::Job(job)).unwrap();
 
         // Exit immediately -- this forces the processor to wait since the job
@@ -418,7 +418,7 @@ mod tests {
                 out.to_str().unwrap(), chr,
             ));
 
-            job = env.create_job("append-val", Request::Web(req));
+            job = env.create_job("append-val.sh", Request::Web(req));
             input.send(ProcessorInput::Job(job)).unwrap();
         }
 
@@ -461,7 +461,7 @@ mod tests {
         // Queue a wait job
         let mut req = dummy_web_request();
         req.params.insert("env".into(), out.to_str().unwrap().to_string());
-        let job = env.create_job("wait", Request::Web(req));
+        let job = env.create_job("wait.sh", Request::Web(req));
         input.send(ProcessorInput::Job(job)).unwrap();
 
         // Queue ten extra jobs
@@ -469,7 +469,7 @@ mod tests {
         let mut job;
         for _ in 0..10 {
             req = Request::Web(dummy_web_request());
-            job = env.create_job("example", req);
+            job = env.create_job("example.sh", req);
             input.send(ProcessorInput::Job(job)).unwrap();
         }
 

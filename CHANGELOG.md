@@ -20,6 +20,8 @@ This document contains what changed in each release of Fisher.
    consistency
  * **BREAKING:** Rename `active_jobs` to `busy_threads` in `GET /health` for
   consistency
+ * **BREAKING:** The extension of the files is needed when calling the hooks
+  (for example you need to call `/hook/example.sh` instead of `/hook/example`)
  * Speed up status hooks processing
  * Replace the old processor with a faster one
  * Improve testing coverage of the project

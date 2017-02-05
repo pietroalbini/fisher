@@ -216,7 +216,7 @@ mod tests {
     fn test_job_creation() {
         let env = TestingEnv::new();
 
-        let _ = env.create_job("example", dummy_web_request().into());
+        let _ = env.create_job("example.sh", dummy_web_request().into());
 
         env.cleanup();
     }
@@ -226,8 +226,8 @@ mod tests {
     fn test_job_hook_name() {
         let env = TestingEnv::new();
 
-        let job = env.create_job("example", dummy_web_request().into());
-        assert_eq!(job.hook_name(), "example".to_string());
+        let job = env.create_job("example.sh", dummy_web_request().into());
+        assert_eq!(job.hook_name(), "example.sh".to_string());
 
         env.cleanup();
     }
@@ -237,12 +237,12 @@ mod tests {
         let env = TestingEnv::new();
 
         // The "example" hook should be processed without problems
-        let job = env.create_job("example", dummy_web_request().into());
+        let job = env.create_job("example.sh", dummy_web_request().into());
         let result = job.process().unwrap();
         assert!(result.success);
         assert_eq!(result.exit_code, Some(0));
 
-        let job = env.create_job("failing", dummy_web_request().into());
+        let job = env.create_job("failing.sh", dummy_web_request().into());
         let result = job.process().unwrap();
         assert!(! result.success);
         assert_eq!(result.exit_code, Some(1));
@@ -280,7 +280,7 @@ mod tests {
         req.params.insert("env".to_string(), output.to_string());
 
         // Process the job
-        let job = env.create_job("jobs-details", req.into());
+        let job = env.create_job("jobs-details.sh", req.into());
         assert!(job.process().is_ok());
 
         // The hook must be executed
