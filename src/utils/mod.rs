@@ -19,14 +19,10 @@
 mod tempdir;
 mod net;
 mod hex;
-
-#[cfg(test)]
 mod parse_env;
 
 
 pub use utils::tempdir::create_temp_dir;
 pub use utils::net::parse_forwarded_for;
 pub use utils::hex::from_hex;
-
-#[cfg(test)]
 pub use utils::parse_env::parse_env;

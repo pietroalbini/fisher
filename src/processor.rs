@@ -13,14 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 use std::sync::{Arc, mpsc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::fmt;
 
-use jobs::Job;
+use jobs::{Job, Context};
 use hooks::Hooks;
 use requests::Request;
 use providers::StatusEvent;
@@ -45,14 +44,15 @@ pub struct Processor {
 
 impl Processor {
 
-    pub fn new(max_threads: u16, hooks: Arc<Hooks>) -> FisherResult<Self> {
+    pub fn new(max_threads: u16, hooks: Arc<Hooks>,
+               environment: HashMap<String, String>) -> FisherResult<Self> {
         // Retrieve wanted information from the spawned thread
         let (input_send, input_recv) = mpsc::sync_channel(0);
         let (wait_send, wait_recv) = mpsc::channel();
 
         ::std::thread::spawn(move || {
             let inner = InnerProcessor::new(
-                max_threads, hooks
+                max_threads, hooks, environment,
             );
             input_send.send(inner.input()).unwrap();
 
@@ -86,6 +86,7 @@ impl Processor {
 struct InnerProcessor {
     max_threads: u16,
     hooks: Arc<Hooks>,
+    jobs_context: Arc<Context>,
 
     should_stop: bool,
     queue: VecDeque<Job>,
@@ -97,12 +98,18 @@ struct InnerProcessor {
 
 impl InnerProcessor {
 
-    fn new(max_threads: u16, hooks: Arc<Hooks>) -> Self {
+    fn new(max_threads: u16, hooks: Arc<Hooks>,
+           environment: HashMap<String, String>) -> Self {
         let (input_send, input_recv) = mpsc::channel();
+
+        let jobs_context = Arc::new(Context {
+            environment: environment,
+        });
 
         InnerProcessor {
             max_threads: max_threads,
             hooks: hooks,
+            jobs_context: jobs_context,
 
             should_stop: false,
             queue: VecDeque::new(),
@@ -172,7 +179,8 @@ impl InnerProcessor {
     #[inline]
     fn spawn_thread(&mut self) {
         self.threads.push(Thread::new(
-            self.input_send.clone(), self.hooks.clone(),
+            self.input_send.clone(), self.jobs_context.clone(),
+            self.hooks.clone(),
         ));
     }
 
@@ -241,7 +249,7 @@ struct Thread {
 impl Thread {
 
     pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
-               hooks: Arc<Hooks>) -> Thread {
+               ctx: Arc<Context>, hooks: Arc<Hooks>) -> Thread {
         let (input_send, input_recv) = mpsc::channel();
         let busy = Arc::new(AtomicBool::new(false));
 
@@ -251,7 +259,7 @@ impl Thread {
                 match input {
                     // A new job should be processed
                     ThreadInput::Process(job) => {
-                        let result = job.process();
+                        let result = job.process(&ctx);
 
                         // Display the error if there is one
                         match result {
@@ -271,7 +279,7 @@ impl Thread {
                                         Some(hp.provider.clone()),
                                         Request::Status(event.clone()),
                                     );
-                                    status_result = status_job.process();
+                                    status_result = status_job.process(&ctx);
 
                                     if let Err(mut error) = status_result {
                                         error.set_hook(hp.hook.name().into());
@@ -354,6 +362,7 @@ mod tests {
     use std::fs::File;
     use std::io::Read;
     use std::sync::mpsc;
+    use std::collections::HashMap;
 
     use utils::testing::*;
     use requests::Request;
@@ -365,7 +374,9 @@ mod tests {
     fn test_processor_starting() {
         let env = TestingEnv::new();
 
-        let processor = Processor::new(1, env.hooks()).unwrap();
+        let processor = Processor::new(
+            1, env.hooks(), HashMap::new()
+        ).unwrap();
         processor.stop().unwrap();
 
         env.cleanup();
@@ -376,7 +387,9 @@ mod tests {
     fn test_processor_clean_stop() {
         let mut env = TestingEnv::new();
 
-        let processor = Processor::new(1, env.hooks()).unwrap();
+        let processor = Processor::new(
+            1, env.hooks(), HashMap::new()
+        ).unwrap();
 
         // Prepare a request
         let mut out = env.tempdir();
@@ -403,7 +416,9 @@ mod tests {
     fn run_multiple_append(threads: u16) -> String {
         let mut env = TestingEnv::new();
 
-        let processor = Processor::new(threads, env.hooks()).unwrap();
+        let processor = Processor::new(
+            threads, env.hooks(), HashMap::new()
+        ).unwrap();
 
         let input = processor.input();
         let mut out = env.tempdir();
@@ -452,7 +467,9 @@ mod tests {
     fn test_health_status() {
         let mut env = TestingEnv::new();
 
-        let processor = Processor::new(1, env.hooks()).unwrap();
+        let processor = Processor::new(
+            1, env.hooks(), HashMap::new()
+        ).unwrap();
 
         let input = processor.input();
         let mut out = env.tempdir();

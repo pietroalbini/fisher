@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::net;
 use std::sync::Arc;
@@ -21,6 +22,7 @@ use hooks::{self, HookNamesIter, Hooks, Hook};
 use processor::Processor;
 use web::WebApp;
 use errors::FisherResult;
+use utils;
 
 
 #[derive(Debug, Clone)]
@@ -50,6 +52,7 @@ impl FisherOptions {
 pub struct Fisher<'a> {
     options: &'a FisherOptions,
     hooks: Hooks,
+    environment: HashMap<String, String>,
 }
 
 impl<'a> Fisher<'a> {
@@ -58,7 +61,18 @@ impl<'a> Fisher<'a> {
         Fisher {
             options: options,
             hooks: Hooks::new(),
+            environment: HashMap::new(),
         }
+    }
+
+    pub fn env(&mut self, key: String, value: String) {
+        let _ = self.environment.insert(key, value);
+    }
+
+    pub fn raw_env(&mut self, env: &str) -> FisherResult<()> {
+        let (key, value) = utils::parse_env(env)?;
+        self.env(key.into(), value.into());
+        Ok(())
     }
 
     pub fn add_hook(&mut self, name: String, hook: Hook) {
@@ -85,6 +99,7 @@ impl<'a> Fisher<'a> {
         // Start the processor
         let processor = Processor::new(
             self.options.max_threads, hooks.clone(),
+            self.environment,
         )?;
         let processor_input = processor.input();
 

@@ -13,66 +13,30 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
-
 use errors::{FisherResult, ErrorKind};
 
 
-pub fn parse_env(content: &str) -> FisherResult<HashMap<&str, &str>> {
-    let mut result = HashMap::new();
-
-    for line in content.split("\n") {
-        // Skip empty lines
-        if line.trim() == "" {
-            continue;
-        }
-
-        let parts: Vec<&str> = line.splitn(2, "=").take(2).collect();
-        if parts.len() != 2 {
-            return Err(ErrorKind::InvalidInput(
-                format!("Invalid env received: {}", line)
-            ).into());
-        }
-
-        let key = parts.get(0).unwrap();
-        let value = parts.get(1).unwrap();
-        result.insert(*key, *value);
+pub fn parse_env(line: &str) -> FisherResult<(&str, &str)> {
+    if let Some(pos) = line.find('=') {
+        let (key, value) = line.split_at(pos);
+        Ok((key, &value[1..]))
+    } else {
+        Err(ErrorKind::InvalidInput(
+            format!("Not a valid environment definition: {}", line)
+        ).into())
     }
-
-    Ok(result)
 }
 
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use errors::ErrorKind;
-
     use super::parse_env;
 
 
     #[test]
     fn test_parse_env() {
-        // Test with an empty env
-        assert_eq!(parse_env("").unwrap(), HashMap::new());
-
-        // Test with multiple elements
-        let mut expected = HashMap::new();
-        expected.insert("A", "b");
-        expected.insert("B", "c=d=e");
-        assert_eq!(parse_env("A=b\n\nB=c=d=e\n").unwrap(), expected);
-
-        // Test with invalid data
-        let res = parse_env("A=b\nB");
-        assert!(res.is_err());
-        match *res.err().unwrap().kind() {
-            ErrorKind::InvalidInput(..) => {
-                assert!(true)
-            },
-            _ => {
-                panic!("Wrong error received!");
-            },
-        };
+        assert!(parse_env("b").is_err());
+        assert_eq!(parse_env("a=b").unwrap(), ("a", "b"));
+        assert_eq!(parse_env("a=b=c").unwrap(), ("a", "b=c"));
     }
 }

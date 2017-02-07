@@ -26,7 +26,7 @@ use libc::{SIGINT, SIGTERM};
 use ansi_term::{Style, Colour};
 
 
-pub fn parse_cli() -> fisher::Result<fisher::FisherOptions> {
+pub fn parse_cli() -> fisher::Result<(fisher::FisherOptions, Vec<String>)> {
     let matches = App::new("Fisher")
         .about("Simple webhooks catcher")
         .version(env!("CARGO_PKG_VERSION"))
@@ -39,6 +39,12 @@ pub fn parse_cli() -> fisher::Result<fisher::FisherOptions> {
              .long("bind").short("b")
              .value_name("PORT")
              .help("The port to bind fish to"))
+
+        .arg(Arg::with_name("env").takes_value(true)
+             .multiple(true)
+             .long("env").short("e")
+             .value_name("KEY=VALUE")
+             .help("Add additional environment variables"))
 
         .arg(Arg::with_name("max_threads").takes_value(true)
              .long("jobs").short("j")
@@ -65,13 +71,20 @@ pub fn parse_cli() -> fisher::Result<fisher::FisherOptions> {
         behind_proxies = Some(count.parse::<u8>()?);
     }
 
-    Ok(fisher::FisherOptions {
-        bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").to_string(),
-        hooks_dir: matches.value_of("hooks").unwrap().to_string(),
-        max_threads: max_threads,
-        enable_health: ! matches.is_present("disable_health"),
-        behind_proxies: behind_proxies,
-    })
+    Ok((
+        fisher::FisherOptions {
+            bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").to_string(),
+            hooks_dir: matches.value_of("hooks").unwrap().to_string(),
+            max_threads: max_threads,
+            enable_health: ! matches.is_present("disable_health"),
+            behind_proxies: behind_proxies,
+        },
+        if let Some(values) = matches.values_of("env") {
+            values.map(|v| v.to_string()).collect()
+        } else {
+            Vec::new()
+        }
+    ))
 }
 
 
@@ -107,7 +120,7 @@ fn app() -> fisher::Result<()> {
     ]);
 
     // Load the options from the CLI arguments
-    let options = parse_cli()?;
+    let (options, environment) = parse_cli()?;
 
     // Show the relevant options
     println!("{} {}",
@@ -141,6 +154,11 @@ fn app() -> fisher::Result<()> {
         for name in &hook_names {
             println!("- {}", name);
         }
+    }
+
+    // Set the extra environment variables
+    for env in &environment {
+        factory.raw_env(env)?;
     }
 
     // Start Fisher

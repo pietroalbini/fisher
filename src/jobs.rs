@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::collections::HashMap;
 use std::process;
 use std::os::unix::process::ExitStatusExt;
 use std::os::unix::process::CommandExt;
@@ -41,6 +42,21 @@ lazy_static! {
         "LC_ALL".to_string(),
         "LANG".to_string(),
     ];
+}
+
+
+#[derive(Debug)]
+pub struct Context {
+    pub environment: HashMap<String, String>,
+}
+
+impl Default for Context {
+
+    fn default() -> Self {
+        Context {
+            environment: HashMap::new(),
+        }
+    }
 }
 
 
@@ -75,7 +91,7 @@ impl Job {
         }
     }
 
-    pub fn process(&self) -> FisherResult<JobOutput> {
+    pub fn process(&self, ctx: &Context) -> FisherResult<JobOutput> {
         let mut command = process::Command::new(&self.hook.exec());
 
         // Prepare the command's environment variables
@@ -106,6 +122,11 @@ impl Job {
             provider.prepare_directory(
                 &self.request, &working_directory
             )?;
+        }
+
+        // Apply the custom environment
+        for (key, value) in ctx.environment.iter() {
+            command.env(&key, &value);
         }
 
         // Make sure the process is isolated
@@ -205,11 +226,45 @@ impl<'a> From<(&'a Job, process::Output)> for JobOutput {
 #[cfg(test)]
 mod tests {
     use std::env;
+    use std::collections::HashMap;
 
     use utils::testing::*;
     use utils;
 
-    use super::DEFAULT_ENV;
+    use super::{DEFAULT_ENV, Context};
+
+
+    macro_rules! read {
+        ($output:expr, $name:expr) => {{
+            use std::fs;
+            use std::io::Read;
+
+            let file_name = format!("{}/{}", $output, $name);
+            let mut file = fs::File::open(&file_name).unwrap();
+
+            let mut buf = String::new();
+            file.read_to_string(&mut buf).unwrap();
+
+            buf
+        }};
+    }
+
+
+    fn parse_env(content: &str) -> HashMap<&str, &str> {
+        let mut result = HashMap::new();
+
+        for line in content.split("\n") {
+            // Skip empty lines
+            if line.trim() == "" {
+                continue;
+            }
+
+            let (key, value) = utils::parse_env(line).unwrap();
+            result.insert(key, value);
+        }
+
+        result
+    }
 
 
     #[test]
@@ -235,15 +290,16 @@ mod tests {
     #[test]
     fn test_job_execution() {
         let env = TestingEnv::new();
+        let ctx = Context::default();
 
         // The "example" hook should be processed without problems
         let job = env.create_job("example.sh", dummy_web_request().into());
-        let result = job.process().unwrap();
+        let result = job.process(&ctx).unwrap();
         assert!(result.success);
         assert_eq!(result.exit_code, Some(0));
 
         let job = env.create_job("failing.sh", dummy_web_request().into());
-        let result = job.process().unwrap();
+        let result = job.process(&ctx).unwrap();
         assert!(! result.success);
         assert_eq!(result.exit_code, Some(1));
 
@@ -252,22 +308,8 @@ mod tests {
 
     #[test]
     fn test_job_environment() {
-        macro_rules! read {
-            ($output:expr, $name:expr) => {{
-                use std::fs;
-                use std::io::Read;
-
-                let file_name = format!("{}/{}", $output, $name);
-                let mut file = fs::File::open(&file_name).unwrap();
-
-                let mut buf = String::new();
-                file.read_to_string(&mut buf).unwrap();
-
-                buf
-            }};
-        }
-
         let mut env = TestingEnv::new();
+        let ctx = Context::default();
 
         // Create a temp directory which will contain the build
         let output_path = utils::create_temp_dir().unwrap();
@@ -281,7 +323,7 @@ mod tests {
 
         // Process the job
         let job = env.create_job("jobs-details.sh", req.into());
-        assert!(job.process().is_ok());
+        assert!(job.process(&ctx).is_ok());
 
         // The hook must be executed
         assert_eq!(read!(output, "executed"), "executed\n".to_string());
@@ -298,7 +340,7 @@ mod tests {
 
         // Parse the environment file
         let raw_env = read!(output, "env");
-        let job_env = utils::parse_env(&raw_env).unwrap();
+        let job_env = parse_env(&raw_env);
 
         // Get all the required environment variables
         let mut required_env = {
@@ -366,6 +408,42 @@ mod tests {
                 Err(..) => {},
             }
         }
+
+        env.cleanup();
+    }
+
+
+    #[test]
+    fn test_environment_with_context() {
+        let mut env = TestingEnv::new();
+
+        // Add an extra environment variable to the context
+        let ctx = Context {
+            environment: {
+                let mut extra_env = HashMap::new();
+                extra_env.insert("TEST_ENV".into(), "yes".into());
+                extra_env
+            },
+        };
+
+        // Create a temp directory which will contain the output
+        let output_path = utils::create_temp_dir().unwrap();
+        let output = output_path.to_str().unwrap();
+        env.delete_also(&output);
+
+        // Create a dummy web request
+        let mut req = dummy_web_request();
+        req.params.insert("env".into(), output.to_string());
+
+        // Process the job
+        let job = env.create_job("jobs-details.sh", req.into());
+        assert!(job.process(&ctx).is_ok());
+
+        let raw_env = read!(output, "env");
+        let job_env = parse_env(&raw_env);
+
+        // Test that the extra environment variable is present
+        assert_eq!(*job_env.get("TEST_ENV").unwrap(), "yes");
 
         env.cleanup();
     }
