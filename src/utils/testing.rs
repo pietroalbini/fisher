@@ -198,9 +198,6 @@ impl WebAppInstance {
 
     pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: u8)
                -> Self {
-        // Create a new instance of WebApp
-        let mut inst = WebApp::new();
-
         // Create the input channel for the fake processor
         let (input_send, input_recv) = mpsc::channel();
         let (input_request_send, input_request_recv) = mpsc::channel();
@@ -226,12 +223,13 @@ impl WebAppInstance {
         });
 
         // Start the web server
-        let addr = inst.listen(
+        // Create a new instance of WebApp
+        let inst = WebApp::new(
             hooks, health, behind_proxies, "127.0.0.1:0", input_send,
         ).unwrap();
 
         // Create the HTTP client
-        let url = format!("http://{}", addr);
+        let url = format!("http://{}", inst.addr());
         let client = hyper::Client::new();
 
         WebAppInstance {
@@ -288,9 +286,13 @@ impl WebAppInstance {
         NextHealthCheck::new(result_recv)
     }
 
-    pub fn stop(&mut self) -> bool {
+    pub fn lock(&self) {
+        self.inst.lock();
+    }
+
+    pub fn stop(self) {
         self.input_request.send(FakeProcessorInput::Stop).unwrap();
-        self.inst.stop()
+        self.inst.stop();
     }
 }
 

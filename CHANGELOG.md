@@ -31,6 +31,7 @@ This document contains what changed in each release of Fisher.
 
  * Avoid killing the running jobs when a signal is received
  * Fix GitHub pings not being delivered if a events whitelist was present
+ * Fix web server not replying to incoming requests while shutting down
 
 ### Fisher 1.0.0-beta.3
 

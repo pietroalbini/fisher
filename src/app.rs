@@ -86,27 +86,22 @@ impl<'a> Fisher<'a> {
         let processor_input = processor.input();
 
         // Start the Web API
-        let mut web_api = WebApp::new();
-        let listening;
-        match web_api.listen(
+        let web_api = match WebApp::new(
             hooks.clone(), self.enable_health, self.behind_proxies, self.bind,
             processor_input,
         ) {
-            Ok(socket) => {
-                listening = socket;
-            },
+            Ok(socket) => socket,
             Err(error) => {
                 // Be sure to stop the processor
                 processor.stop()?;
 
                 return Err(error);
             },
-        }
+        };
 
         Ok(RunningFisher::new(
             processor,
             web_api,
-            listening,
         ))
     }
 }
@@ -115,27 +110,25 @@ impl<'a> Fisher<'a> {
 pub struct RunningFisher {
     processor: Processor,
     web_api: WebApp,
-    web_address: net::SocketAddr,
 }
 
 impl RunningFisher {
 
-    fn new(processor: Processor, web_api: WebApp,
-           web_address: net::SocketAddr) -> Self {
+    fn new(processor: Processor, web_api: WebApp) -> Self {
         RunningFisher {
             processor: processor,
             web_api: web_api,
-            web_address: web_address,
         }
     }
 
     pub fn web_address(&self) -> &net::SocketAddr {
-        &self.web_address
+        self.web_api.addr()
     }
 
-    pub fn stop(mut self) -> FisherResult<()> {
-        self.web_api.stop();
+    pub fn stop(self) -> FisherResult<()> {
+        self.web_api.lock();
         self.processor.stop()?;
+        self.web_api.stop();
 
         Ok(())
     }

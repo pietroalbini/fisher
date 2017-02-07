@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::{mpsc, Arc};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::net::SocketAddr;
 
 use tiny_http::Method;
@@ -26,23 +27,20 @@ use web::api::WebApi;
 
 
 pub struct WebApp {
-    server: Option<HttpServer<WebApi>>,
+    server: HttpServer<WebApi>,
+    addr: SocketAddr,
+    locked: Arc<AtomicBool>,
 }
 
 impl WebApp {
 
-    pub fn new() -> Self {
-        WebApp {
-            server: None,
-        }
-    }
+    pub fn new(hooks: Arc<Hooks>, enable_health: bool, behind_proxies: u8,
+               bind: &str, input: mpsc::Sender<ProcessorInput>)
+               -> FisherResult<Self> {
+        let locked = Arc::new(AtomicBool::new(false));
 
-    pub fn listen(&mut self, hooks: Arc<Hooks>, enable_health: bool,
-                  behind_proxies: u8, bind: &str,
-                  input: mpsc::Sender<ProcessorInput>)
-                 -> FisherResult<SocketAddr> {
         // Create the web api
-        let api = WebApi::new(input, hooks, enable_health);
+        let api = WebApi::new(input, hooks, locked.clone(), enable_health);
 
         // Create the HTTP server
         let mut server = HttpServer::new(api, behind_proxies);
@@ -61,16 +59,23 @@ impl WebApp {
 
         let socket = server.listen(bind)?;
 
-        self.server = Some(server);
-        Ok(socket)
+        Ok(WebApp {
+            server: server,
+            addr: socket,
+            locked: locked,
+        })
     }
 
-    pub fn stop(&mut self) -> bool {
-        if let Some(ref mut server) = self.server {
-            server.stop()
-        } else {
-            false
-        }
+    pub fn addr(&self) -> &SocketAddr {
+        &self.addr
+    }
+
+    pub fn lock(&self) {
+        self.locked.store(true, Ordering::Relaxed);
+    }
+
+    pub fn stop(mut self) {
+        self.server.stop();
     }
 }
 
@@ -153,6 +158,16 @@ mod tests {
         assert_eq!(res.status, StatusCode::Forbidden);
 
         // Even if the last request succeded, there shouldn't be any job
+        assert!(inst.processor_input().is_none());
+
+        // Try on a locked instance
+        inst.lock();
+
+        // Even if this requets is valid, it should not be processed -- the
+        // instance is locked
+        let res = inst.request(Method::Get, "/hook/example.sh?secret=testing")
+                      .send().unwrap();
+        assert_eq!(res.status, StatusCode::ServiceUnavailable);
         assert!(inst.processor_input().is_none());
 
         inst.stop();

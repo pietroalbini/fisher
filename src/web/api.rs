@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::{Arc, Mutex, mpsc};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use requests::{Request, RequestType};
 use hooks::Hooks;
@@ -26,6 +27,7 @@ use web::responses::Response;
 pub struct WebApi {
     processor_input: Arc<Mutex<mpsc::Sender<ProcessorInput>>>,
     hooks: Arc<Hooks>,
+    locked: Arc<AtomicBool>,
 
     health_enabled: bool,
 }
@@ -33,16 +35,23 @@ pub struct WebApi {
 impl WebApi {
 
     pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
-               hooks: Arc<Hooks>, health_enabled: bool) -> Self {
+               hooks: Arc<Hooks>, locked: Arc<AtomicBool>,
+               health_enabled: bool) -> Self {
         WebApi {
             processor_input: Arc::new(Mutex::new(processor_input)),
             hooks: hooks,
+            locked: locked,
             health_enabled: health_enabled,
         }
     }
 
     pub fn process_hook(&self, req: &Request, args: Vec<String>) -> Response {
         let hook_name = &args[0];
+
+        // Don't process hooks if the web api is locked
+        if self.locked.load(Ordering::Relaxed) {
+            return Response::Unavailable;
+        }
 
         // Check if the hook exists
         let hook;

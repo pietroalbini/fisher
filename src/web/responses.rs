@@ -24,6 +24,7 @@ pub enum Response {
     NotFound,
     Forbidden,
     BadRequest(FisherError),
+    Unavailable,
     Ok,
     HealthStatus(HealthDetails),
 }
@@ -35,6 +36,7 @@ impl Response {
             Response::NotFound => 404,
             Response::Forbidden => 403,
             Response::BadRequest(..) => 400,
+            Response::Unavailable => 503,
             _ => 200,
         }
     }
@@ -59,6 +61,7 @@ impl Response {
                         Response::NotFound => "not_found",
                         Response::Forbidden => "forbidden",
                         Response::BadRequest(..) => "bad_request",
+                        Response::Unavailable => "unavailable",
                         Response::Ok | Response::HealthStatus(..) => "ok",
                     },
                 })
@@ -140,6 +143,23 @@ mod tests {
         assert_eq!(
             obj.get("error_msg").unwrap().as_str().unwrap(),
             error_msg.as_str()
+        );
+    }
+
+
+    #[test]
+    fn test_unavailable() {
+        let response = Response::Unavailable;
+        assert_eq!(response.status(), 503);
+
+        // The result must be an object
+        let json = j(response.json());
+        let obj = json.as_object().unwrap();
+
+        // The status must be "unavailable"
+        assert_eq!(
+            obj.get("status").unwrap().as_str().unwrap(),
+            "unavailable"
         );
     }
 
