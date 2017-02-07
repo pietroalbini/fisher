@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn test_startup() {
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(true, None);
+        let mut inst = testing_env.start_web(true, 0);
 
         // Test if the Web API is working fine
         let res = inst.request(Method::Get, "/").send().unwrap();
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn test_hook_call() {
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(true, None);
+        let mut inst = testing_env.start_web(true, 0);
 
         // It shouldn't be possible to call a non-existing hook
         let res = inst.request(Method::Get, "/hook/invalid.sh")
@@ -163,7 +163,7 @@ mod tests {
     fn test_health_disabled() {
         // Create the instance with disabled health status
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(false, None);
+        let mut inst = testing_env.start_web(false, 0);
 
         // It shouldn't be possible to get the health status
         let res = inst.request(Method::Get, "/health").send().unwrap();
@@ -177,7 +177,7 @@ mod tests {
     fn test_health_enabled() {
         // Create the instance with enabled health status
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(true, None);
+        let mut inst = testing_env.start_web(true, 0);
 
         let check_after = inst.next_health(HealthDetails {
             queued_jobs: 1,
@@ -223,7 +223,7 @@ mod tests {
     fn test_behind_proxy() {
         // Create a new instance behind a proxy
         let testing_env = TestingEnv::new();
-        let mut inst = testing_env.start_web(true, Some(1));
+        let mut inst = testing_env.start_web(true, 1);
 
         // Call the example hook without a proxy
         let res = inst.request(Method::Get, "/hook/example.sh?ip=127.1.1.1")

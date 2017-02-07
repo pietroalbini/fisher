@@ -23,7 +23,6 @@ use std::fs;
 use hyper::client as hyper;
 use hyper::method::Method;
 
-use app::FisherOptions;
 use hooks::{self, Hooks};
 use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
@@ -197,7 +196,7 @@ pub struct WebAppInstance {
 
 impl WebAppInstance {
 
-    pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: Option<u8>)
+    pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: u8)
                -> Self {
         // Create a new instance of WebApp
         let mut inst = WebApp::new();
@@ -226,17 +225,10 @@ impl WebAppInstance {
             }
         });
 
-        // Set the options
-        let options = FisherOptions {
-            bind: "127.0.0.1:0".to_string(),
-            enable_health: health,
-            behind_proxies: behind_proxies,
-
-            .. FisherOptions::defaults()
-        };
-
         // Start the web server
-        let addr = inst.listen(hooks, &options, input_send).unwrap();
+        let addr = inst.listen(
+            hooks, health, behind_proxies, "127.0.0.1:0", input_send,
+        ).unwrap();
 
         // Create the HTTP client
         let url = format!("http://{}", addr);
@@ -361,7 +353,7 @@ impl TestingEnv {
 
     // WEB TESTING
 
-    pub fn start_web(&self, health: bool, behind_proxies: Option<u8>)
+    pub fn start_web(&self, health: bool, behind_proxies: u8)
                      -> WebAppInstance {
         WebAppInstance::new(self.hooks.clone(), health, behind_proxies)
     }

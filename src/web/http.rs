@@ -378,7 +378,7 @@ mod tests {
         }
 
         // Create the server instance
-        let mut server = HttpServer::new(DummyData(vec!["test".into()]), None);
+        let mut server = HttpServer::new(DummyData(vec!["test".into()]), 0);
         server.add_route(Method::Get, "/?", Box::new(dummy_handler_fn));
 
         // Start the server

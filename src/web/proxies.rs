@@ -112,12 +112,12 @@ mod tests {
     #[test]
     fn test_creation() {
         // Create a new disabled ProxySupport instance
-        let proxy = ProxySupport::new(None);
-        assert_eq!(proxy.behind, None);
+        let proxy = ProxySupport::new(0);
+        assert_eq!(proxy.behind, 0);
 
         // Create a new enabled ProxySupport instance
-        let proxy = ProxySupport::new(Some(1));
-        assert_eq!(proxy.behind, Some(1));
+        let proxy = ProxySupport::new(1);
+        assert_eq!(proxy.behind, 1);
     }
 
 
@@ -133,14 +133,14 @@ mod tests {
         }
 
         // Test with a disabled proxy support
-        let p = ProxySupport::new(None);
+        let p = ProxySupport::new(0);
         assert_ip!(p, req!(), "127.1.1.1");
         assert_ip!(p, req!("127.2.2.2"), "127.1.1.1");
         assert_ip!(p, req!("127.3.3.3, 127.2.2.2"), "127.1.1.1");
         assert_ip!(p, req!("invalid"), "127.1.1.1");
 
         // Test with an enabled proxy support with one proxy
-        let p = ProxySupport::new(Some(1));
+        let p = ProxySupport::new(1);
         assert_err!(p.source_ip(&req!()), ErrorKind::NotBehindProxy);
         assert_ip!(p, req!("127.2.2.2"), "127.2.2.2");
         assert_ip!(p, req!("127.3.3.3, 127.2.2.2"), "127.2.2.2");
@@ -150,7 +150,7 @@ mod tests {
         );
 
         // Test with an enabled proxy support with two proxies
-        let p = ProxySupport::new(Some(2));
+        let p = ProxySupport::new(2);
         assert_err!(p.source_ip(&req!()), ErrorKind::NotBehindProxy);
         assert_err!(
             p.source_ip(&req!("127.2.2.2")),
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_fix_request() {
-        let proxy = ProxySupport::new(Some(1));
+        let proxy = ProxySupport::new(1);
         let mut req = req!("127.2.2.2");
 
         assert_eq!(
