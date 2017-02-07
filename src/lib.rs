@@ -41,7 +41,7 @@ mod requests;
 mod native;
 
 // Public API
-pub use app::{Fisher, RunningFisher, FisherOptions};
+pub use app::{Fisher, RunningFisher};
 pub use errors::FisherResult as Result;
 pub use errors::FisherError as Error;
 pub use errors::ErrorKind;

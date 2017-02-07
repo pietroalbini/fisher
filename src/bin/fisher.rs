@@ -26,7 +26,17 @@ use libc::{SIGINT, SIGTERM};
 use ansi_term::{Style, Colour};
 
 
-pub fn parse_cli() -> fisher::Result<(fisher::FisherOptions, Vec<String>)> {
+struct CliArgs {
+    hooks_dir: String,
+    bind: String,
+    env: Vec<String>,
+    max_threads: u16,
+    behind_proxies: u8,
+    enable_health: bool,
+}
+
+
+fn parse_cli() -> fisher::Result<CliArgs> {
     let matches = App::new("Fisher")
         .about("Simple webhooks catcher")
         .version(env!("CARGO_PKG_VERSION"))
@@ -62,29 +72,24 @@ pub fn parse_cli() -> fisher::Result<(fisher::FisherOptions, Vec<String>)> {
 
         .get_matches();
 
-    let max_threads = (
-        matches.value_of("max_threads").unwrap_or("1").parse::<u16>()
-    )?;
-
-    let mut behind_proxies = None;
-    if let Some(count) = matches.value_of("behind_proxies") {
-        behind_proxies = Some(count.parse::<u8>()?);
-    }
-
-    Ok((
-        fisher::FisherOptions {
-            bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").to_string(),
-            hooks_dir: matches.value_of("hooks").unwrap().to_string(),
-            max_threads: max_threads,
-            enable_health: ! matches.is_present("disable_health"),
-            behind_proxies: behind_proxies,
+    Ok(CliArgs {
+        hooks_dir: matches.value_of("hooks").unwrap().into(),
+        bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").into(),
+        env: {
+            if let Some(values) = matches.values_of("env") {
+                values.map(|v| v.to_string()).collect()
+            } else { Vec::new() }
         },
-        if let Some(values) = matches.values_of("env") {
-            values.map(|v| v.to_string()).collect()
-        } else {
-            Vec::new()
-        }
-    ))
+        max_threads: {
+            matches.value_of("max_threads").unwrap_or("1").parse::<u16>()?
+        },
+        behind_proxies: {
+            if let Some(count) = matches.value_of("behind_proxies") {
+                count.parse::<u8>()?
+            } else { 0 }
+        },
+        enable_health: ! matches.is_present("disable_health"),
+    })
 }
 
 
@@ -120,30 +125,35 @@ fn app() -> fisher::Result<()> {
     ]);
 
     // Load the options from the CLI arguments
-    let (options, environment) = parse_cli()?;
+    let args = parse_cli()?;
 
     // Show the relevant options
     println!("{} {}",
         Style::new().bold().paint("Concurrent jobs:"),
-        options.max_threads
+        args.max_threads
     );
     println!("{} {}",
         Style::new().bold().paint("Health checks:  "),
-        if options.enable_health { "enabled" } else { "disabled" }
+        if args.enable_health { "enabled" } else { "disabled" }
     );
     println!("{} {}",
         Style::new().bold().paint("Proxy support:  "),
-        if let Some(proxies) = options.behind_proxies {
-            format!("enabled (behind {} proxies)", proxies)
+        if args.behind_proxies != 0 {
+            format!("enabled (behind {} proxies)", args.behind_proxies)
         } else { "disabled".to_string() }
     );
 
     println!("");
 
     // Create a new Fisher instance
-    let mut factory = fisher::Fisher::new(&options);
-    factory.collect_hooks(&options.hooks_dir)?;
+    let mut factory = fisher::Fisher::new();
 
+    factory.max_threads = args.max_threads;
+    factory.behind_proxies = args.behind_proxies;
+    factory.bind = &args.bind;
+    factory.enable_health = args.enable_health;
+
+    factory.collect_hooks(args.hooks_dir)?;
     {
         let mut hook_names = factory.hook_names().collect::<Vec<&String>>();
         hook_names.sort();
@@ -157,7 +167,7 @@ fn app() -> fisher::Result<()> {
     }
 
     // Set the extra environment variables
-    for env in &environment {
+    for env in &args.env {
         factory.raw_env(env)?;
     }
 
@@ -166,7 +176,7 @@ fn app() -> fisher::Result<()> {
     if let Err(error) = app_result {
         println!("{} on {}: {}",
             Colour::Red.bold().paint("Failed to start the Web API"),
-            options.bind, error,
+            args.bind, error,
         );
         ::std::process::exit(1);
     }

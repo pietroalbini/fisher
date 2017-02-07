@@ -131,7 +131,7 @@ pub struct HttpServer<App: Send + Sync + 'static> {
 
 impl<App: Send + Sync + 'static> HttpServer<App> {
 
-    pub fn new(app: App, proxies_count: Option<u8>) -> Self {
+    pub fn new(app: App, proxies_count: u8) -> Self {
         HttpServer {
             app: Arc::new(app),
             handlers: Arc::new(Mutex::new(Vec::new())),

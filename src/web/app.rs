@@ -19,7 +19,6 @@ use std::net::SocketAddr;
 use tiny_http::Method;
 
 use errors::FisherResult;
-use app::FisherOptions;
 use hooks::Hooks;
 use processor::ProcessorInput;
 use web::http::HttpServer;
@@ -38,14 +37,15 @@ impl WebApp {
         }
     }
 
-    pub fn listen(&mut self, hooks: Arc<Hooks>, options: &FisherOptions,
+    pub fn listen(&mut self, hooks: Arc<Hooks>, enable_health: bool,
+                  behind_proxies: u8, bind: &str,
                   input: mpsc::Sender<ProcessorInput>)
                  -> FisherResult<SocketAddr> {
         // Create the web api
-        let api = WebApi::new(input, hooks, options.enable_health);
+        let api = WebApi::new(input, hooks, enable_health);
 
         // Create the HTTP server
-        let mut server = HttpServer::new(api, options.behind_proxies);
+        let mut server = HttpServer::new(api, behind_proxies);
         server.add_route(
             Method::Get, "/health",
             Box::new(WebApi::get_health)
@@ -59,7 +59,7 @@ impl WebApp {
             Box::new(WebApi::process_hook)
         );
 
-        let socket = server.listen(&options.bind)?;
+        let socket = server.listen(bind)?;
 
         self.server = Some(server);
         Ok(socket)

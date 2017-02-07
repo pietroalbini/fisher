@@ -22,12 +22,12 @@ use utils;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ProxySupport {
-    behind: Option<u8>,
+    behind: u8,
 }
 
 impl ProxySupport {
 
-    pub fn new(behind: Option<u8>) -> Self {
+    pub fn new(behind: u8) -> Self {
         ProxySupport {
             behind: behind,
         }
@@ -38,7 +38,7 @@ impl ProxySupport {
         let original = req.source;
 
         // Return the original IP if the proxy support is disabled
-        if self.behind.is_none() {
+        if self.behind == 0 {
             return Ok(original);
         }
 
@@ -55,7 +55,7 @@ impl ProxySupport {
 
         // Return the correct IP if there are enough proxies, or an error if
         // there are too few
-        let index = (self.behind.unwrap() - 1) as usize;
+        let index = (self.behind - 1) as usize;
         if let Some(ip) = forwarded_ips.get(index) {
             Ok(*ip)
         } else {

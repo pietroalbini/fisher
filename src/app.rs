@@ -25,41 +25,24 @@ use errors::FisherResult;
 use utils;
 
 
-#[derive(Debug, Clone)]
-pub struct FisherOptions {
-    pub bind: String,
-    pub hooks_dir: String,
-    pub max_threads: u16,
-    pub enable_health: bool,
-    pub behind_proxies: Option<u8>,
-}
-
-impl FisherOptions {
-
-    #[cfg(test)]
-    pub fn defaults() -> Self {
-        FisherOptions {
-            bind: "127.0.0.1:8000".to_string(),
-            hooks_dir: "hooks/".to_string(),
-            max_threads: 1,
-            enable_health: true,
-            behind_proxies: None,
-        }
-    }
-}
-
-
+#[derive(Debug)]
 pub struct Fisher<'a> {
-    options: &'a FisherOptions,
+    pub max_threads: u16,
+    pub behind_proxies: u8,
+    pub bind: &'a str,
+    pub enable_health: bool,
     hooks: Hooks,
     environment: HashMap<String, String>,
 }
 
 impl<'a> Fisher<'a> {
 
-    pub fn new(options: &'a FisherOptions) -> Self {
+    pub fn new() -> Self {
         Fisher {
-            options: options,
+            max_threads: 1,
+            behind_proxies: 0,
+            bind: "127.0.0.1:8000",
+            enable_health: true,
             hooks: Hooks::new(),
             environment: HashMap::new(),
         }
@@ -98,8 +81,7 @@ impl<'a> Fisher<'a> {
 
         // Start the processor
         let processor = Processor::new(
-            self.options.max_threads, hooks.clone(),
-            self.environment,
+            self.max_threads, hooks.clone(), self.environment,
         )?;
         let processor_input = processor.input();
 
@@ -107,7 +89,8 @@ impl<'a> Fisher<'a> {
         let mut web_api = WebApp::new();
         let listening;
         match web_api.listen(
-            hooks.clone(), self.options, processor_input
+            hooks.clone(), self.enable_health, self.behind_proxies, self.bind,
+            processor_input,
         ) {
             Ok(socket) => {
                 listening = socket;
