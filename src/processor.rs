@@ -13,23 +13,80 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::{VecDeque, HashMap};
+use std::collections::{BinaryHeap, HashMap};
 use std::sync::{Arc, mpsc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::fmt;
+use std::cmp::Ordering as CmpOrdering;
 
 use jobs::{Job, Context};
 use hooks::Hooks;
 use requests::Request;
 use providers::StatusEvent;
+use utils::Serial;
 use errors::{self, FisherResult};
+
+
+#[derive(Debug)]
+struct ScheduledJob {
+    job: Job,
+    priority: isize,
+    serial: Serial,
+}
+
+impl ScheduledJob {
+
+    fn new(job: Job, priority: isize, serial: Serial) -> ScheduledJob {
+        ScheduledJob {
+            job: job,
+            priority: priority,
+            serial: serial,
+        }
+    }
+
+    fn job(&self) -> &Job {
+        &self.job
+    }
+}
+
+impl Ord for ScheduledJob {
+
+    fn cmp(&self, other: &ScheduledJob) -> CmpOrdering {
+        let priority_ord = self.priority.cmp(&other.priority);
+
+        if priority_ord == CmpOrdering::Equal {
+            self.serial.cmp(&other.serial).reverse()
+        } else {
+            priority_ord
+        }
+    }
+}
+
+impl PartialOrd for ScheduledJob {
+
+    fn partial_cmp(&self, other: &ScheduledJob) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for ScheduledJob {
+
+    fn eq(&self, other: &ScheduledJob) -> bool {
+        self.priority == other.priority
+    }
+}
+
+impl Eq for ScheduledJob {}
 
 
 #[derive(Clone)]
 pub enum ProcessorInput {
-    Job(Job),
+    Job(Job, isize),
     HealthStatus(mpsc::Sender<HealthDetails>),
+
+    _Lock,
+    _Unlock,
 
     _StopSignal,
     _JobEnded,
@@ -88,8 +145,9 @@ struct InnerProcessor {
     hooks: Arc<Hooks>,
     jobs_context: Arc<Context>,
 
+    locked: bool,
     should_stop: bool,
-    queue: VecDeque<Job>,
+    queue: BinaryHeap<ScheduledJob>,
     threads: Vec<Thread>,
 
     input_send: mpsc::Sender<ProcessorInput>,
@@ -111,8 +169,9 @@ impl InnerProcessor {
             hooks: hooks,
             jobs_context: jobs_context,
 
+            locked: false,
             should_stop: false,
-            queue: VecDeque::new(),
+            queue: BinaryHeap::new(),
             threads: Vec::new(),
 
             input_send: input_send,
@@ -129,12 +188,17 @@ impl InnerProcessor {
             self.spawn_thread();
         }
 
+        let mut serial = Serial::zero();
         while let Ok(input) = self.input_recv.recv() {
             match input {
 
-                ProcessorInput::Job(job) => {
-                    self.queue.push_back(job);
+                ProcessorInput::Job(job, priority) => {
+                    self.queue.push(ScheduledJob::new(
+                        job, priority, serial.clone()
+                    ));
                     self.run_jobs();
+
+                    serial.next();
                 },
 
                 ProcessorInput::HealthStatus(return_to) => {
@@ -148,6 +212,15 @@ impl InnerProcessor {
                         busy_threads: busy_threads as u16,
                         max_threads: self.max_threads,
                     })?;
+                },
+
+                ProcessorInput::_Lock => {
+                    self.locked = true;
+                },
+
+                ProcessorInput::_Unlock => {
+                    self.locked = false;
+                    self.run_jobs();
                 },
 
                 ProcessorInput::_JobEnded => {
@@ -208,14 +281,18 @@ impl InnerProcessor {
     }
 
     fn run_jobs(&mut self) {
+        if self.locked {
+            return;
+        }
+
         // Here there is a loop so if for some reason there are multiple
         // threads available and there are enough elements in the queue,
         // all of them are processed
         'main: loop {
-            if let Some(mut job) = self.queue.pop_front() {
+            if let Some(mut job) = self.queue.pop() {
                 // Try to run the job in a thread
                 for thread in &self.threads {
-                    // The process() method returns Some(Job) if
+                    // The process() method returns Some(ScheduledJob) if
                     // *IT'S BUSY* working on another job
                     if let Some(j) = thread.process(job) {
                         job = j;
@@ -223,7 +300,7 @@ impl InnerProcessor {
                         continue 'main;
                     }
                 }
-                self.queue.push_front(job);
+                self.queue.push(job);
             }
             break;
         }
@@ -233,7 +310,7 @@ impl InnerProcessor {
 
 #[derive(Debug)]
 enum ThreadInput {
-    Process(Job),
+    Process(ScheduledJob),
     StopSignal,
 }
 
@@ -259,7 +336,7 @@ impl Thread {
                 match input {
                     // A new job should be processed
                     ThreadInput::Process(job) => {
-                        let result = job.process(&ctx);
+                        let result = job.job().process(&ctx);
 
                         // Display the error if there is one
                         match result {
@@ -288,7 +365,7 @@ impl Thread {
                                 }
                             },
                             Err(mut error) => {
-                                error.set_hook(job.hook_name().into());
+                                error.set_hook(job.job().hook_name().into());
                                 let _ = errors::print_err::<()>(Err(error));
                             }
                         }
@@ -314,7 +391,7 @@ impl Thread {
     }
 
     // Here, None equals to success, and Some(job) equals to failure
-    pub fn process(&self, job: Job) -> Option<Job> {
+    pub fn process(&self, job: ScheduledJob) -> Option<ScheduledJob> {
         // Do some consistency checks
         if self.should_stop || self.busy() {
             return Some(job);
@@ -400,7 +477,7 @@ mod tests {
 
         // Queue a dummy job
         let job = env.create_job("long.sh", Request::Web(req));
-        processor.input().send(ProcessorInput::Job(job)).unwrap();
+        processor.input().send(ProcessorInput::Job(job, 0)).unwrap();
 
         // Exit immediately -- this forces the processor to wait since the job
         // sleeps for half a second
@@ -413,7 +490,7 @@ mod tests {
     }
 
 
-    fn run_multiple_append(threads: u16) -> String {
+    fn run_multiple_append(threads: u16, prioritized: bool) -> String {
         let mut env = TestingEnv::new();
 
         let processor = Processor::new(
@@ -424,18 +501,31 @@ mod tests {
         let mut out = env.tempdir();
         out.push("out");
 
+        // Prevent jobs from being run
+        input.send(ProcessorInput::_Lock).unwrap();
+
         // Queue ten different jobs
         let mut req;
         let mut job;
+        let mut priority = 0;
         for chr in 0..10 {
             req = dummy_web_request();
             req.params.insert("env".into(), format!("{}>{}",
                 out.to_str().unwrap(), chr,
             ));
 
+            if prioritized {
+                priority = chr / 2;
+            }
+
+            println!("{} {}", chr, priority);
+
             job = env.create_job("append-val.sh", Request::Web(req));
-            input.send(ProcessorInput::Job(job)).unwrap();
+            input.send(ProcessorInput::Job(job, priority)).unwrap();
         }
+
+        // Allow the processor to work
+        input.send(ProcessorInput::_Unlock).unwrap();
 
         processor.stop().unwrap();
 
@@ -452,14 +542,21 @@ mod tests {
 
     #[test]
     fn test_processor_one_thread_correct_order() {
-        let output = run_multiple_append(1);
+        let output = run_multiple_append(1, false);
         assert_eq!(output.as_str(), "0123456789");
     }
 
 
     #[test]
+    fn test_processor_one_thread_correct_order_prioritized() {
+        let output = run_multiple_append(1, true);
+        assert_eq!(output.as_str(), "8967452301");
+    }
+
+
+    #[test]
     fn test_processor_multiple_threads() {
-        let output = run_multiple_append(4);
+        let output = run_multiple_append(4, false);
         assert_eq!(output.len(), 10);
     }
 
@@ -479,7 +576,7 @@ mod tests {
         let mut req = dummy_web_request();
         req.params.insert("env".into(), out.to_str().unwrap().to_string());
         let job = env.create_job("wait.sh", Request::Web(req));
-        input.send(ProcessorInput::Job(job)).unwrap();
+        input.send(ProcessorInput::Job(job, 0)).unwrap();
 
         // Queue ten extra jobs
         let mut req;
@@ -487,7 +584,7 @@ mod tests {
         for _ in 0..10 {
             req = Request::Web(dummy_web_request());
             job = env.create_job("example.sh", req);
-            input.send(ProcessorInput::Job(job)).unwrap();
+            input.send(ProcessorInput::Job(job, 0)).unwrap();
         }
 
         // Get the health status of the processor

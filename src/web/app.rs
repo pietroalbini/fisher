@@ -133,7 +133,7 @@ mod tests {
         assert!(input.is_some());
 
         // Assert the right job is queued
-        if let ProcessorInput::Job(job) = input.unwrap() {
+        if let ProcessorInput::Job(job, _) = input.unwrap() {
             assert_eq!(job.hook_name(), "example.sh");
         } else {
             panic!("Wrong processor input received");

@@ -20,8 +20,10 @@ mod tempdir;
 mod net;
 mod hex;
 mod parse_env;
+mod serial;
 
 
+pub use utils::serial::Serial;
 pub use utils::tempdir::create_temp_dir;
 pub use utils::net::parse_forwarded_for;
 pub use utils::hex::from_hex;

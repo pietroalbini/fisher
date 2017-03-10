@@ -73,7 +73,7 @@ impl WebApi {
             RequestType::ExecuteHook => {
                 let job = Job::new(hook.clone(), provider, req.clone());
                 self.processor_input.lock().unwrap()
-                    .send(ProcessorInput::Job(job)).unwrap();
+                    .send(ProcessorInput::Job(job, 0)).unwrap();
 
                 Response::Ok
             },
