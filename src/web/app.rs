@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::net::SocketAddr;
 
@@ -21,7 +21,7 @@ use tiny_http::Method;
 
 use errors::FisherResult;
 use hooks::Hooks;
-use processor::ProcessorInput;
+use processor::ProcessorApi;
 use web::http::HttpServer;
 use web::api::WebApi;
 
@@ -35,12 +35,12 @@ pub struct WebApp {
 impl WebApp {
 
     pub fn new(hooks: Arc<Hooks>, enable_health: bool, behind_proxies: u8,
-               bind: &str, input: mpsc::Sender<ProcessorInput>)
+               bind: &str, processor: ProcessorApi)
                -> FisherResult<Self> {
         let locked = Arc::new(AtomicBool::new(false));
 
         // Create the web api
-        let api = WebApi::new(input, hooks, locked.clone(), enable_health);
+        let api = WebApi::new(processor, hooks, locked.clone(), enable_health);
 
         // Create the HTTP server
         let mut server = HttpServer::new(api, behind_proxies);

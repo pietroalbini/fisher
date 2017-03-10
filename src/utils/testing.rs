@@ -27,7 +27,7 @@ use hooks::{self, Hooks};
 use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
-use processor::{ProcessorInput, HealthDetails};
+use processor::{ProcessorApi, ProcessorInput, HealthDetails};
 use utils;
 
 
@@ -225,7 +225,8 @@ impl WebAppInstance {
         // Start the web server
         // Create a new instance of WebApp
         let inst = WebApp::new(
-            hooks, health, behind_proxies, "127.0.0.1:0", input_send,
+            hooks, health, behind_proxies, "127.0.0.1:0",
+            ProcessorApi::mock(input_send.clone()),
         ).unwrap();
 
         // Create the HTTP client

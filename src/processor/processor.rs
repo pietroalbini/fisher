@@ -38,11 +38,50 @@ pub enum ProcessorInput {
     Job(Job, isize),
     HealthStatus(mpsc::Sender<HealthDetails>),
 
-    _Lock,
-    _Unlock,
+    #[cfg(test)] Lock,
+    #[cfg(test)] Unlock,
 
-    _StopSignal,
-    _JobEnded,
+    StopSignal,
+    JobEnded,
+}
+
+
+#[derive(Debug, Clone)]
+pub struct ProcessorApi {
+    input: mpsc::Sender<ProcessorInput>,
+}
+
+impl ProcessorApi {
+
+    #[cfg(test)]
+    pub fn mock(input: mpsc::Sender<ProcessorInput>) -> Self {
+        ProcessorApi {
+            input: input,
+        }
+    }
+
+    pub fn queue(&self, job: Job, priority: isize) -> FisherResult<()> {
+        self.input.send(ProcessorInput::Job(job, priority))?;
+        Ok(())
+    }
+
+    pub fn health_status(&self) -> FisherResult<HealthDetails> {
+        let (res_send, res_recv) = mpsc::channel();
+        self.input.send(ProcessorInput::HealthStatus(res_send))?;
+        Ok(res_recv.recv()?)
+    }
+
+    #[cfg(test)]
+    pub fn lock(&self) -> FisherResult<()> {
+        self.input.send(ProcessorInput::Lock)?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn unlock(&self) -> FisherResult<()> {
+        self.input.send(ProcessorInput::Unlock)?;
+        Ok(())
+    }
 }
 
 
@@ -80,14 +119,16 @@ impl Processor {
 
     pub fn stop(self) -> FisherResult<()> {
         // Ask the processor to stop
-        self.input.send(ProcessorInput::_StopSignal)?;
+        self.input.send(ProcessorInput::StopSignal)?;
         self.wait.recv()?;
 
         Ok(())
     }
 
-    pub fn input(&self) -> mpsc::Sender<ProcessorInput> {
-        self.input.clone()
+    pub fn api(&self) -> ProcessorApi {
+        ProcessorApi {
+            input: self.input.clone(),
+        }
     }
 }
 
@@ -167,16 +208,18 @@ impl InnerProcessor {
                     })?;
                 },
 
-                ProcessorInput::_Lock => {
+                #[cfg(test)]
+                ProcessorInput::Lock => {
                     self.locked = true;
                 },
 
-                ProcessorInput::_Unlock => {
+                #[cfg(test)]
+                ProcessorInput::Unlock => {
                     self.locked = false;
                     self.run_jobs();
                 },
 
-                ProcessorInput::_JobEnded => {
+                ProcessorInput::JobEnded => {
                     self.run_jobs();
 
                     if self.should_stop {
@@ -188,7 +231,7 @@ impl InnerProcessor {
                     }
                 },
 
-                ProcessorInput::_StopSignal => {
+                ProcessorInput::StopSignal => {
                     self.should_stop = true;
                     self.cleanup_threads();
 
@@ -265,13 +308,12 @@ impl InnerProcessor {
 mod tests {
     use std::fs::File;
     use std::io::Read;
-    use std::sync::mpsc;
     use std::collections::HashMap;
 
     use utils::testing::*;
     use requests::Request;
 
-    use super::{Processor, ProcessorInput};
+    use super::Processor;
 
 
     #[test]
@@ -304,7 +346,7 @@ mod tests {
 
         // Queue a dummy job
         let job = env.create_job("long.sh", Request::Web(req));
-        processor.input().send(ProcessorInput::Job(job, 0)).unwrap();
+        processor.api().queue(job, 0).unwrap();
 
         // Exit immediately -- this forces the processor to wait since the job
         // sleeps for half a second
@@ -324,12 +366,12 @@ mod tests {
             threads, env.hooks(), HashMap::new()
         ).unwrap();
 
-        let input = processor.input();
+        let api = processor.api();
         let mut out = env.tempdir();
         out.push("out");
 
         // Prevent jobs from being run
-        input.send(ProcessorInput::_Lock).unwrap();
+        api.lock().unwrap();
 
         // Queue ten different jobs
         let mut req;
@@ -348,11 +390,11 @@ mod tests {
             println!("{} {}", chr, priority);
 
             job = env.create_job("append-val.sh", Request::Web(req));
-            input.send(ProcessorInput::Job(job, priority)).unwrap();
+            api.queue(job, priority).unwrap();
         }
 
         // Allow the processor to work
-        input.send(ProcessorInput::_Unlock).unwrap();
+        api.unlock().unwrap();
 
         processor.stop().unwrap();
 
@@ -395,7 +437,7 @@ mod tests {
             1, env.hooks(), HashMap::new()
         ).unwrap();
 
-        let input = processor.input();
+        let api = processor.api();
         let mut out = env.tempdir();
         out.push("ok");
 
@@ -403,7 +445,7 @@ mod tests {
         let mut req = dummy_web_request();
         req.params.insert("env".into(), out.to_str().unwrap().to_string());
         let job = env.create_job("wait.sh", Request::Web(req));
-        input.send(ProcessorInput::Job(job, 0)).unwrap();
+        api.queue(job, 0).unwrap();
 
         // Queue ten extra jobs
         let mut req;
@@ -411,13 +453,11 @@ mod tests {
         for _ in 0..10 {
             req = Request::Web(dummy_web_request());
             job = env.create_job("example.sh", req);
-            input.send(ProcessorInput::Job(job, 0)).unwrap();
+            api.queue(job, 0).unwrap();
         }
 
         // Get the health status of the processor
-        let (status_send, status_recv) = mpsc::channel();
-        input.send(ProcessorInput::HealthStatus(status_send)).unwrap();
-        let status = status_recv.recv().unwrap();
+        let status = api.health_status().unwrap();
 
         // Check if the health details are correct
         assert_eq!(status.queued_jobs, 10);

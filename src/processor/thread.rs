@@ -92,7 +92,7 @@ impl Thread {
 
                         busy_inner.store(false, Ordering::Relaxed);
                         processor_input.send(
-                            ProcessorInput::_JobEnded
+                            ProcessorInput::JobEnded
                         ).unwrap();
                     },
 

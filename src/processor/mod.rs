@@ -17,5 +17,5 @@ mod scheduled_job;
 mod processor;
 mod thread;
 
-pub use processor::processor::{HealthDetails, Processor, ProcessorInput};
-pub use processor::scheduled_job::ScheduledJob;
+pub use processor::processor::{HealthDetails, Processor, ProcessorApi};
+#[cfg(test)] pub use processor::processor::ProcessorInput;

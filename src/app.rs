@@ -83,12 +83,12 @@ impl<'a> Fisher<'a> {
         let processor = Processor::new(
             self.max_threads, hooks.clone(), self.environment,
         )?;
-        let processor_input = processor.input();
+        let processor_api = processor.api();
 
         // Start the Web API
         let web_api = match WebApp::new(
             hooks.clone(), self.enable_health, self.behind_proxies, self.bind,
-            processor_input,
+            processor_api,
         ) {
             Ok(socket) => socket,
             Err(error) => {

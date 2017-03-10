@@ -13,19 +13,19 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use requests::{Request, RequestType};
 use hooks::Hooks;
 use jobs::Job;
-use processor::ProcessorInput;
+use processor::ProcessorApi;
 use web::responses::Response;
 
 
 #[derive(Clone)]
 pub struct WebApi {
-    processor_input: Arc<Mutex<mpsc::Sender<ProcessorInput>>>,
+    processor: Arc<Mutex<ProcessorApi>>,
     hooks: Arc<Hooks>,
     locked: Arc<AtomicBool>,
 
@@ -34,11 +34,11 @@ pub struct WebApi {
 
 impl WebApi {
 
-    pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
+    pub fn new(processor: ProcessorApi,
                hooks: Arc<Hooks>, locked: Arc<AtomicBool>,
                health_enabled: bool) -> Self {
         WebApi {
-            processor_input: Arc::new(Mutex::new(processor_input)),
+            processor: Arc::new(Mutex::new(processor)),
             hooks: hooks,
             locked: locked,
             health_enabled: health_enabled,
@@ -72,8 +72,7 @@ impl WebApi {
             // Queue a job if the hook should be executed
             RequestType::ExecuteHook => {
                 let job = Job::new(hook.clone(), provider, req.clone());
-                self.processor_input.lock().unwrap()
-                    .send(ProcessorInput::Job(job, 0)).unwrap();
+                self.processor.lock().unwrap().queue(job, 0).unwrap();
 
                 Response::Ok
             },
@@ -84,16 +83,9 @@ impl WebApi {
 
     pub fn get_health(&self, _req: &Request, _args: Vec<String>) -> Response {
         if self.health_enabled {
-            // Create a channel to communicate with the processor
-            let (details_send, details_recv) = mpsc::channel();
-
-            // Get the details from the processor
-            self.processor_input.lock().unwrap().send(
-                ProcessorInput::HealthStatus(details_send)
-            ).unwrap();
-            let details = details_recv.recv().unwrap();
-
-            Response::HealthStatus(details)
+            Response::HealthStatus(
+                self.processor.lock().unwrap().health_status().unwrap()
+            )
         } else {
             Response::Forbidden
         }
