@@ -15,69 +15,22 @@
 
 use std::collections::{BinaryHeap, HashMap};
 use std::sync::{Arc, mpsc};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
-use std::fmt;
-use std::cmp::Ordering as CmpOrdering;
 
 use jobs::{Job, Context};
 use hooks::Hooks;
-use requests::Request;
-use providers::StatusEvent;
 use utils::Serial;
-use errors::{self, FisherResult};
+use errors::FisherResult;
+
+use super::thread::Thread;
+use super::scheduled_job::ScheduledJob;
 
 
-#[derive(Debug)]
-struct ScheduledJob {
-    job: Job,
-    priority: isize,
-    serial: Serial,
+#[derive(Clone, Debug, Serialize)]
+pub struct HealthDetails {
+    pub queued_jobs: usize,
+    pub busy_threads: u16,
+    pub max_threads: u16,
 }
-
-impl ScheduledJob {
-
-    fn new(job: Job, priority: isize, serial: Serial) -> ScheduledJob {
-        ScheduledJob {
-            job: job,
-            priority: priority,
-            serial: serial,
-        }
-    }
-
-    fn job(&self) -> &Job {
-        &self.job
-    }
-}
-
-impl Ord for ScheduledJob {
-
-    fn cmp(&self, other: &ScheduledJob) -> CmpOrdering {
-        let priority_ord = self.priority.cmp(&other.priority);
-
-        if priority_ord == CmpOrdering::Equal {
-            self.serial.cmp(&other.serial).reverse()
-        } else {
-            priority_ord
-        }
-    }
-}
-
-impl PartialOrd for ScheduledJob {
-
-    fn partial_cmp(&self, other: &ScheduledJob) -> Option<CmpOrdering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for ScheduledJob {
-
-    fn eq(&self, other: &ScheduledJob) -> bool {
-        self.priority == other.priority
-    }
-}
-
-impl Eq for ScheduledJob {}
 
 
 #[derive(Clone)]
@@ -305,132 +258,6 @@ impl InnerProcessor {
             break;
         }
     }
-}
-
-
-#[derive(Debug)]
-enum ThreadInput {
-    Process(ScheduledJob),
-    StopSignal,
-}
-
-
-struct Thread {
-    should_stop: bool,
-    busy: Arc<AtomicBool>,
-
-    handle: thread::JoinHandle<()>,
-    input: mpsc::Sender<ThreadInput>,
-}
-
-impl Thread {
-
-    pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
-               ctx: Arc<Context>, hooks: Arc<Hooks>) -> Thread {
-        let (input_send, input_recv) = mpsc::channel();
-        let busy = Arc::new(AtomicBool::new(false));
-
-        let busy_inner = busy.clone();
-        let handle = thread::spawn(move || {
-            for input in input_recv.iter() {
-                match input {
-                    // A new job should be processed
-                    ThreadInput::Process(job) => {
-                        let result = job.job().process(&ctx);
-
-                        // Display the error if there is one
-                        match result {
-                            Ok(output) => {
-                                let event = if output.success {
-                                    StatusEvent::JobCompleted(output)
-                                } else {
-                                    StatusEvent::JobFailed(output)
-                                };
-                                let kind = event.kind();
-
-                                let mut status_job;
-                                let mut status_result;
-                                for hp in hooks.status_hooks_iter(kind) {
-                                    status_job = Job::new(
-                                        hp.hook.clone(),
-                                        Some(hp.provider.clone()),
-                                        Request::Status(event.clone()),
-                                    );
-                                    status_result = status_job.process(&ctx);
-
-                                    if let Err(mut error) = status_result {
-                                        error.set_hook(hp.hook.name().into());
-                                        let _ = errors::print_err::<()>(Err(error));
-                                    }
-                                }
-                            },
-                            Err(mut error) => {
-                                error.set_hook(job.job().hook_name().into());
-                                let _ = errors::print_err::<()>(Err(error));
-                            }
-                        }
-
-                        busy_inner.store(false, Ordering::Relaxed);
-                        processor_input.send(
-                            ProcessorInput::_JobEnded
-                        ).unwrap();
-                    },
-
-                    // Please stop, thanks!
-                    ThreadInput::StopSignal => break,
-                }
-            }
-        });
-
-        Thread {
-            should_stop: false,
-            busy: busy,
-            handle: handle,
-            input: input_send,
-        }
-    }
-
-    // Here, None equals to success, and Some(job) equals to failure
-    pub fn process(&self, job: ScheduledJob) -> Option<ScheduledJob> {
-        // Do some consistency checks
-        if self.should_stop || self.busy() {
-            return Some(job);
-        }
-
-        self.busy.store(true, Ordering::Relaxed);
-        self.input.send(ThreadInput::Process(job)).unwrap();
-
-        None
-    }
-
-    pub fn stop(mut self) {
-        self.should_stop = true;
-        self.input.send(ThreadInput::StopSignal).unwrap();
-
-        self.handle.join().unwrap();
-    }
-
-    #[inline]
-    pub fn busy(&self) -> bool {
-        self.busy.load(Ordering::Relaxed)
-    }
-}
-
-impl fmt::Debug for Thread {
-
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Thread {{ busy: {}, should_stop: {} }}",
-            self.busy(), self.should_stop,
-        )
-    }
-}
-
-
-#[derive(Clone, Debug, Serialize)]
-pub struct HealthDetails {
-    pub queued_jobs: usize,
-    pub busy_threads: u16,
-    pub max_threads: u16,
 }
 
 
