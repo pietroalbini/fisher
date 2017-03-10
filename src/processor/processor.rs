@@ -16,13 +16,18 @@
 use std::collections::{BinaryHeap, HashMap};
 use std::sync::{Arc, mpsc};
 
-use jobs::{Job, Context};
+use jobs::{Job, JobOutput, Context};
+use providers::StatusEvent;
 use hooks::Hooks;
 use utils::Serial;
 use errors::FisherResult;
+use requests::Request;
 
 use super::thread::Thread;
 use super::scheduled_job::ScheduledJob;
+
+
+const STATUS_EVENTS_PRIORITY: isize = 1000;
 
 
 #[derive(Clone, Debug, Serialize)]
@@ -37,6 +42,7 @@ pub struct HealthDetails {
 pub enum ProcessorInput {
     Job(Job, isize),
     HealthStatus(mpsc::Sender<HealthDetails>),
+    QueueStatusEvent(StatusEvent),
 
     #[cfg(test)] Lock,
     #[cfg(test)] Unlock,
@@ -80,6 +86,31 @@ impl ProcessorApi {
     #[cfg(test)]
     pub fn unlock(&self) -> FisherResult<()> {
         self.input.send(ProcessorInput::Unlock)?;
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct ProcessorInternalApi {
+    input: mpsc::Sender<ProcessorInput>,
+}
+
+impl ProcessorInternalApi {
+
+    pub fn record_output(&self, output: JobOutput) -> FisherResult<()> {
+        let event = if output.success {
+            StatusEvent::JobCompleted(output)
+        } else {
+            StatusEvent::JobFailed(output)
+        };
+
+        self.input.send(ProcessorInput::QueueStatusEvent(event))?;
+        Ok(())
+    }
+
+    pub fn job_ended(&self) -> FisherResult<()> {
+        self.input.send(ProcessorInput::JobEnded)?;
         Ok(())
     }
 }
@@ -188,7 +219,7 @@ impl InnerProcessor {
 
                 ProcessorInput::Job(job, priority) => {
                     self.queue.push(ScheduledJob::new(
-                        job, priority, serial.clone()
+                        job, priority, serial.clone(), true,
                     ));
                     self.run_jobs();
 
@@ -206,6 +237,21 @@ impl InnerProcessor {
                         busy_threads: busy_threads as u16,
                         max_threads: self.max_threads,
                     })?;
+                },
+
+                ProcessorInput::QueueStatusEvent(event) => {
+                    for hook in self.hooks.status_hooks_iter(event.kind()) {
+                        self.queue.push(ScheduledJob::new(
+                            Job::new(
+                                hook.hook.clone(),
+                                Some(hook.provider.clone()),
+                                Request::Status(event.clone()),
+                            ), STATUS_EVENTS_PRIORITY, serial.clone(), false,
+                        ));
+                        serial.next();
+                    }
+
+                    self.run_jobs();
                 },
 
                 #[cfg(test)]
@@ -247,10 +293,11 @@ impl InnerProcessor {
 
     #[inline]
     fn spawn_thread(&mut self) {
-        self.threads.push(Thread::new(
-            self.input_send.clone(), self.jobs_context.clone(),
-            self.hooks.clone(),
-        ));
+        let api = ProcessorInternalApi {
+            input: self.input_send.clone(),
+        };
+
+        self.threads.push(Thread::new(api, self.jobs_context.clone()));
     }
 
     fn cleanup_threads(&mut self) {

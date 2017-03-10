@@ -18,14 +18,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::fmt;
 
-use jobs::{Job, Context};
-use hooks::Hooks;
-use requests::Request;
-use providers::StatusEvent;
+use jobs::Context;
 use errors;
 
 use super::scheduled_job::ScheduledJob;
-use super::processor::ProcessorInput;
+use super::processor::ProcessorInternalApi;
 
 
 #[derive(Debug)]
@@ -45,8 +42,7 @@ pub struct Thread {
 
 impl Thread {
 
-    pub fn new(processor_input: mpsc::Sender<ProcessorInput>,
-               ctx: Arc<Context>, hooks: Arc<Hooks>) -> Thread {
+    pub fn new(processor: ProcessorInternalApi, ctx: Arc<Context>) -> Thread {
         let (input_send, input_recv) = mpsc::channel();
         let busy = Arc::new(AtomicBool::new(false));
 
@@ -61,27 +57,8 @@ impl Thread {
                         // Display the error if there is one
                         match result {
                             Ok(output) => {
-                                let event = if output.success {
-                                    StatusEvent::JobCompleted(output)
-                                } else {
-                                    StatusEvent::JobFailed(output)
-                                };
-                                let kind = event.kind();
-
-                                let mut status_job;
-                                let mut status_result;
-                                for hp in hooks.status_hooks_iter(kind) {
-                                    status_job = Job::new(
-                                        hp.hook.clone(),
-                                        Some(hp.provider.clone()),
-                                        Request::Status(event.clone()),
-                                    );
-                                    status_result = status_job.process(&ctx);
-
-                                    if let Err(mut error) = status_result {
-                                        error.set_hook(hp.hook.name().into());
-                                        let _ = errors::print_err::<()>(Err(error));
-                                    }
+                                if job.should_trigger_status_hooks() {
+                                    processor.record_output(output).unwrap();
                                 }
                             },
                             Err(mut error) => {
@@ -91,9 +68,7 @@ impl Thread {
                         }
 
                         busy_inner.store(false, Ordering::Relaxed);
-                        processor_input.send(
-                            ProcessorInput::JobEnded
-                        ).unwrap();
+                        processor.job_ended().unwrap();
                     },
 
                     // Please stop, thanks!

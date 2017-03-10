@@ -24,20 +24,27 @@ pub struct ScheduledJob {
     job: Job,
     priority: isize,
     serial: Serial,
+    should_trigger_status_hooks: bool,
 }
 
 impl ScheduledJob {
 
-    pub fn new(job: Job, priority: isize, serial: Serial) -> ScheduledJob {
+    pub fn new(job: Job, priority: isize, serial: Serial,
+               should_trigger_status_hooks: bool) -> ScheduledJob {
         ScheduledJob {
             job: job,
             priority: priority,
             serial: serial,
+            should_trigger_status_hooks: should_trigger_status_hooks,
         }
     }
 
     pub fn job(&self) -> &Job {
         &self.job
+    }
+
+    pub fn should_trigger_status_hooks(&self) -> bool {
+        self.should_trigger_status_hooks
     }
 }
 
