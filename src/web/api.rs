@@ -72,7 +72,8 @@ impl WebApi {
             // Queue a job if the hook should be executed
             RequestType::ExecuteHook => {
                 let job = Job::new(hook.clone(), provider, req.clone());
-                self.processor.lock().unwrap().queue(job, 0).unwrap();
+                self.processor.lock().unwrap()
+                              .queue(job, hook.priority()).unwrap();
 
                 Response::Ok
             },

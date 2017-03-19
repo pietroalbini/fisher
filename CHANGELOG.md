@@ -12,6 +12,7 @@ This document contains what changed in each release of Fisher.
  * Add the `label`, `milestone`, `organization`, `project_card`,
    `project_column`, `project`, `pull_request_review`, `team` GitHub events
  * Add the ability to provide extra environment variables with the `-e` flag
+ * Add the ability to set priorities for hooks
 
 * **Changes and improvements:**
 

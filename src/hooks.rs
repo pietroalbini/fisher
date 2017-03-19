@@ -23,6 +23,7 @@ use std::io::{BufReader, BufRead};
 use std::sync::Arc;
 
 use regex::Regex;
+use serde_json;
 
 use providers::{Provider, StatusEventKind};
 use requests::{Request, RequestType};
@@ -30,9 +31,38 @@ use errors::FisherResult;
 
 
 lazy_static! {
-    static ref HEADER_RE: Regex = Regex::new(
+    static ref PREFERENCES_HEADER_RE: Regex = Regex::new(
+        r"## Fisher: (.*)"
+    ).unwrap();
+    static ref PROVIDER_HEADER_RE: Regex = Regex::new(
         r"## Fisher-([a-zA-Z]+): (.*)"
     ).unwrap();
+}
+
+
+#[derive(Debug, Deserialize)]
+struct Preferences {
+    priority: Option<isize>,
+}
+
+impl Preferences {
+
+    fn empty() -> Self {
+        Preferences {
+            priority: None,
+        }
+    }
+
+    #[inline]
+    fn priority(&self) -> isize {
+        self.priority.unwrap_or(0)
+    }
+}
+
+
+struct LoadHeadersOutput {
+    preferences: Preferences,
+    providers: Vec<Arc<Provider>>,
 }
 
 
@@ -40,28 +70,31 @@ lazy_static! {
 pub struct Hook {
     name: String,
     exec: String,
+    priority: isize,
     providers: Vec<Arc<Provider>>,
 }
 
 impl Hook {
 
     fn load(name: String, exec: String) -> FisherResult<Hook> {
-        let providers = Hook::load_providers(&exec)?;
+        let headers = Hook::load_headers(&exec)?;
 
         Ok(Hook {
             name: name,
             exec: exec,
-            providers: providers,
+            priority: headers.preferences.priority(),
+            providers: headers.providers,
         })
     }
 
-    fn load_providers(file: &str) -> FisherResult<Vec<Arc<Provider>>> {
+    fn load_headers(file: &str) -> FisherResult<LoadHeadersOutput> {
         let f = fs::File::open(file).unwrap();
         let reader = BufReader::new(f);
 
         let mut content;
         let mut line_number: u32 = 0;
-        let mut result = vec![];
+        let mut providers = vec![];
+        let mut preferences = None;
         for line in reader.lines() {
             line_number += 1;
             content = line.unwrap();
@@ -71,14 +104,20 @@ impl Hook {
                 break;
             }
 
-            // Capture every provider defined in the hook
-            for cap in HEADER_RE.captures_iter(&content) {
-                let name = cap.at(1).unwrap();
-                let data = cap.at(2).unwrap();
+            if preferences.is_none() {
+                if let Some(cap) = PREFERENCES_HEADER_RE.captures(&content) {
+                    preferences = Some(serde_json::from_str(&cap[1])?);
+                    continue;  // Don't capture anything else for this line
+                }
+            }
+
+            if let Some(cap) = PROVIDER_HEADER_RE.captures(&content) {
+                let name = &cap[1];
+                let data = &cap[2];
 
                 match Provider::new(name, data) {
                     Ok(provider) => {
-                        result.push(Arc::new(provider));
+                        providers.push(Arc::new(provider));
                     },
                     Err(mut error) => {
                         error.set_file(file.into());
@@ -89,7 +128,12 @@ impl Hook {
             }
         }
 
-        Ok(result)
+        Ok(LoadHeadersOutput {
+            preferences: if let Some(pref) = preferences { pref } else {
+                Preferences::empty()
+            },
+            providers: providers,
+        })
     }
 
     pub fn validate(&self, req: &Request)
@@ -111,6 +155,10 @@ impl Hook {
 
     pub fn exec(&self) -> &str {
         &self.exec
+    }
+
+    pub fn priority(&self) -> isize {
+        self.priority
     }
 }
 
@@ -267,6 +315,17 @@ mod tests {
             r#"echo "Hello world"#
         );
         let hook = assert_hook!(base, "naked.sh");
+        assert_eq!(hook.priority, 0);
+        assert!(hook.providers.is_empty());
+
+        // Try to load an hook with some preferences
+        create_hook!(base, "preferences.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher: {"priority": 5}"#,
+            r#"echo "Hello world"#
+        );
+        let hook = assert_hook!(base, "preferences.sh");
+        assert_eq!(hook.priority, 5);
         assert!(hook.providers.is_empty());
 
         // Try to load an hook with a provider
@@ -276,6 +335,21 @@ mod tests {
             r#"echo "Hello world"#
         );
         let hook = assert_hook!(base, "one-provider.sh");
+        assert_eq!(hook.priority, 0);
+        assert_eq!(hook.providers.len(), 1);
+        assert_eq!(
+            hook.providers.get(0).unwrap().name(), "Testing".to_string()
+        );
+
+        // Try to load an hook with a provider and some preferences
+        create_hook!(base, "preferences-provider.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher: {"priority": 5}"#,
+            r#"## Fisher-Testing: {}"#,
+            r#"echo "Hello world"#
+        );
+        let hook = assert_hook!(base, "preferences-provider.sh");
+        assert_eq!(hook.priority, 5);
         assert_eq!(hook.providers.len(), 1);
         assert_eq!(
             hook.providers.get(0).unwrap().name(), "Testing".to_string()
@@ -289,6 +363,7 @@ mod tests {
             r#"echo "Hello world"#
         );
         let hook = assert_hook!(base, "two-providers.sh");
+        assert_eq!(hook.priority, 0);
         assert_eq!(hook.providers.len(), 2);
         assert_eq!(
             hook.providers.get(0).unwrap().name(), "Standalone".to_string()
@@ -307,7 +382,9 @@ mod tests {
                 let mut path = $base.clone();
                 path.push($file);
 
-                Hook::load_providers(&path.to_str().unwrap().to_string())
+                Hook::load_headers(
+                    &path.to_str().unwrap().to_string()
+                ).map(|res| res.providers)
             }};
         };
 
@@ -345,7 +422,6 @@ mod tests {
         // This hook contains multiple simil-providers, but not a real one
         create_hook!(base, "simil.sh",
             r#"#!/bin/bash"#,
-            r#"## Fisher: something"#,
             r#"## Something-Testing: fisher"#,
             r#"## Fisher-Testing something"#,
             r#"echo "hi";"#
