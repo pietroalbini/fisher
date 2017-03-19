@@ -13,9 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+mod api;
 mod scheduled_job;
-mod processor;
+mod scheduler;
 mod thread;
 
-pub use processor::processor::{HealthDetails, Processor, ProcessorApi};
-#[cfg(test)] pub use processor::processor::ProcessorInput;
+pub use self::api::{Processor, ProcessorApi, HealthDetails};
+#[cfg(test)] pub use processor::scheduler::SchedulerInput as ProcessorInput;

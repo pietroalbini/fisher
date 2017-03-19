@@ -22,7 +22,7 @@ use jobs::Context;
 use errors;
 
 use super::scheduled_job::ScheduledJob;
-use super::processor::ProcessorInternalApi;
+use super::scheduler::SchedulerInternalApi;
 
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ pub struct Thread {
 
 impl Thread {
 
-    pub fn new(processor: ProcessorInternalApi, ctx: Arc<Context>) -> Thread {
+    pub fn new(processor: SchedulerInternalApi, ctx: Arc<Context>) -> Thread {
         let (input_send, input_recv) = mpsc::channel();
         let busy = Arc::new(AtomicBool::new(false));
 

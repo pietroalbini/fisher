@@ -39,7 +39,7 @@ pub struct HealthDetails {
 
 
 #[derive(Clone)]
-pub enum ProcessorInput {
+pub enum SchedulerInput {
     Job(Job, isize),
     HealthStatus(mpsc::Sender<HealthDetails>),
     QueueStatusEvent(StatusEvent),
@@ -53,50 +53,11 @@ pub enum ProcessorInput {
 
 
 #[derive(Debug, Clone)]
-pub struct ProcessorApi {
-    input: mpsc::Sender<ProcessorInput>,
+pub struct SchedulerInternalApi {
+    input: mpsc::Sender<SchedulerInput>,
 }
 
-impl ProcessorApi {
-
-    #[cfg(test)]
-    pub fn mock(input: mpsc::Sender<ProcessorInput>) -> Self {
-        ProcessorApi {
-            input: input,
-        }
-    }
-
-    pub fn queue(&self, job: Job, priority: isize) -> FisherResult<()> {
-        self.input.send(ProcessorInput::Job(job, priority))?;
-        Ok(())
-    }
-
-    pub fn health_status(&self) -> FisherResult<HealthDetails> {
-        let (res_send, res_recv) = mpsc::channel();
-        self.input.send(ProcessorInput::HealthStatus(res_send))?;
-        Ok(res_recv.recv()?)
-    }
-
-    #[cfg(test)]
-    pub fn lock(&self) -> FisherResult<()> {
-        self.input.send(ProcessorInput::Lock)?;
-        Ok(())
-    }
-
-    #[cfg(test)]
-    pub fn unlock(&self) -> FisherResult<()> {
-        self.input.send(ProcessorInput::Unlock)?;
-        Ok(())
-    }
-}
-
-
-#[derive(Debug, Clone)]
-pub struct ProcessorInternalApi {
-    input: mpsc::Sender<ProcessorInput>,
-}
-
-impl ProcessorInternalApi {
+impl SchedulerInternalApi {
 
     pub fn record_output(&self, output: JobOutput) -> FisherResult<()> {
         let event = if output.success {
@@ -105,67 +66,19 @@ impl ProcessorInternalApi {
             StatusEvent::JobFailed(output)
         };
 
-        self.input.send(ProcessorInput::QueueStatusEvent(event))?;
+        self.input.send(SchedulerInput::QueueStatusEvent(event))?;
         Ok(())
     }
 
     pub fn job_ended(&self) -> FisherResult<()> {
-        self.input.send(ProcessorInput::JobEnded)?;
+        self.input.send(SchedulerInput::JobEnded)?;
         Ok(())
     }
 }
 
 
 #[derive(Debug)]
-pub struct Processor {
-    input: mpsc::Sender<ProcessorInput>,
-    wait: mpsc::Receiver<()>,
-}
-
-impl Processor {
-
-    pub fn new(max_threads: u16, hooks: Arc<Hooks>,
-               environment: HashMap<String, String>) -> FisherResult<Self> {
-        // Retrieve wanted information from the spawned thread
-        let (input_send, input_recv) = mpsc::sync_channel(0);
-        let (wait_send, wait_recv) = mpsc::channel();
-
-        ::std::thread::spawn(move || {
-            let inner = InnerProcessor::new(
-                max_threads, hooks, environment,
-            );
-            input_send.send(inner.input()).unwrap();
-
-            inner.run().unwrap();
-
-            // Notify the main thread this exited
-            wait_send.send(()).unwrap();
-        });
-
-        Ok(Processor {
-            input: input_recv.recv()?,
-            wait: wait_recv,
-        })
-    }
-
-    pub fn stop(self) -> FisherResult<()> {
-        // Ask the processor to stop
-        self.input.send(ProcessorInput::StopSignal)?;
-        self.wait.recv()?;
-
-        Ok(())
-    }
-
-    pub fn api(&self) -> ProcessorApi {
-        ProcessorApi {
-            input: self.input.clone(),
-        }
-    }
-}
-
-
-#[derive(Debug)]
-struct InnerProcessor {
+pub struct Scheduler {
     max_threads: u16,
     hooks: Arc<Hooks>,
     jobs_context: Arc<Context>,
@@ -175,13 +88,13 @@ struct InnerProcessor {
     queue: BinaryHeap<ScheduledJob>,
     threads: Vec<Thread>,
 
-    input_send: mpsc::Sender<ProcessorInput>,
-    input_recv: mpsc::Receiver<ProcessorInput>,
+    input_send: mpsc::Sender<SchedulerInput>,
+    input_recv: mpsc::Receiver<SchedulerInput>,
 }
 
-impl InnerProcessor {
+impl Scheduler {
 
-    fn new(max_threads: u16, hooks: Arc<Hooks>,
+    pub fn new(max_threads: u16, hooks: Arc<Hooks>,
            environment: HashMap<String, String>) -> Self {
         let (input_send, input_recv) = mpsc::channel();
 
@@ -189,7 +102,7 @@ impl InnerProcessor {
             environment: environment,
         });
 
-        InnerProcessor {
+        Scheduler {
             max_threads: max_threads,
             hooks: hooks,
             jobs_context: jobs_context,
@@ -204,11 +117,11 @@ impl InnerProcessor {
         }
     }
 
-    fn input(&self) -> mpsc::Sender<ProcessorInput> {
+    pub fn input(&self) -> mpsc::Sender<SchedulerInput> {
         self.input_send.clone()
     }
 
-    fn run(mut self) -> FisherResult<()> {
+    pub fn run(mut self) -> FisherResult<()> {
         for _ in 0..self.max_threads {
             self.spawn_thread();
         }
@@ -217,7 +130,7 @@ impl InnerProcessor {
         while let Ok(input) = self.input_recv.recv() {
             match input {
 
-                ProcessorInput::Job(job, priority) => {
+                SchedulerInput::Job(job, priority) => {
                     self.queue.push(ScheduledJob::new(
                         job, priority, serial.clone(), true,
                     ));
@@ -226,7 +139,7 @@ impl InnerProcessor {
                     serial.next();
                 },
 
-                ProcessorInput::HealthStatus(return_to) => {
+                SchedulerInput::HealthStatus(return_to) => {
                     // Count the busy threads
                     let busy_threads = self.threads.iter()
                         .filter(|thread| thread.busy())
@@ -239,7 +152,7 @@ impl InnerProcessor {
                     })?;
                 },
 
-                ProcessorInput::QueueStatusEvent(event) => {
+                SchedulerInput::QueueStatusEvent(event) => {
                     for hook in self.hooks.status_hooks_iter(event.kind()) {
                         self.queue.push(ScheduledJob::new(
                             Job::new(
@@ -255,17 +168,17 @@ impl InnerProcessor {
                 },
 
                 #[cfg(test)]
-                ProcessorInput::Lock => {
+                SchedulerInput::Lock => {
                     self.locked = true;
                 },
 
                 #[cfg(test)]
-                ProcessorInput::Unlock => {
+                SchedulerInput::Unlock => {
                     self.locked = false;
                     self.run_jobs();
                 },
 
-                ProcessorInput::JobEnded => {
+                SchedulerInput::JobEnded => {
                     self.run_jobs();
 
                     if self.should_stop {
@@ -277,7 +190,7 @@ impl InnerProcessor {
                     }
                 },
 
-                ProcessorInput::StopSignal => {
+                SchedulerInput::StopSignal => {
                     self.should_stop = true;
                     self.cleanup_threads();
 
@@ -293,10 +206,9 @@ impl InnerProcessor {
 
     #[inline]
     fn spawn_thread(&mut self) {
-        let api = ProcessorInternalApi {
+        let api = SchedulerInternalApi {
             input: self.input_send.clone(),
         };
-
         self.threads.push(Thread::new(api, self.jobs_context.clone()));
     }
 
@@ -360,7 +272,7 @@ mod tests {
     use utils::testing::*;
     use requests::Request;
 
-    use super::Processor;
+    use super::super::Processor;
 
 
     #[test]
