@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::fs;
+use std::fs::{read_dir, canonicalize, ReadDir, DirEntry, File};
 use std::path::Path;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys as HashMapKeys;
@@ -88,7 +88,7 @@ impl Hook {
     }
 
     fn load_headers(file: &str) -> FisherResult<LoadHeadersOutput> {
-        let f = fs::File::open(file).unwrap();
+        let f = File::open(file).unwrap();
         let reader = BufReader::new(f);
 
         let mut content;
@@ -198,9 +198,8 @@ impl Hooks {
         }
     }
 
-    pub fn insert(&mut self, name: String, hook: Hook) {
-        let hook = Arc::new(hook);
-        self.hooks.insert(name, hook.clone());
+    pub fn insert(&mut self, hook: Arc<Hook>) {
+        self.hooks.insert(hook.name().to_string(), hook.clone());
 
         for provider in &hook.providers {
             if let Provider::Status(ref status) = *provider.as_ref() {
@@ -230,7 +229,8 @@ impl Hooks {
         }
     }
 
-    pub fn status_hooks_iter(&self, kind: StatusEventKind) -> SliceIter<HookProvider> {
+    pub fn status_hooks_iter(&self, kind: StatusEventKind)
+                             -> SliceIter<HookProvider> {
         if let Some(hook_providers) = self.status_hooks.get(&kind) {
             hook_providers.iter()
         } else {
@@ -241,34 +241,71 @@ impl Hooks {
 }
 
 
-pub fn collect<T: AsRef<Path>>(base: T)
-        -> FisherResult<HashMap<String, Hook>> {
-    let mut hooks = HashMap::new();
+pub struct HooksCollector {
+    dir: ReadDir,
+}
 
-    for entry in fs::read_dir(&base)? {
-        let pathbuf = entry?.path();
-        let path = pathbuf.as_path();
+impl HooksCollector {
 
+    pub fn new<P: AsRef<Path>>(base: P) -> FisherResult<Self> {
+        Ok(HooksCollector {
+            dir: read_dir(&base)?,
+        })
+    }
+
+    fn collect_file(&self, e: DirEntry) -> FisherResult<Option<Arc<Hook>>> {
         // Check if the file is actually a file
-        if ! path.is_file() {
-            continue;
+        if ! e.file_type()?.is_file() {
+            return Ok(None);
         }
 
         // Check if the file is executable and readable
-        let mode = path.metadata()?.permissions().mode();
+        let mode = e.metadata()?.permissions().mode();
         if ! ((mode & 0o111) != 0 && (mode & 0o444) != 0) {
             // Skip files with wrong permissions
-            continue
+            return Ok(None);
         }
 
-        let name = path.file_name().unwrap().to_str().unwrap().to_string();
-        let exec = fs::canonicalize(path)?.to_str().unwrap().into();
+        let name = e.file_name().to_str().unwrap().to_string();
+        let exec = canonicalize(e.path())?.to_str().unwrap().into();
 
-        let hook = Hook::load(name.clone(), exec)?;
-        hooks.insert(name, hook);
+        Ok(Some(Arc::new(Hook::load(name, exec)?)))
     }
+}
 
-    Ok(hooks)
+impl Iterator for HooksCollector {
+    type Item = FisherResult<Arc<Hook>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.dir.next() {
+                // Found an entry
+                Some(Ok(entry)) => {
+                    match self.collect_file(entry) {
+                        Ok(result) => {
+                            if let Some(hook) = result {
+                                return Some(Ok(hook));
+                            } else {
+                                // It's not a valid hook, search for another
+                                continue;
+                            }
+                        },
+                        Err(err) => {
+                            return Some(Err(err));
+                        },
+                    }
+                },
+                // I/O error while getting the next entry
+                Some(Err(err)) => {
+                    return Some(Err(err.into()));
+                },
+                // No more entries in the directory
+                None => {
+                    return None;
+                },
+            }
+        }
+    }
 }
 
 
@@ -277,13 +314,14 @@ mod tests {
     use std::os::unix::fs::OpenOptionsExt;
     use std::io::Write;
     use std::fs;
+    use std::sync::Arc;
 
     use utils::testing::*;
     use utils;
     use errors::ErrorKind;
     use providers::StatusEventKind;
 
-    use super::{Hook, Hooks, collect};
+    use super::{Hook, Hooks, HooksCollector};
 
 
     macro_rules! assert_hook {
@@ -300,7 +338,7 @@ mod tests {
             assert_eq!(hook.name, $name.to_string());
             assert_eq!(hook.exec, path_str.clone());
 
-            hook
+            Arc::new(hook)
         }};
     }
 
@@ -479,9 +517,9 @@ mod tests {
         );
 
         let mut hooks = Hooks::new();
-        hooks.insert("test.sh".into(), assert_hook!(base, "test.sh"));
-        hooks.insert("status1.sh".into(), assert_hook!(base, "status1.sh"));
-        hooks.insert("status2.sh".into(), assert_hook!(base, "status2.sh"));
+        hooks.insert(assert_hook!(base, "test.sh"));
+        hooks.insert(assert_hook!(base, "status1.sh"));
+        hooks.insert(assert_hook!(base, "status2.sh"));
 
         assert_eq!(
             hooks.status_hooks_iter(StatusEventKind::JobCompleted)
@@ -544,12 +582,15 @@ mod tests {
         res.unwrap();
 
         // Collect all the hooks in the base
-        let hooks = collect(&base).unwrap();
+        let mut hooks = Vec::new();
+        for hook in HooksCollector::new(&base).unwrap() {
+            hooks.push(hook.unwrap().name().to_string());
+        }
 
         // There should be only two collected hooks
         assert_eq!(hooks.len(), 2);
-        assert!(hooks.contains_key("test-hook.sh"));
-        assert!(hooks.contains_key("another-test.sh"));
+        assert!(hooks.contains(&"test-hook.sh".to_string()));
+        assert!(hooks.contains(&"another-test.sh".to_string()));
 
         // Then add an hook with an invalid provider
         create_hook!(base, "invalid.sh",
@@ -559,7 +600,15 @@ mod tests {
         );
 
         // The collection should fail
-        let error = collect(&base).err().unwrap();
+        let mut error = None;
+        for hook in HooksCollector::new(&base).unwrap() {
+            if let Err(err) = hook {
+                error = Some(err);
+                break;
+            }
+        }
+        let error = error.unwrap();
+
         if let ErrorKind::ProviderNotFound(ref name) = *error.kind() {
             assert_eq!(name, "InvalidHookDoNotUseThisNamePlease");
         } else {

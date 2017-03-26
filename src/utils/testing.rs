@@ -23,7 +23,7 @@ use std::fs;
 use hyper::client as hyper;
 use hyper::method::Method;
 
-use hooks::{self, Hooks};
+use hooks::{Hooks, HooksCollector};
 use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
@@ -309,9 +309,8 @@ impl TestingEnv {
         let hooks_dir = sample_hooks().to_str().unwrap().to_string();
 
         let mut hooks = Hooks::new();
-        let mut collected = hooks::collect(&hooks_dir).unwrap();
-        for name in collected.keys().cloned().collect::<Vec<String>>() {
-            hooks.insert(name.clone(), collected.remove(&name).unwrap());
+        for hook in HooksCollector::new(&hooks_dir).unwrap() {
+            hooks.insert(hook.unwrap());
         }
 
         TestingEnv {

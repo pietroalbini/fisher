@@ -18,11 +18,28 @@ use std::path::Path;
 use std::net;
 use std::sync::Arc;
 
-use hooks::{self, HookNamesIter, Hooks, Hook};
+use hooks::{HooksCollector, HookNamesIter, Hooks, Hook};
 use processor::Processor;
 use web::WebApp;
 use errors::FisherResult;
 use utils;
+
+
+pub trait IntoHook {
+    fn into_hook(self) -> Arc<Hook>;
+}
+
+impl IntoHook for Hook {
+    fn into_hook(self) -> Arc<Hook> {
+        Arc::new(self)
+    }
+}
+
+impl IntoHook for Arc<Hook> {
+    fn into_hook(self) -> Arc<Hook> {
+        self
+    }
+}
 
 
 #[derive(Debug)]
@@ -58,14 +75,14 @@ impl<'a> Fisher<'a> {
         Ok(())
     }
 
-    pub fn add_hook(&mut self, name: String, hook: Hook) {
-        self.hooks.insert(name, hook);
+    pub fn add_hook<H: IntoHook>(&mut self, hook: H) {
+        self.hooks.insert(hook.into_hook());
     }
 
     pub fn collect_hooks<P: AsRef<Path>>(&mut self, path: P) -> FisherResult<()> {
-        let mut hooks = hooks::collect(path)?;
-        for (name, hook) in hooks.drain() {
-            self.add_hook(name, hook);
+        let collector = HooksCollector::new(path)?;
+        for hook in collector {
+            self.add_hook(hook?);
         }
 
         Ok(())
