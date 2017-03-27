@@ -55,7 +55,7 @@ impl WebApi {
 
         // Check if the hook exists
         let hook;
-        if let Some(found) = self.hooks.get(hook_name) {
+        if let Some(found) = self.hooks.get_by_name(hook_name) {
             hook = found;
         } else {
             return Response::NotFound;

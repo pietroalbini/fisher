@@ -27,6 +27,7 @@ use serde_json;
 
 use providers::{Provider, StatusEventKind};
 use requests::{Request, RequestType};
+use state::State;
 use errors::FisherResult;
 
 
@@ -68,6 +69,7 @@ struct LoadHeadersOutput {
 
 #[derive(Debug)]
 pub struct Hook {
+    id: usize,
     name: String,
     exec: String,
     priority: isize,
@@ -76,10 +78,12 @@ pub struct Hook {
 
 impl Hook {
 
-    fn load(name: String, exec: String) -> FisherResult<Hook> {
+    fn load(name: String, exec: String, state: &Arc<State>)
+            -> FisherResult<Hook> {
         let headers = Hook::load_headers(&exec)?;
 
         Ok(Hook {
+            id: state.next_hook_id(),
             name: name,
             exec: exec,
             priority: headers.preferences.priority(),
@@ -149,6 +153,10 @@ impl Hook {
         }
     }
 
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -185,7 +193,7 @@ pub struct HookProvider {
 
 #[derive(Debug)]
 pub struct Hooks {
-    hooks: HashMap<String, Arc<Hook>>,
+    by_name: HashMap<String, Arc<Hook>>,
     status_hooks: HashMap<StatusEventKind, Vec<HookProvider>>,
 }
 
@@ -193,13 +201,13 @@ impl Hooks {
 
     pub fn new() -> Self {
         Hooks {
-            hooks: HashMap::new(),
+            by_name: HashMap::new(),
             status_hooks: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, hook: Arc<Hook>) {
-        self.hooks.insert(hook.name().to_string(), hook.clone());
+        self.by_name.insert(hook.name().to_string(), hook.clone());
 
         for provider in &hook.providers {
             if let Provider::Status(ref status) = *provider.as_ref() {
@@ -216,16 +224,13 @@ impl Hooks {
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<Arc<Hook>> {
-        match self.hooks.get(name) {
-            Some(hook) => Some(hook.clone()),
-            None => None,
-        }
+    pub fn get_by_name(&self, name: &str) -> Option<Arc<Hook>> {
+        self.by_name.get(name).cloned()
     }
 
     pub fn names(&self) -> HookNamesIter {
         HookNamesIter {
-            iter: self.hooks.keys()
+            iter: self.by_name.keys()
         }
     }
 
@@ -243,13 +248,15 @@ impl Hooks {
 
 pub struct HooksCollector {
     dir: ReadDir,
+    state: Arc<State>,
 }
 
 impl HooksCollector {
 
-    pub fn new<P: AsRef<Path>>(base: P) -> FisherResult<Self> {
+    pub fn new<P: AsRef<Path>>(base: P, s: Arc<State>) -> FisherResult<Self> {
         Ok(HooksCollector {
             dir: read_dir(&base)?,
+            state: s,
         })
     }
 
@@ -269,7 +276,7 @@ impl HooksCollector {
         let name = e.file_name().to_str().unwrap().to_string();
         let exec = canonicalize(e.path())?.to_str().unwrap().into();
 
-        Ok(Some(Arc::new(Hook::load(name, exec)?)))
+        Ok(Some(Arc::new(Hook::load(name, exec, &self.state)?)))
     }
 }
 
@@ -320,25 +327,29 @@ mod tests {
     use utils;
     use errors::ErrorKind;
     use providers::StatusEventKind;
+    use state::State;
 
     use super::{Hook, Hooks, HooksCollector};
 
 
     macro_rules! assert_hook {
-        ($base:expr, $name:expr) => {{
+        ($state:expr, $base:expr, $name:expr) => {{
             // Get the hook path
             let mut path = $base.clone();
             path.push($name);
             let path_str = path.to_str().unwrap().to_string();
 
             let hook = Hook::load(
-                $name.to_string(), path_str.clone()
+                $name.to_string(), path_str.clone(), $state,
             ).unwrap();
 
             assert_eq!(hook.name, $name.to_string());
             assert_eq!(hook.exec, path_str.clone());
 
             Arc::new(hook)
+        }};
+        ($base:expr, $name:expr) => {{
+            assert_hook!(&Arc::new(State::new()), $base, $name)
         }};
     }
 
@@ -540,6 +551,7 @@ mod tests {
     #[test]
     fn test_collect() {
         let base = utils::create_temp_dir().unwrap();
+        let state = Arc::new(State::new());
 
         // Create two valid hooks
         create_hook!(base, "test-hook.sh",
@@ -583,7 +595,7 @@ mod tests {
 
         // Collect all the hooks in the base
         let mut hooks = Vec::new();
-        for hook in HooksCollector::new(&base).unwrap() {
+        for hook in HooksCollector::new(&base, state.clone()).unwrap() {
             hooks.push(hook.unwrap().name().to_string());
         }
 
@@ -601,7 +613,7 @@ mod tests {
 
         // The collection should fail
         let mut error = None;
-        for hook in HooksCollector::new(&base).unwrap() {
+        for hook in HooksCollector::new(&base, state.clone()).unwrap() {
             if let Err(err) = hook {
                 error = Some(err);
                 break;
@@ -614,6 +626,28 @@ mod tests {
         } else {
             panic!("Wrong error kind: {:?}", error.kind());
         }
+
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+
+    #[test]
+    fn test_hook_ids() {
+        let state = Arc::new(State::new());
+        let base = utils::create_temp_dir().unwrap();
+
+        create_hook!(base, "hook1.sh",
+            r#"#!/bin/bash"#,
+            r#"echo "Hello world 1"#
+        );
+        create_hook!(base, "hook2.sh",
+            r#"#!/bin/bash"#,
+            r#"echo "Hello world 2"#
+        );
+
+        assert_eq!(assert_hook!(&state, base, "hook1.sh").id(), 0);
+        assert_eq!(assert_hook!(&state, base, "hook2.sh").id(), 1);
+        assert_eq!(assert_hook!(&state, base, "hook1.sh").id(), 2);
 
         fs::remove_dir_all(&base).unwrap();
     }

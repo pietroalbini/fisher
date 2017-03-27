@@ -22,6 +22,7 @@ use hooks::{HooksCollector, HookNamesIter, Hooks, Hook};
 use processor::Processor;
 use web::WebApp;
 use errors::FisherResult;
+use state::State;
 use utils;
 
 
@@ -48,6 +49,8 @@ pub struct Fisher<'a> {
     pub behind_proxies: u8,
     pub bind: &'a str,
     pub enable_health: bool,
+
+    state: Arc<State>,
     hooks: Hooks,
     environment: HashMap<String, String>,
 }
@@ -60,6 +63,8 @@ impl<'a> Fisher<'a> {
             behind_proxies: 0,
             bind: "127.0.0.1:8000",
             enable_health: true,
+
+            state: Arc::new(State::new()),
             hooks: Hooks::new(),
             environment: HashMap::new(),
         }
@@ -80,7 +85,7 @@ impl<'a> Fisher<'a> {
     }
 
     pub fn collect_hooks<P: AsRef<Path>>(&mut self, path: P) -> FisherResult<()> {
-        let collector = HooksCollector::new(path)?;
+        let collector = HooksCollector::new(path, self.state.clone())?;
         for hook in collector {
             self.add_hook(hook?);
         }

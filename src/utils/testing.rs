@@ -28,6 +28,7 @@ use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
 use processor::{ProcessorApi, ProcessorInput, HealthDetails};
+use state::State;
 use utils;
 
 
@@ -306,10 +307,12 @@ pub struct TestingEnv {
 impl TestingEnv {
 
     pub fn new() -> Self {
+        let state = Arc::new(State::new());
+
         let hooks_dir = sample_hooks().to_str().unwrap().to_string();
 
         let mut hooks = Hooks::new();
-        for hook in HooksCollector::new(&hooks_dir).unwrap() {
+        for hook in HooksCollector::new(&hooks_dir, state.clone()).unwrap() {
             hooks.insert(hook.unwrap());
         }
 
@@ -347,7 +350,7 @@ impl TestingEnv {
     // JOBS UTILITIES
 
     pub fn create_job(&self, hook_name: &str, req: Request) -> Job {
-        let hook = self.hooks.get(&hook_name.to_string()).unwrap();
+        let hook = self.hooks.get_by_name(&hook_name.to_string()).unwrap();
         let (_, provider) = hook.validate(&req);
 
         Job::new(hook.clone(), provider, req)
