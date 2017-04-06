@@ -84,8 +84,11 @@ impl<'a> Fisher<'a> {
         self.hooks.insert(hook.into_hook());
     }
 
-    pub fn collect_hooks<P: AsRef<Path>>(&mut self, path: P) -> FisherResult<()> {
-        let collector = HooksCollector::new(path, self.state.clone())?;
+    pub fn collect_hooks<P: AsRef<Path>>(&mut self, path: P, recursive: bool)
+                                         -> FisherResult<()> {
+        let collector = HooksCollector::new(
+            path, self.state.clone(), recursive,
+        )?;
         for hook in collector {
             self.add_hook(hook?);
         }

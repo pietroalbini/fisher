@@ -28,6 +28,7 @@ use ansi_term::{Style, Colour};
 
 struct CliArgs {
     hooks_dir: String,
+    recursive: bool,
     bind: String,
     env: Vec<String>,
     max_threads: u16,
@@ -44,6 +45,10 @@ fn parse_cli() -> fisher::Result<CliArgs> {
         .arg(Arg::with_name("hooks").required(true).index(1)
              .value_name("DIR")
              .help("The directory which contains the hooks"))
+
+        .arg(Arg::with_name("recursive")
+             .long("recursive").short("r")
+             .help("Search for hooks recursively"))
 
         .arg(Arg::with_name("bind").takes_value(true)
              .long("bind").short("b")
@@ -74,6 +79,7 @@ fn parse_cli() -> fisher::Result<CliArgs> {
 
     Ok(CliArgs {
         hooks_dir: matches.value_of("hooks").unwrap().into(),
+        recursive: matches.is_present("recursive"),
         bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").into(),
         env: {
             if let Some(values) = matches.values_of("env") {
@@ -153,7 +159,7 @@ fn app() -> fisher::Result<()> {
     factory.bind = &args.bind;
     factory.enable_health = args.enable_health;
 
-    factory.collect_hooks(args.hooks_dir)?;
+    factory.collect_hooks(args.hooks_dir, args.recursive)?;
     {
         let mut hook_names = factory.hook_names().collect::<Vec<&String>>();
         hook_names.sort();

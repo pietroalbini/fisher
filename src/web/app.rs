@@ -160,6 +160,12 @@ mod tests {
         // Even if the last request succeded, there shouldn't be any job
         assert!(inst.processor_input().is_none());
 
+        // Try to call an hook in a sub directory
+        let res = inst.request(Method::Get, "/hook/sub/hook.sh")
+                      .send().unwrap();
+        assert_eq!(res.status, StatusCode::Ok);
+        assert!(inst.processor_input().is_some());
+
         // Try on a locked instance
         inst.lock();
 

@@ -63,7 +63,7 @@ impl Route {
             }
 
             if part == "?" {
-                result.push_str(r"([a-zA-Z0-9\._-]+)");
+                result.push_str(r"([a-zA-Z0-9\./_-]+)");
             } else {
                 result.push_str(&regex::quote(part));
             }
@@ -308,11 +308,11 @@ mod tests {
         assert_eq!(conv!("/"), r"^/(\?.*)?$");
         assert_eq!(conv!("/."), r"^/\.(\?.*)?$");
         assert_eq!(conv!("/test"), r"^/test(\?.*)?$");
-        assert_eq!(conv!("/?"), r"^/([a-zA-Z0-9\._-]+)(\?.*)?$");
-        assert_eq!(conv!("/test/?"), r"^/test/([a-zA-Z0-9\._-]+)(\?.*)?$");
+        assert_eq!(conv!("/?"), r"^/([a-zA-Z0-9\./_-]+)(\?.*)?$");
+        assert_eq!(conv!("/test/?"), r"^/test/([a-zA-Z0-9\./_-]+)(\?.*)?$");
         assert_eq!(
             conv!("/?/?/test"),
-            r"^/([a-zA-Z0-9\._-]+)/([a-zA-Z0-9\._-]+)/test(\?.*)?$"
+            r"^/([a-zA-Z0-9\./_-]+)/([a-zA-Z0-9\./_-]+)/test(\?.*)?$"
         );
     }
 

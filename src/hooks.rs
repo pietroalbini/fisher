@@ -13,9 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::fs::{read_dir, canonicalize, ReadDir, DirEntry, File};
-use std::path::Path;
-use std::collections::HashMap;
+use std::fs::{read_dir, canonicalize, ReadDir, File};
+use std::path::{Path, PathBuf};
+use std::collections::{HashMap, VecDeque};
 use std::collections::hash_map::Keys as HashMapKeys;
 use std::slice::Iter as SliceIter;
 use std::os::unix::fs::PermissionsExt;
@@ -247,22 +247,32 @@ impl Hooks {
 
 
 pub struct HooksCollector {
-    dir: ReadDir,
+    dirs: VecDeque<ReadDir>,
     state: Arc<State>,
+    base: PathBuf,
+    recursive: bool,
 }
 
 impl HooksCollector {
 
-    pub fn new<P: AsRef<Path>>(base: P, s: Arc<State>) -> FisherResult<Self> {
+    pub fn new<P: AsRef<Path>>(base: P, state: Arc<State>, recursive: bool)
+                               -> FisherResult<Self> {
+        let mut dirs = VecDeque::new();
+        dirs.push_front(read_dir(&base)?);
+
         Ok(HooksCollector {
-            dir: read_dir(&base)?,
-            state: s,
+            dirs: dirs,
+            state: state,
+            base: base.as_ref().to_path_buf(),
+            recursive: recursive,
         })
     }
 
-    fn collect_file(&self, e: DirEntry) -> FisherResult<Option<Arc<Hook>>> {
-        // Check if the file is actually a file
-        if ! e.file_type()?.is_file() {
+    fn collect_file(&mut self, e: PathBuf) -> FisherResult<Option<Arc<Hook>>> {
+        if e.is_dir() {
+            if self.recursive {
+                self.dirs.push_back(read_dir(&e)?);
+            }
             return Ok(None);
         }
 
@@ -273,8 +283,13 @@ impl HooksCollector {
             return Ok(None);
         }
 
-        let name = e.file_name().to_str().unwrap().to_string();
-        let exec = canonicalize(e.path())?.to_str().unwrap().into();
+        // Try to remove the prefix from the path
+        let name = match e.strip_prefix(&self.base) {
+            Ok(stripped) => stripped,
+            Err(_) => &e,
+        }.to_str().unwrap().to_string();
+
+        let exec = canonicalize(&e)?.to_str().unwrap().into();
 
         Ok(Some(Arc::new(Hook::load(name, exec, &self.state)?)))
     }
@@ -285,17 +300,22 @@ impl Iterator for HooksCollector {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.dir.next() {
+            let entry = if let Some(iter) = self.dirs.get_mut(0) {
+                iter.next()
+            } else {
+                // No more directories to search in
+                return None;
+            };
+
+            match entry {
                 // Found an entry
                 Some(Ok(entry)) => {
-                    match self.collect_file(entry) {
+                    match self.collect_file(entry.path()) {
                         Ok(result) => {
                             if let Some(hook) = result {
                                 return Some(Ok(hook));
-                            } else {
-                                // It's not a valid hook, search for another
-                                continue;
                             }
+                            // If None is returned get another one
                         },
                         Err(err) => {
                             return Some(Err(err));
@@ -308,7 +328,8 @@ impl Iterator for HooksCollector {
                 },
                 // No more entries in the directory
                 None => {
-                    return None;
+                    // Don't search in this directory anymore
+                    let _ = self.dirs.pop_front();
                 },
             }
         }
@@ -595,7 +616,7 @@ mod tests {
 
         // Collect all the hooks in the base
         let mut hooks = Vec::new();
-        for hook in HooksCollector::new(&base, state.clone()).unwrap() {
+        for hook in HooksCollector::new(&base, state.clone(), false).unwrap() {
             hooks.push(hook.unwrap().name().to_string());
         }
 
@@ -603,6 +624,18 @@ mod tests {
         assert_eq!(hooks.len(), 2);
         assert!(hooks.contains(&"test-hook.sh".to_string()));
         assert!(hooks.contains(&"another-test.sh".to_string()));
+
+        // Collect with recursion
+        let mut hooks = Vec::new();
+        for hook in HooksCollector::new(&base, state.clone(), true).unwrap() {
+            hooks.push(hook.unwrap().name().to_string());
+        }
+
+        // There should be only two collected hooks
+        assert_eq!(hooks.len(), 3);
+        assert!(hooks.contains(&"test-hook.sh".to_string()));
+        assert!(hooks.contains(&"another-test.sh".to_string()));
+        assert!(hooks.contains(&"a-directory/hook-in-subdir.sh".to_string()));
 
         // Then add an hook with an invalid provider
         create_hook!(base, "invalid.sh",
@@ -613,7 +646,7 @@ mod tests {
 
         // The collection should fail
         let mut error = None;
-        for hook in HooksCollector::new(&base, state.clone()).unwrap() {
+        for hook in HooksCollector::new(&base, state.clone(), false).unwrap() {
             if let Err(err) = hook {
                 error = Some(err);
                 break;

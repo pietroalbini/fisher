@@ -176,6 +176,13 @@ pub fn sample_hooks() -> PathBuf {
         r#"echo "triggered!""#
     );
 
+    fs::create_dir(&tempdir.join("sub")).unwrap();
+    create_hook!(tempdir.join("sub"), "hook.sh",
+        r#"#!/bin/bash"#,
+        r#"## Fisher-Testing: {}"#,
+        r#"echo "Hello world""#
+    );
+
     tempdir
 }
 
@@ -312,7 +319,9 @@ impl TestingEnv {
         let hooks_dir = sample_hooks().to_str().unwrap().to_string();
 
         let mut hooks = Hooks::new();
-        for hook in HooksCollector::new(&hooks_dir, state.clone()).unwrap() {
+        for hook in HooksCollector::new(
+            &hooks_dir, state.clone(), true,
+        ).unwrap() {
             hooks.insert(hook.unwrap());
         }
 
