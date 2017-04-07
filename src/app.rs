@@ -107,6 +107,7 @@ impl<'a> Fisher<'a> {
         // Start the processor
         let processor = Processor::new(
             self.max_threads, hooks.clone(), self.environment,
+            self.state.clone(),
         )?;
         let processor_api = processor.api();
 

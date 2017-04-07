@@ -18,12 +18,13 @@ use std::sync::{Arc, mpsc};
 
 use jobs::{Job, JobOutput, Context};
 use providers::StatusEvent;
-use hooks::Hooks;
+use hooks::{Hooks, HookId};
 use utils::Serial;
 use errors::FisherResult;
 use requests::Request;
+use state::State;
 
-use super::thread::Thread;
+use super::thread::{Thread, ThreadId};
 use super::scheduled_job::ScheduledJob;
 
 
@@ -48,7 +49,7 @@ pub enum SchedulerInput {
     #[cfg(test)] Unlock,
 
     StopSignal,
-    JobEnded,
+    JobEnded(ThreadId, HookId),
 }
 
 
@@ -70,8 +71,9 @@ impl SchedulerInternalApi {
         Ok(())
     }
 
-    pub fn job_ended(&self) -> FisherResult<()> {
-        self.input.send(SchedulerInput::JobEnded)?;
+    pub fn job_ended(&self, thread: ThreadId, job: &ScheduledJob)
+                     -> FisherResult<()> {
+        self.input.send(SchedulerInput::JobEnded(thread, job.hook_id()))?;
         Ok(())
     }
 }
@@ -82,11 +84,13 @@ pub struct Scheduler {
     max_threads: u16,
     hooks: Arc<Hooks>,
     jobs_context: Arc<Context>,
+    state: Arc<State>,
 
     locked: bool,
     should_stop: bool,
     queue: BinaryHeap<ScheduledJob>,
-    threads: Vec<Thread>,
+    waiting: HashMap<HookId, BinaryHeap<ScheduledJob>>,
+    threads: HashMap<ThreadId, Thread>,
 
     input_send: mpsc::Sender<SchedulerInput>,
     input_recv: mpsc::Receiver<SchedulerInput>,
@@ -95,22 +99,32 @@ pub struct Scheduler {
 impl Scheduler {
 
     pub fn new(max_threads: u16, hooks: Arc<Hooks>,
-           environment: HashMap<String, String>) -> Self {
+           environment: HashMap<String, String>, state: Arc<State>) -> Self {
         let (input_send, input_recv) = mpsc::channel();
 
         let jobs_context = Arc::new(Context {
             environment: environment,
         });
 
+        // Populate the waiting HashMap with non-parallel hooks
+        let mut waiting = HashMap::new();
+        for hook in hooks.iter() {
+            if ! hook.parallel() {
+                waiting.insert(hook.id(), BinaryHeap::new());
+            }
+        }
+
         Scheduler {
             max_threads: max_threads,
             hooks: hooks,
             jobs_context: jobs_context,
+            state: state,
 
             locked: false,
             should_stop: false,
             queue: BinaryHeap::new(),
-            threads: Vec::new(),
+            waiting: waiting,
+            threads: HashMap::with_capacity(max_threads as usize),
 
             input_send: input_send,
             input_recv: input_recv,
@@ -127,11 +141,12 @@ impl Scheduler {
         }
 
         let mut serial = Serial::zero();
+        let mut to_schedule = Vec::new();
         while let Ok(input) = self.input_recv.recv() {
             match input {
 
                 SchedulerInput::Job(job, priority) => {
-                    self.queue.push(ScheduledJob::new(
+                    self.queue_job(ScheduledJob::new(
                         job, priority, serial.clone(),
                     ));
                     self.run_jobs();
@@ -141,12 +156,17 @@ impl Scheduler {
 
                 SchedulerInput::HealthStatus(return_to) => {
                     // Count the busy threads
-                    let busy_threads = self.threads.iter()
+                    let busy_threads = self.threads.values()
                         .filter(|thread| thread.busy())
                         .count();
 
+                    let mut queued_jobs = self.queue.len();
+                    for waiting in self.waiting.values() {
+                        queued_jobs += waiting.len();
+                    }
+
                     return_to.send(HealthDetails {
-                        queued_jobs: self.queue.len(),
+                        queued_jobs: queued_jobs,
                         busy_threads: busy_threads as u16,
                         max_threads: self.max_threads,
                     })?;
@@ -154,7 +174,7 @@ impl Scheduler {
 
                 SchedulerInput::QueueStatusEvent(event) => {
                     for hook in self.hooks.status_hooks_iter(event.kind()) {
-                        self.queue.push(ScheduledJob::new(
+                        to_schedule.push(ScheduledJob::new(
                             Job::new(
                                 hook.hook.clone(),
                                 Some(hook.provider.clone()),
@@ -162,6 +182,11 @@ impl Scheduler {
                             ), STATUS_EVENTS_PRIORITY, serial.clone(),
                         ));
                         serial.next();
+                    }
+
+                    // This is a separated step due to mutable borrows
+                    for job in to_schedule.drain(..) {
+                        self.queue_job(job);
                     }
 
                     self.run_jobs();
@@ -178,7 +203,22 @@ impl Scheduler {
                     self.run_jobs();
                 },
 
-                SchedulerInput::JobEnded => {
+                SchedulerInput::JobEnded(thread_id, hook_id) => {
+                    // Mark the thread as idle
+                    if let Some(mut thread) = self.threads.get_mut(&thread_id) {
+                        thread.mark_idle();
+                    }
+
+                    // Put the highest-priority waiting job for this hook
+                    // back in the queue
+                    let mut push_back = None;
+                    if let Some(mut waiting) = self.waiting.get_mut(&hook_id) {
+                        push_back = waiting.pop();
+                    }
+                    if let Some(job) = push_back {
+                        self.queue_job(job);
+                    }
+
                     self.run_jobs();
 
                     if self.should_stop {
@@ -209,7 +249,9 @@ impl Scheduler {
         let api = SchedulerInternalApi {
             input: self.input_send.clone(),
         };
-        self.threads.push(Thread::new(api, self.jobs_context.clone()));
+
+        let thread = Thread::new(api, self.jobs_context.clone(), &self.state);
+        self.threads.insert(thread.id(), thread);
     }
 
     fn cleanup_threads(&mut self) {
@@ -218,20 +260,21 @@ impl Scheduler {
         let mut to_remove = Vec::with_capacity(self.threads.len());
 
         let mut remaining = self.threads.len();
-        for (i, thread) in self.threads.iter().enumerate() {
+        for (id, thread) in self.threads.iter() {
             if thread.busy() {
                 continue;
             }
 
             if self.should_stop || remaining > self.max_threads as usize {
-                to_remove.push(i);
+                to_remove.push(*id);
                 remaining -= 1;
             }
         }
 
-        for (removed, one) in to_remove.iter().enumerate() {
-            let thread = self.threads.remove(one - removed);
-            thread.stop();
+        for id in &to_remove {
+            if let Some(thread) = self.threads.remove(id) {
+                thread.stop();
+            }
         }
     }
 
@@ -244,9 +287,9 @@ impl Scheduler {
         // threads available and there are enough elements in the queue,
         // all of them are processed
         'main: loop {
-            if let Some(mut job) = self.queue.pop() {
+            if let Some(mut job) = self.get_job() {
                 // Try to run the job in a thread
-                for thread in &self.threads {
+                for thread in self.threads.values_mut() {
                     // The process() method returns Some(ScheduledJob) if
                     // *IT'S BUSY* working on another job
                     if let Some(j) = thread.process(job) {
@@ -255,10 +298,56 @@ impl Scheduler {
                         continue 'main;
                     }
                 }
-                self.queue.push(job);
+                self.queue_job(job);
             }
             break;
         }
+    }
+
+    fn queue_job(&mut self, job: ScheduledJob) {
+        let hook_id = job.hook_id();
+
+        // Put the job in waiting if it can't be parallel and
+        // it's already running
+        if self.is_running(hook_id) {
+            if let Some(mut waiting) = self.waiting.get_mut(&hook_id) {
+                waiting.push(job);
+                return;
+            }
+        }
+
+        self.queue.push(job);
+    }
+
+    fn get_job(&mut self) -> Option<ScheduledJob> {
+        loop {
+            if let Some(job) = self.queue.pop() {
+                let hook_id = job.hook_id();
+
+                // Put the job in waiting if it can't be parallel and
+                // it's already running
+                if self.is_running(hook_id) {
+                    if let Some(mut waiting) = self.waiting.get_mut(&hook_id) {
+                        waiting.push(job);
+                        continue;
+                    }
+                }
+
+                return Some(job);
+            } else {
+                return None;
+            }
+        }
+    }
+
+    fn is_running(&self, hook: HookId) -> bool {
+        for thread in self.threads.values() {
+            if thread.currently_running() == Some(hook) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
@@ -267,9 +356,11 @@ impl Scheduler {
 mod tests {
     use std::fs::File;
     use std::io::Read;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
+    use std::sync::Arc;
 
     use utils::testing::*;
+    use state::State;
     use requests::Request;
 
     use super::super::Processor;
@@ -280,7 +371,7 @@ mod tests {
         let env = TestingEnv::new();
 
         let processor = Processor::new(
-            1, env.hooks(), HashMap::new()
+            1, env.hooks(), HashMap::new(), Arc::new(State::new()),
         ).unwrap();
         processor.stop().unwrap();
 
@@ -293,7 +384,7 @@ mod tests {
         let mut env = TestingEnv::new();
 
         let processor = Processor::new(
-            1, env.hooks(), HashMap::new()
+            1, env.hooks(), HashMap::new(), Arc::new(State::new()),
         ).unwrap();
 
         // Prepare a request
@@ -322,7 +413,7 @@ mod tests {
         let mut env = TestingEnv::new();
 
         let processor = Processor::new(
-            threads, env.hooks(), HashMap::new()
+            threads, env.hooks(), HashMap::new(), Arc::new(State::new()),
         ).unwrap();
 
         let api = processor.api();
@@ -345,8 +436,6 @@ mod tests {
             if prioritized {
                 priority = chr / 2;
             }
-
-            println!("{} {}", chr, priority);
 
             job = env.create_job("append-val.sh", Request::Web(req));
             api.queue(job, priority).unwrap();
@@ -389,22 +478,63 @@ mod tests {
     }
 
     #[test]
+    fn test_non_parallel_processing() {
+        let mut env = TestingEnv::new();
+
+        let processor = Processor::new(
+            2, env.hooks(), HashMap::new(), Arc::new(State::new()),
+        ).unwrap();
+        let api = processor.api();
+
+        // Queue ten jobs
+        let mut waiters = VecDeque::new();
+        for _ in 0..10 {
+            let mut waiting = env.waiting_job(false);
+            api.queue(waiting.take_job().unwrap(), 0).unwrap();
+            waiters.push_back(waiting);
+        }
+
+        // Get the status
+        while let Some(mut waiting) = waiters.pop_front() {
+            // Only one job should be running
+            let mut status;
+            loop {
+                status = api.health_status().unwrap();
+                if status.queued_jobs == waiters.len() {
+                    break;
+                } else if status.queued_jobs != waiters.len() + 1 {
+                    panic!(
+                        "Wrong number of queued jobs: {}", status.queued_jobs
+                    );
+                }
+            }
+
+            assert_eq!(status.busy_threads, 1);
+            assert_eq!(status.max_threads, 2);
+
+            waiting.unlock().unwrap();
+
+            // Wait for the job to be executed
+            while ! waiting.executed() {}
+        }
+
+        processor.stop().unwrap();
+
+        env.cleanup();
+    }
+
+    #[test]
     fn test_health_status() {
         let mut env = TestingEnv::new();
 
         let processor = Processor::new(
-            1, env.hooks(), HashMap::new()
+            1, env.hooks(), HashMap::new(), Arc::new(State::new()),
         ).unwrap();
-
         let api = processor.api();
-        let mut out = env.tempdir();
-        out.push("ok");
 
         // Queue a wait job
-        let mut req = dummy_web_request();
-        req.params.insert("env".into(), out.to_str().unwrap().to_string());
-        let job = env.create_job("wait.sh", Request::Web(req));
-        api.queue(job, 0).unwrap();
+        let mut waiting = env.waiting_job(true);
+        api.queue(waiting.take_job().unwrap(), 0).unwrap();
 
         // Queue ten extra jobs
         let mut req;
@@ -424,12 +554,12 @@ mod tests {
         assert_eq!(status.max_threads, 1);
 
         // Create the file the first job is waiting for
-        File::create(&out).unwrap();
+        waiting.unlock().unwrap();
 
         processor.stop().unwrap();
 
         // The file should not exist -- the first job removes it
-        assert!(! out.exists());
+        assert!(waiting.executed());
 
         env.cleanup();
     }

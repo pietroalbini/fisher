@@ -17,6 +17,7 @@ use std::fs::{read_dir, canonicalize, ReadDir, File};
 use std::path::{Path, PathBuf};
 use std::collections::{HashMap, VecDeque};
 use std::collections::hash_map::Keys as HashMapKeys;
+use std::collections::hash_map::Values as HashMapValues;
 use std::slice::Iter as SliceIter;
 use std::os::unix::fs::PermissionsExt;
 use std::io::{BufReader, BufRead};
@@ -29,6 +30,9 @@ use providers::{Provider, StatusEventKind};
 use requests::{Request, RequestType};
 use state::State;
 use errors::FisherResult;
+
+
+pub type HookId = usize;
 
 
 lazy_static! {
@@ -44,6 +48,7 @@ lazy_static! {
 #[derive(Debug, Deserialize)]
 struct Preferences {
     priority: Option<isize>,
+    parallel: Option<bool>,
 }
 
 impl Preferences {
@@ -51,12 +56,18 @@ impl Preferences {
     fn empty() -> Self {
         Preferences {
             priority: None,
+            parallel: None,
         }
     }
 
     #[inline]
     fn priority(&self) -> isize {
         self.priority.unwrap_or(0)
+    }
+
+    #[inline]
+    fn parallel(&self) -> bool {
+        self.parallel.unwrap_or(true)
     }
 }
 
@@ -73,6 +84,7 @@ pub struct Hook {
     name: String,
     exec: String,
     priority: isize,
+    parallel: bool,
     providers: Vec<Arc<Provider>>,
 }
 
@@ -87,6 +99,7 @@ impl Hook {
             name: name,
             exec: exec,
             priority: headers.preferences.priority(),
+            parallel: headers.preferences.parallel(),
             providers: headers.providers,
         })
     }
@@ -153,7 +166,7 @@ impl Hook {
         }
     }
 
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> HookId {
         self.id
     }
 
@@ -168,6 +181,10 @@ impl Hook {
     pub fn priority(&self) -> isize {
         self.priority
     }
+
+    pub fn parallel(&self) -> bool {
+        self.parallel
+    }
 }
 
 
@@ -179,6 +196,19 @@ impl<'a> Iterator for HookNamesIter<'a> {
     type Item = &'a String;
 
     fn next(&mut self) -> Option<&'a String> {
+        self.iter.next()
+    }
+}
+
+
+pub struct HooksIter<'a> {
+    iter: HashMapValues<'a, String, Arc<Hook>>,
+}
+
+impl<'a> Iterator for HooksIter<'a> {
+    type Item = &'a Arc<Hook>;
+
+    fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
 }
@@ -226,6 +256,12 @@ impl Hooks {
 
     pub fn get_by_name(&self, name: &str) -> Option<Arc<Hook>> {
         self.by_name.get(name).cloned()
+    }
+
+    pub fn iter(&self) -> HooksIter {
+        HooksIter {
+            iter: self.by_name.values()
+        }
     }
 
     pub fn names(&self) -> HookNamesIter {

@@ -29,6 +29,7 @@ use web::{WebApp, WebRequest};
 use requests::Request;
 use processor::{ProcessorApi, ProcessorInput, HealthDetails};
 use state::State;
+use errors::FisherResult;
 use utils;
 
 
@@ -145,6 +146,7 @@ pub fn sample_hooks() -> PathBuf {
 
     create_hook!(tempdir, "wait.sh",
         r#"#!/bin/bash"#,
+        r#"## Fisher: {"parallel": false}"#,
         r#"## Fisher-Testing: {}"#,
         r#"while true; do"#,
         r#"    if [[ -f "${FISHER_TESTING_ENV}" ]]; then"#,
@@ -365,6 +367,10 @@ impl TestingEnv {
         Job::new(hook.clone(), provider, req)
     }
 
+    pub fn waiting_job(&mut self, trigger_status_hooks: bool) -> WaitingJob {
+        WaitingJob::new(self, trigger_status_hooks)
+    }
+
     // WEB TESTING
 
     pub fn start_web(&self, health: bool, behind_proxies: u8)
@@ -397,5 +403,51 @@ impl NextHealthCheck {
             },
             Err(..) => panic!("No ProcessorInput received!"),
         };
+    }
+}
+
+
+pub struct WaitingJob {
+    lock_path: PathBuf,
+    locked: bool,
+    job: Option<Job>,
+}
+
+impl WaitingJob {
+
+    fn new(env: &mut TestingEnv, trigger_status_hooks: bool) -> Self {
+        let lock_path = env.tempdir().join("lock");
+
+        let mut req = dummy_web_request();
+        req.params.insert("env".into(), lock_path.to_str().unwrap().into());
+
+        if ! trigger_status_hooks {
+            req.params.insert("ignore_status_hooks".into(), String::new());
+        }
+
+        let job = env.create_job("wait.sh", Request::Web(req));
+
+        WaitingJob {
+            lock_path: lock_path,
+            locked: true,
+            job: Some(job),
+        }
+    }
+
+    pub fn take_job(&mut self) -> Option<Job> {
+        self.job.take()
+    }
+
+    pub fn unlock(&mut self) -> FisherResult<()> {
+        if self.locked {
+            fs::File::create(&self.lock_path)?;
+            self.locked = false;
+        }
+
+        Ok(())
+    }
+
+    pub fn executed(&self) -> bool {
+        (! self.locked) && fs::metadata(&self.lock_path).is_err()
     }
 }

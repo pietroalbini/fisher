@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[derive(Debug)]
 pub struct State {
     next_hook_id: AtomicUsize,
+    next_thread_id: AtomicUsize,
 }
 
 impl State {
@@ -26,11 +27,16 @@ impl State {
     pub fn new() -> Self {
         State {
             next_hook_id: AtomicUsize::new(0),
+            next_thread_id: AtomicUsize::new(0),
         }
     }
 
     pub fn next_hook_id(&self) -> usize {
         self.next_hook_id.fetch_add(1, Ordering::SeqCst)
+    }
+
+    pub fn next_thread_id(&self) -> usize {
+        self.next_thread_id.fetch_add(1, Ordering::SeqCst)
     }
 }
 

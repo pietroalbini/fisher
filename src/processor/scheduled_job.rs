@@ -16,6 +16,7 @@
 use std::cmp::Ordering;
 
 use jobs::Job;
+use hooks::HookId;
 use utils::Serial;
 
 
@@ -42,6 +43,10 @@ impl ScheduledJob {
 
     pub fn trigger_status_hooks(&self) -> bool {
         self.job.trigger_status_hooks()
+    }
+
+    pub fn hook_id(&self) -> HookId {
+        self.job.hook_id()
     }
 }
 

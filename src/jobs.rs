@@ -24,7 +24,7 @@ use std::io::Write;
 use std::sync::Arc;
 use std::net::IpAddr;
 
-use hooks::Hook;
+use hooks::{Hook, HookId};
 use utils;
 use requests::Request;
 use providers::Provider;
@@ -81,6 +81,11 @@ impl Job {
     #[inline]
     pub fn hook_name(&self) -> &str {
         self.hook.name()
+    }
+
+    #[inline]
+    pub fn hook_id(&self) -> HookId {
+        self.hook.id()
     }
 
     #[inline]

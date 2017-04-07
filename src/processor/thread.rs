@@ -14,15 +14,19 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::{Arc, mpsc};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::fmt;
 
 use jobs::Context;
+use hooks::HookId;
+use state::State;
 use errors;
 
 use super::scheduled_job::ScheduledJob;
 use super::scheduler::SchedulerInternalApi;
+
+
+pub type ThreadId = usize;
 
 
 #[derive(Debug)]
@@ -33,8 +37,10 @@ enum ThreadInput {
 
 
 pub struct Thread {
+    id: ThreadId,
+    currently_running: Option<HookId>,
+
     should_stop: bool,
-    busy: Arc<AtomicBool>,
 
     handle: thread::JoinHandle<()>,
     input: mpsc::Sender<ThreadInput>,
@@ -42,11 +48,11 @@ pub struct Thread {
 
 impl Thread {
 
-    pub fn new(processor: SchedulerInternalApi, ctx: Arc<Context>) -> Thread {
+    pub fn new(processor: SchedulerInternalApi, ctx: Arc<Context>,
+               state: &Arc<State>) -> Thread {
         let (input_send, input_recv) = mpsc::channel();
-        let busy = Arc::new(AtomicBool::new(false));
+        let id = state.next_thread_id();
 
-        let busy_inner = busy.clone();
         let handle = thread::spawn(move || {
             for input in input_recv.iter() {
                 match input {
@@ -67,8 +73,7 @@ impl Thread {
                             }
                         }
 
-                        busy_inner.store(false, Ordering::Relaxed);
-                        processor.job_ended().unwrap();
+                        processor.job_ended(id, &job).unwrap();
                     },
 
                     // Please stop, thanks!
@@ -78,21 +83,24 @@ impl Thread {
         });
 
         Thread {
+            id: id,
+            currently_running: None,
+
             should_stop: false,
-            busy: busy,
+
             handle: handle,
             input: input_send,
         }
     }
 
     // Here, None equals to success, and Some(job) equals to failure
-    pub fn process(&self, job: ScheduledJob) -> Option<ScheduledJob> {
+    pub fn process(&mut self, job: ScheduledJob) -> Option<ScheduledJob> {
         // Do some consistency checks
         if self.should_stop || self.busy() {
             return Some(job);
         }
 
-        self.busy.store(true, Ordering::Relaxed);
+        self.currently_running = Some(job.hook_id());
         self.input.send(ThreadInput::Process(job)).unwrap();
 
         None
@@ -105,9 +113,20 @@ impl Thread {
         self.handle.join().unwrap();
     }
 
-    #[inline]
+    pub fn id(&self) -> ThreadId {
+        self.id
+    }
+
+    pub fn currently_running(&self) -> Option<HookId> {
+        self.currently_running
+    }
+
     pub fn busy(&self) -> bool {
-        self.busy.load(Ordering::Relaxed)
+        self.currently_running.is_some()
+    }
+
+    pub fn mark_idle(&mut self) {
+        self.currently_running = None;
     }
 }
 

@@ -18,6 +18,7 @@ use std::sync::{Arc, mpsc};
 
 use jobs::Job;
 use hooks::Hooks;
+use state::State;
 use errors::FisherResult;
 
 use super::scheduler::{Scheduler, SchedulerInput};
@@ -34,14 +35,15 @@ pub struct Processor {
 impl Processor {
 
     pub fn new(max_threads: u16, hooks: Arc<Hooks>,
-               environment: HashMap<String, String>) -> FisherResult<Self> {
+               environment: HashMap<String, String>, state: Arc<State>)
+               -> FisherResult<Self> {
         // Retrieve wanted information from the spawned thread
         let (input_send, input_recv) = mpsc::sync_channel(0);
         let (wait_send, wait_recv) = mpsc::channel();
 
         ::std::thread::spawn(move || {
             let inner = Scheduler::new(
-                max_threads, hooks, environment,
+                max_threads, hooks, environment, state,
             );
             input_send.send(inner.input()).unwrap();
 

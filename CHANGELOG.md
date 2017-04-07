@@ -14,6 +14,7 @@ This document contains what changed in each release of Fisher.
  * Add the ability to provide extra environment variables with the `-e` flag
  * Add the ability to load hooks in subdirectories with the `-r` flag
  * Add the ability to set priorities for hooks
+ * Add the ability to disable parallel execution for certain hooks
 
 * **Changes and improvements:**
 
