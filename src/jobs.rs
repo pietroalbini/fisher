@@ -91,6 +91,15 @@ impl Job {
         }
     }
 
+    #[inline]
+    pub fn trigger_status_hooks(&self) -> bool {
+        if let Some(ref provider) = self.provider {
+            provider.trigger_status_hooks(&self.request)
+        } else {
+            true
+        }
+    }
+
     pub fn process(&self, ctx: &Context) -> FisherResult<JobOutput> {
         let mut command = process::Command::new(&self.hook.exec());
 

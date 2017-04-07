@@ -197,6 +197,12 @@ impl ProviderTrait for StatusProvider {
 
         Ok(())
     }
+
+    fn trigger_status_hooks(&self, _req: &Request) -> bool {
+        // Don't trigger status hooks about status hooks
+        // That would end really bad
+        false
+    }
 }
 
 

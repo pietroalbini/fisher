@@ -132,7 +132,7 @@ impl Scheduler {
 
                 SchedulerInput::Job(job, priority) => {
                     self.queue.push(ScheduledJob::new(
-                        job, priority, serial.clone(), true,
+                        job, priority, serial.clone(),
                     ));
                     self.run_jobs();
 
@@ -159,7 +159,7 @@ impl Scheduler {
                                 hook.hook.clone(),
                                 Some(hook.provider.clone()),
                                 Request::Status(event.clone()),
-                            ), STATUS_EVENTS_PRIORITY, serial.clone(), false,
+                            ), STATUS_EVENTS_PRIORITY, serial.clone(),
                         ));
                         serial.next();
                     }

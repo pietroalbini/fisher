@@ -57,7 +57,7 @@ impl Thread {
                         // Display the error if there is one
                         match result {
                             Ok(output) => {
-                                if job.should_trigger_status_hooks() {
+                                if job.trigger_status_hooks() {
                                     processor.record_output(output).unwrap();
                                 }
                             },

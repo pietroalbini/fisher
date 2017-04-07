@@ -104,6 +104,14 @@ impl ProviderTrait for TestingProvider {
 
         Ok(())
     }
+
+    fn trigger_status_hooks(&self, request: &Request) -> bool {
+        if let &Request::Web(ref inner) = request {
+            ! inner.params.contains_key("ignore_status_hooks")
+        } else {
+            true
+        }
+    }
 }
 
 
@@ -184,5 +192,17 @@ mod tests {
         should_be.insert("ENV".to_string(), "test".to_string());
 
         assert_eq!(p.env(&req.into()), should_be);
+    }
+
+    #[test]
+    fn test_trigger_status_hooks() {
+        let p = TestingProvider::new("").unwrap();
+
+        assert!(p.trigger_status_hooks(&dummy_web_request().into()));
+
+        let mut req = dummy_web_request();
+        req.params.insert("ignore_status_hooks".into(), "yes".into());
+
+        assert!(! p.trigger_status_hooks(&req.into()));
     }
 }

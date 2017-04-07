@@ -64,6 +64,13 @@ pub trait ProviderTrait: ::std::fmt::Debug {
                          -> FisherResult<()> {
         Ok(())
     }
+
+    /// This method tells the scheduler if the hook should trigger status hooks
+    /// after the request is processed. By default this returns true, change it
+    /// only if you really know what you're doing
+    fn trigger_status_hooks(&self, _req: &Request) -> bool {
+        true
+    }
 }
 
 
@@ -129,6 +136,17 @@ macro_rules! ProviderEnum {
                             (prov as &ProviderTrait)
                                 .prepare_directory(req, path)
                         },
+                    )*
+                }
+            }
+
+            pub fn trigger_status_hooks(&self, req: &Request) -> bool {
+                match *self {
+                    $(
+                        #[cfg($cfg)]
+                        Provider::$name(ref prov) => {
+                            (prov as &ProviderTrait).trigger_status_hooks(req)
+                        }
                     )*
                 }
             }
