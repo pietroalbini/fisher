@@ -25,23 +25,50 @@ use serde_json;
 pub type FisherResult<T> = Result<T, FisherError>;
 
 
+/// This enum represents the error that occured.
+
 #[derive(Debug)]
 pub enum ErrorKind {
+    /// The provider requested by an hook doesn't exist. The provider name is
+    /// provided as the first parameter.
     ProviderNotFound(String),
+
+    /// The input you provided was invalid. A more detailed error message is
+    /// available in the first parameter.
     InvalidInput(String),
+
+    #[doc(hidden)]
     NotBehindProxy,
+
+    #[doc(hidden)]
     WrongRequestKind,
 
-    // Hex decoding errors
+    #[doc(hidden)]
     InvalidHexChar(char),
+
+    #[doc(hidden)]
     InvalidHexLength,
 
-    // Derived errors
+    #[doc(hidden)]
     BrokenChannel,
+
+    /// An error occured while performing I/O operations. The underlying error
+    /// is available as the first parameter.
     IoError(io::Error),
+
+    /// An error occured while parsing some JSON. The underlying error is
+    /// available as the first parameter.
     JsonError(serde_json::Error),
+
+    /// An error occured while parsing an IP address. The underlying error is
+    /// available as the first parameter.
     AddrParseError(net::AddrParseError),
+
+    /// An error occured while parsing a number. The underlying error is
+    /// available as the first parameter.
     ParseIntError(num::ParseIntError),
+
+    #[doc(hidden)]
     GenericError(Box<Error + Send + Sync>),
 }
 
