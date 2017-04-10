@@ -2,9 +2,9 @@
 
 This document contains what changed in each release of Fisher.
 
-### Next release
+### Fisher 1.0.0-beta.4
 
-*Not yet released.*
+*Released on April 10th, 2017.*
 
 * **New features:**
 
@@ -38,7 +38,7 @@ This document contains what changed in each release of Fisher.
 
 ### Fisher 1.0.0-beta.3
 
-*Released on January 5th, 2016.*
+*Released on January 5th, 2017.*
 
 * Add the `$FISHER_REQUEST_IP` environment variable
 * Add support for status hooks
