@@ -22,7 +22,7 @@ extern crate fisher;
 use std::time::{Instant, Duration};
 
 use clap::{App, Arg};
-use libc::{SIGINT, SIGTERM};
+use libc::{SIGINT, SIGTERM, SIGHUP};
 use ansi_term::{Style, Colour};
 
 
@@ -128,6 +128,7 @@ fn app() -> fisher::Result<()> {
     let signal_trap = signal::trap::Trap::trap(&[
         SIGINT,  // Interrupt the program
         SIGTERM,  // Interrupt the program
+        SIGHUP,  // Reload Fisher
     ]);
 
     // Load the options from the CLI arguments
@@ -161,7 +162,7 @@ fn app() -> fisher::Result<()> {
 
     factory.collect_hooks(args.hooks_dir, args.recursive)?;
     {
-        let mut hook_names = factory.hook_names().collect::<Vec<&String>>();
+        let mut hook_names = factory.hook_names().collect::<Vec<String>>();
         hook_names.sort();
 
         println!("{} ({} total)",
@@ -186,7 +187,7 @@ fn app() -> fisher::Result<()> {
         );
         ::std::process::exit(1);
     }
-    let app = app_result.unwrap();
+    let mut app = app_result.unwrap();
 
     println!("{} on {}",
         Colour::Green.bold().paint("Web API listening"), app.web_address(),
@@ -196,6 +197,15 @@ fn app() -> fisher::Result<()> {
     loop {
         match signal_trap.wait(Instant::now()) {
             Some(SIGINT) | Some(SIGTERM) => break,
+            Some(SIGHUP) => {
+                println!("{} hooks list",
+                    Colour::Green.bold().paint("Reloading")
+                );
+
+                // Don't crash if the reload fails, just show errors
+                // No changes are applied if the reload fails
+                let _ = print_err(app.reload());
+            },
             _ => {},
         }
         ::std::thread::sleep(Duration::new(0, 100));

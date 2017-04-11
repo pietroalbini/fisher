@@ -23,7 +23,7 @@ use std::fs;
 use hyper::client as hyper;
 use hyper::method::Method;
 
-use hooks::{Hooks, HooksCollector};
+use hooks::{Hooks, HooksBlueprint};
 use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
@@ -320,15 +320,11 @@ impl TestingEnv {
 
         let hooks_dir = sample_hooks().to_str().unwrap().to_string();
 
-        let mut hooks = Hooks::new();
-        for hook in HooksCollector::new(
-            &hooks_dir, state.clone(), true,
-        ).unwrap() {
-            hooks.insert(hook.unwrap());
-        }
+        let mut hooks_blueprint = HooksBlueprint::new(state.clone());
+        hooks_blueprint.collect_path(&hooks_dir, true).unwrap();
 
         TestingEnv {
-            hooks: Arc::new(hooks),
+            hooks: Arc::new(hooks_blueprint.hooks()),
             remove_dirs: vec![hooks_dir],
         }
     }

@@ -18,7 +18,7 @@ use std::path::Path;
 use std::net;
 use std::sync::Arc;
 
-use hooks::{HooksCollector, HookNamesIter, Hooks, Hook};
+use hooks::{HookNamesIter, Hooks, HooksBlueprint, Hook};
 use processor::Processor;
 use web::WebApp;
 use errors::FisherResult;
@@ -52,12 +52,17 @@ pub struct Fisher<'a> {
 
     state: Arc<State>,
     hooks: Hooks,
+    hooks_blueprint: HooksBlueprint,
     environment: HashMap<String, String>,
 }
 
 impl<'a> Fisher<'a> {
 
     pub fn new() -> Self {
+        let state = Arc::new(State::new());
+        let hooks_blueprint = HooksBlueprint::new(state.clone());
+        let hooks = hooks_blueprint.hooks();
+
         Fisher {
             max_threads: 1,
             behind_proxies: 0,
@@ -65,7 +70,8 @@ impl<'a> Fisher<'a> {
             enable_health: true,
 
             state: Arc::new(State::new()),
-            hooks: Hooks::new(),
+            hooks: hooks,
+            hooks_blueprint: hooks_blueprint,
             environment: HashMap::new(),
         }
     }
@@ -80,19 +86,14 @@ impl<'a> Fisher<'a> {
         Ok(())
     }
 
-    pub fn add_hook<H: IntoHook>(&mut self, hook: H) {
-        self.hooks.insert(hook.into_hook());
+    pub fn add_hook<H: IntoHook>(&mut self, hook: H) -> FisherResult<()> {
+        self.hooks_blueprint.insert(hook.into_hook())?;
+        Ok(())
     }
 
     pub fn collect_hooks<P: AsRef<Path>>(&mut self, path: P, recursive: bool)
                                          -> FisherResult<()> {
-        let collector = HooksCollector::new(
-            path, self.state.clone(), recursive,
-        )?;
-        for hook in collector {
-            self.add_hook(hook?);
-        }
-
+        self.hooks_blueprint.collect_path(path, recursive)?;
         Ok(())
     }
 
@@ -128,6 +129,7 @@ impl<'a> Fisher<'a> {
         Ok(RunningFisher::new(
             processor,
             web_api,
+            self.hooks_blueprint,
         ))
     }
 }
@@ -136,19 +138,27 @@ impl<'a> Fisher<'a> {
 pub struct RunningFisher {
     processor: Processor,
     web_api: WebApp,
+    hooks_blueprint: HooksBlueprint,
 }
 
 impl RunningFisher {
 
-    fn new(processor: Processor, web_api: WebApp) -> Self {
+    fn new(processor: Processor, web_api: WebApp,
+           hooks_blueprint: HooksBlueprint) -> Self {
         RunningFisher {
             processor: processor,
             web_api: web_api,
+            hooks_blueprint: hooks_blueprint,
         }
     }
 
     pub fn web_address(&self) -> &net::SocketAddr {
         self.web_api.addr()
+    }
+
+    pub fn reload(&mut self) -> FisherResult<()> {
+        self.hooks_blueprint.reload()?;
+        Ok(())
     }
 
     pub fn stop(self) -> FisherResult<()> {
