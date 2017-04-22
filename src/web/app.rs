@@ -71,7 +71,11 @@ impl WebApp {
     }
 
     pub fn lock(&self) {
-        self.locked.store(true, Ordering::Relaxed);
+        self.locked.store(true, Ordering::SeqCst);
+    }
+
+    pub fn unlock(&self) {
+        self.locked.store(false, Ordering::SeqCst);
     }
 
     pub fn stop(mut self) {
@@ -175,6 +179,17 @@ mod tests {
                       .send().unwrap();
         assert_eq!(res.status, StatusCode::ServiceUnavailable);
         assert!(inst.processor_input().is_none());
+
+        // Now unlock the instance
+        inst.unlock();
+
+        // Call the example hook with authorization
+        let res = inst.request(Method::Get, "/hook/example.sh?secret=testing")
+                      .send().unwrap();
+        assert_eq!(res.status, StatusCode::Ok);
+
+        // Assert a job is queued
+        assert!(inst.processor_input().is_some());
 
         inst.stop();
         testing_env.cleanup();

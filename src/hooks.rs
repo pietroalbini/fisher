@@ -275,6 +275,7 @@ pub struct HookProvider {
 #[derive(Debug)]
 struct HooksInner {
     hooks: Vec<Arc<Hook>>,
+    by_id: HashMap<HookId, Arc<Hook>>,
     by_name: HashMap<String, Arc<Hook>>,
     status_hooks: HashMap<StatusEventKind, Vec<HookProvider>>,
 }
@@ -284,6 +285,7 @@ impl HooksInner {
     pub fn new() -> Self {
         HooksInner {
             hooks: Vec::new(),
+            by_id: HashMap::new(),
             by_name: HashMap::new(),
             status_hooks: HashMap::new(),
         }
@@ -291,6 +293,7 @@ impl HooksInner {
 
     pub fn insert(&mut self, hook: Arc<Hook>) {
         self.hooks.push(hook.clone());
+        self.by_id.insert(hook.id(), hook.clone());
         self.by_name.insert(hook.name().to_string(), hook.clone());
 
         for provider in &hook.providers {
@@ -320,6 +323,13 @@ pub struct Hooks {
 }
 
 impl Hooks {
+
+    pub fn id_exists(&self, id: &HookId) -> bool {
+        match self.inner.read() {
+            Ok(inner) => inner.by_id.contains_key(id),
+            Err(poisoned) => poisoned.get_ref().by_id.contains_key(id),
+        }
+    }
 
     pub fn get_by_name(&self, name: &str) -> Option<Arc<Hook>> {
         match self.inner.read() {

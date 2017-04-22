@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, mpsc};
 
 use jobs::{Job, JobOutput, Context};
@@ -31,6 +31,27 @@ use super::scheduled_job::ScheduledJob;
 const STATUS_EVENTS_PRIORITY: isize = 1000;
 
 
+#[cfg(test)]
+#[derive(Debug)]
+pub struct DebugDetails {
+    pub waiting: HashMap<HookId, usize>,
+}
+
+#[cfg(test)]
+impl DebugDetails {
+
+    fn from_scheduler(scheduler: &Scheduler) -> Self {
+        let waiting = scheduler.waiting.iter()
+            .map(|(key, value)| (*key, value.len()))
+            .collect();
+
+        DebugDetails {
+            waiting: waiting,
+        }
+    }
+}
+
+
 #[derive(Clone, Debug, Serialize)]
 pub struct HealthDetails {
     pub queued_jobs: usize,
@@ -45,8 +66,12 @@ pub enum SchedulerInput {
     HealthStatus(mpsc::Sender<HealthDetails>),
     QueueStatusEvent(StatusEvent),
 
-    #[cfg(test)] Lock,
-    #[cfg(test)] Unlock,
+    Cleanup,
+
+    #[cfg(test)] DebugDetails(mpsc::Sender<DebugDetails>),
+
+    Lock,
+    Unlock,
 
     StopSignal,
     JobEnded(ThreadId, HookId),
@@ -192,12 +217,21 @@ impl Scheduler {
                     self.run_jobs();
                 },
 
+                SchedulerInput::Cleanup => {
+                    self.cleanup_threads();
+                    self.cleanup_hooks();
+                },
+
                 #[cfg(test)]
+                SchedulerInput::DebugDetails(return_to) => {
+                    let details = DebugDetails::from_scheduler(&self);
+                    let _ = return_to.send(details);
+                },
+
                 SchedulerInput::Lock => {
                     self.locked = true;
                 },
 
-                #[cfg(test)]
                 SchedulerInput::Unlock => {
                     self.locked = false;
                     self.run_jobs();
@@ -275,6 +309,50 @@ impl Scheduler {
             if let Some(thread) = self.threads.remove(id) {
                 thread.stop();
             }
+        }
+    }
+
+    fn cleanup_hooks(&mut self) {
+        // Get a set of all the queued hooks
+        let mut queued = HashSet::with_capacity(self.queue.len());;
+        for job in self.queue.iter() {
+            queued.insert(job.hook_id());
+        }
+
+        // Remove old hooks from self.waiting
+        let mut to_remove = Vec::with_capacity(self.waiting.len());
+        for (hook_id, waiting) in self.waiting.iter() {
+            // This hook wasn't deleted
+            if self.hooks.id_exists(&hook_id) {
+                continue;
+            }
+
+            // There are jobs waiting
+            if ! waiting.is_empty() {
+                continue;
+            }
+
+            // There are jobs in the queue
+            if queued.contains(&hook_id) {
+                continue;
+            }
+
+            to_remove.push(*hook_id);
+        }
+        for hook_id in &to_remove {
+            let _ = self.waiting.remove(&hook_id);
+        }
+
+        // Add new hooks
+        for hook in self.hooks.iter() {
+            if hook.parallel() {
+                continue;
+            }
+            if self.waiting.contains_key(&hook.id()) {
+                continue;
+            }
+
+            self.waiting.insert(hook.id(), BinaryHeap::new());
         }
     }
 
@@ -562,5 +640,77 @@ mod tests {
         assert!(waiting.executed());
 
         env.cleanup();
+    }
+
+
+    #[test]
+    fn test_cleanup_hooks() {
+        wrapper(|env| {
+            let processor = Processor::new(
+                1, env.hooks(), HashMap::new(), env.state(),
+            )?;
+            let api = processor.api();
+
+            let mut waitings = VecDeque::new();
+            for _ in 0..10 {
+                let mut waiting = env.waiting_job(true);
+                api.queue(waiting.take_job().unwrap(), 1)?;
+                waitings.push_back(waiting);
+            }
+
+            let old_hook_id = env.hook_id_of("wait.sh").unwrap();
+
+            let debug = api.debug_details()?;
+            assert_eq!(debug.waiting.get(&old_hook_id), Some(&9));
+
+            // Execute only 5 out of 10 waiting jobs
+            for mut waiting in waitings.drain(..5) {
+                waiting.unlock()?;
+            }
+
+            // Wait until the previous operation ended
+            while api.health_status()?.queued_jobs != 4 { }
+
+            let debug = api.debug_details()?;
+            assert_eq!(debug.waiting.get(&old_hook_id), Some(&4));
+
+            // Reload the hooks
+            env.reload_hooks()?;
+
+            let new_hook_id = env.hook_id_of("wait.sh").unwrap();
+            assert!(new_hook_id != old_hook_id);
+
+            // The new hook id shouldn't be present yet
+            let debug = api.debug_details()?;
+            assert_eq!(debug.waiting.get(&old_hook_id), Some(&4));
+            assert_eq!(debug.waiting.get(&new_hook_id), None);
+
+            // Execute a first cleanup
+            api.cleanup()?;
+
+            // Now the new hook id should be present, but with no hooks
+            let debug = api.debug_details()?;
+            assert_eq!(debug.waiting.get(&old_hook_id), Some(&4));
+            assert_eq!(debug.waiting.get(&new_hook_id), Some(&0));
+
+            for mut waiting in waitings.drain(..) {
+                waiting.unlock()?;
+            }
+
+            // Wait until the previous operation ended
+            while api.health_status()?.busy_threads != 0 { }
+
+            // Execute a second cleanup
+            api.cleanup()?;
+
+            // Now the old hook id should be gone
+            let debug = api.debug_details()?;
+            assert_eq!(debug.waiting.get(&old_hook_id), None);
+            assert_eq!(debug.waiting.get(&new_hook_id), Some(&0));
+
+            processor.stop()?;
+
+            Ok(())
+        });
     }
 }

@@ -157,7 +157,17 @@ impl RunningFisher {
     }
 
     pub fn reload(&mut self) -> FisherResult<()> {
+        let processor = self.processor.api();
+
+        self.web_api.lock();
+        processor.lock()?;
+
         self.hooks_blueprint.reload()?;
+        processor.cleanup()?;
+
+        processor.unlock()?;
+        self.web_api.unlock();
+
         Ok(())
     }
 

@@ -23,7 +23,7 @@ use std::fs;
 use hyper::client as hyper;
 use hyper::method::Method;
 
-use hooks::{Hooks, HooksBlueprint};
+use hooks::{HookId, Hooks, HooksBlueprint};
 use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
@@ -301,6 +301,10 @@ impl WebAppInstance {
         self.inst.lock();
     }
 
+    pub fn unlock(&self) {
+        self.inst.unlock();
+    }
+
     pub fn stop(self) {
         self.input_request.send(FakeProcessorInput::Stop).unwrap();
         self.inst.stop();
@@ -310,6 +314,8 @@ impl WebAppInstance {
 
 pub struct TestingEnv {
     hooks: Arc<Hooks>,
+    hooks_blueprint: HooksBlueprint,
+    state: Arc<State>,
     remove_dirs: Vec<String>,
 }
 
@@ -325,8 +331,14 @@ impl TestingEnv {
 
         TestingEnv {
             hooks: Arc::new(hooks_blueprint.hooks()),
+            hooks_blueprint: hooks_blueprint,
+            state: state,
             remove_dirs: vec![hooks_dir],
         }
+    }
+
+    pub fn state(&self) -> Arc<State> {
+        self.state.clone()
     }
 
     // CLEANUP
@@ -344,14 +356,24 @@ impl TestingEnv {
 
     // UTILITIES
 
-    pub fn hooks(&self) -> Arc<Hooks> {
-        self.hooks.clone()
-    }
-
     pub fn tempdir(&mut self) -> PathBuf {
         let dir = utils::create_temp_dir().unwrap();
         self.delete_also(dir.to_str().unwrap());
         dir
+    }
+
+    // HOOKS UTILITIES
+
+    pub fn hooks(&self) -> Arc<Hooks> {
+        self.hooks.clone()
+    }
+
+    pub fn hook_id_of(&self, name: &str) -> Option<HookId> {
+        self.hooks.get_by_name(name).map(|hook| hook.id())
+    }
+
+    pub fn reload_hooks(&mut self) -> FisherResult<()> {
+        self.hooks_blueprint.reload()
     }
 
     // JOBS UTILITIES
@@ -445,5 +467,16 @@ impl WaitingJob {
 
     pub fn executed(&self) -> bool {
         (! self.locked) && fs::metadata(&self.lock_path).is_err()
+    }
+}
+
+
+pub fn wrapper<F: Fn(&mut TestingEnv) -> FisherResult<()>>(function: F) {
+    let mut env = TestingEnv::new();
+    let result = function(&mut env);
+    env.cleanup();
+
+    if let Err(error) = result {
+        panic!("{}", error);
     }
 }

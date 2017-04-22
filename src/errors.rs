@@ -56,6 +56,9 @@ pub enum ErrorKind {
     #[doc(hidden)]
     PoisonedLock,
 
+    #[doc(hidden)]
+    ThreadCrashed,
+
     /// An error occured while performing I/O operations. The underlying error
     /// is available as the first parameter.
     IoError(io::Error),
@@ -155,6 +158,8 @@ impl Error for FisherError {
                 "internal communication channel crashed",
             ErrorKind::PoisonedLock =>
                 "poisoned lock",
+            ErrorKind::ThreadCrashed =>
+                "thread crashed",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -206,6 +211,9 @@ impl fmt::Display for FisherError {
 
             ErrorKind::PoisonedLock =>
                 "an internal lock was poisoned".into(),
+
+            ErrorKind::ThreadCrashed =>
+                "an internal thread crashed".into(),
 
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),
