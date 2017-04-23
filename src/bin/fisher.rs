@@ -22,7 +22,7 @@ extern crate fisher;
 use std::time::{Instant, Duration};
 
 use clap::{App, Arg};
-use libc::{SIGINT, SIGTERM, SIGHUP};
+use libc::{SIGINT, SIGTERM, SIGUSR1};
 use ansi_term::{Style, Colour};
 
 
@@ -128,7 +128,7 @@ fn app() -> fisher::Result<()> {
     let signal_trap = signal::trap::Trap::trap(&[
         SIGINT,  // Interrupt the program
         SIGTERM,  // Interrupt the program
-        SIGHUP,  // Reload Fisher
+        SIGUSR1,  // Reload Fisher
     ]);
 
     // Load the options from the CLI arguments
@@ -197,7 +197,7 @@ fn app() -> fisher::Result<()> {
     loop {
         match signal_trap.wait(Instant::now()) {
             Some(SIGINT) | Some(SIGTERM) => break,
-            Some(SIGHUP) => {
+            Some(SIGUSR1) => {
                 println!("{} hooks list",
                     Colour::Green.bold().paint("Reloading")
                 );
