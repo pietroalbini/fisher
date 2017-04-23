@@ -162,13 +162,15 @@ impl RunningFisher {
         self.web_api.lock();
         processor.lock()?;
 
-        self.hooks_blueprint.reload()?;
-        processor.cleanup()?;
+        let result = self.hooks_blueprint.reload();
+        if result.is_ok() {
+            processor.cleanup()?;
+        }
 
         processor.unlock()?;
         self.web_api.unlock();
 
-        Ok(())
+        result
     }
 
     pub fn stop(self) -> FisherResult<()> {
