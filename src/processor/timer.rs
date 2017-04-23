@@ -16,6 +16,7 @@
 use std::thread::{JoinHandle, spawn};
 use std::time::Duration;
 use std::sync::mpsc;
+use std::fmt;
 
 use errors::{ErrorKind, FisherResult};
 
@@ -36,7 +37,6 @@ enum TimerInput {
 }
 
 
-#[derive(Debug)]
 pub struct Timer {
     input: mpsc::Sender<TimerInput>,
     handle: JoinHandle<()>,
@@ -97,6 +97,13 @@ impl Timer {
         }
 
         Ok(())
+    }
+}
+
+impl fmt::Debug for Timer {
+
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Timer")
     }
 }
 
