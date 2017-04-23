@@ -15,7 +15,7 @@ cache: cargo
 
 script:
   - cargo build --release
-  - cargo test --release
+  - cargo test --all --release
 
 notifications:
   email: false

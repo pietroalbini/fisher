@@ -29,6 +29,8 @@ extern crate libc;
 #[cfg(feature = "provider-github")] extern crate ring;
 #[cfg(test)] extern crate hyper;
 
+extern crate fisher_common;
+
 #[macro_use] mod utils;
 mod providers;
 mod hooks;
