@@ -65,7 +65,7 @@ impl Route {
             if part == "?" {
                 result.push_str(r"([a-zA-Z0-9\./_-]+)");
             } else {
-                result.push_str(&regex::quote(part));
+                result.push_str(&regex::escape(part));
             }
         }
 
@@ -83,8 +83,8 @@ impl Route {
             Some(captures) => {
                 Some(
                     captures.iter().skip(1)
-                            .filter(|x| x.is_some())
-                            .map(|x| x.unwrap().to_string())
+                            .filter_map(|x| x)  // Strip Option<T>, returning T
+                            .map(|x| x.as_str().to_string())
                             .collect()
                 )
             },
