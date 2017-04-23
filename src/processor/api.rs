@@ -22,6 +22,8 @@ use state::State;
 use errors::FisherResult;
 
 use super::scheduler::{Scheduler, SchedulerInput};
+#[cfg(test)] use super::scheduler::DebugDetails;
+use super::timer::Timer;
 
 pub use super::scheduler::HealthDetails;
 
@@ -29,6 +31,7 @@ pub use super::scheduler::HealthDetails;
 #[derive(Debug)]
 pub struct Processor {
     input: mpsc::Sender<SchedulerInput>,
+    timer: Timer,
     wait: mpsc::Receiver<()>,
 }
 
@@ -53,13 +56,25 @@ impl Processor {
             wait_send.send(()).unwrap();
         });
 
-        Ok(Processor {
+        let processor = Processor {
             input: input_recv.recv()?,
+            timer: Timer::new(),
             wait: wait_recv,
-        })
+        };
+
+        // Set up the cleanup timer
+        let api = processor.api();
+        processor.timer.add_task(30, move || {
+            let _ = api.cleanup();
+        })?;
+
+        Ok(processor)
     }
 
     pub fn stop(self) -> FisherResult<()> {
+        // Stop the timer
+        self.timer.stop()?;
+
         // Ask the processor to stop
         self.input.send(SchedulerInput::StopSignal)?;
         self.wait.recv()?;
@@ -100,13 +115,23 @@ impl ProcessorApi {
         Ok(res_recv.recv()?)
     }
 
+    pub fn cleanup(&self) -> FisherResult<()> {
+        self.input.send(SchedulerInput::Cleanup)?;
+        Ok(())
+    }
+
     #[cfg(test)]
+    pub fn debug_details(&self) -> FisherResult<DebugDetails> {
+        let (res_send, res_recv) = mpsc::channel();
+        self.input.send(SchedulerInput::DebugDetails(res_send))?;
+        Ok(res_recv.recv()?)
+    }
+
     pub fn lock(&self) -> FisherResult<()> {
         self.input.send(SchedulerInput::Lock)?;
         Ok(())
     }
 
-    #[cfg(test)]
     pub fn unlock(&self) -> FisherResult<()> {
         self.input.send(SchedulerInput::Unlock)?;
         Ok(())

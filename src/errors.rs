@@ -19,6 +19,7 @@ use std::net;
 use std::num;
 use std::error::Error;
 use std::sync::mpsc;
+use std::sync;
 
 use serde_json;
 
@@ -51,6 +52,12 @@ pub enum ErrorKind {
 
     #[doc(hidden)]
     BrokenChannel,
+
+    #[doc(hidden)]
+    PoisonedLock,
+
+    #[doc(hidden)]
+    ThreadCrashed,
 
     /// An error occured while performing I/O operations. The underlying error
     /// is available as the first parameter.
@@ -149,6 +156,10 @@ impl Error for FisherError {
                 "invalid length of the hex",
             ErrorKind::BrokenChannel =>
                 "internal communication channel crashed",
+            ErrorKind::PoisonedLock =>
+                "poisoned lock",
+            ErrorKind::ThreadCrashed =>
+                "thread crashed",
             ErrorKind::IoError(ref error) =>
                 error.description(),
             ErrorKind::JsonError(ref error) =>
@@ -197,6 +208,12 @@ impl fmt::Display for FisherError {
 
             ErrorKind::BrokenChannel =>
                 "an internal communication channel crashed".into(),
+
+            ErrorKind::PoisonedLock =>
+                "an internal lock was poisoned".into(),
+
+            ErrorKind::ThreadCrashed =>
+                "an internal thread crashed".into(),
 
             ErrorKind::IoError(ref error) =>
                 format!("{}", error),
@@ -251,6 +268,14 @@ impl<T> From<mpsc::SendError<T>> for FisherError {
 
     fn from(_: mpsc::SendError<T>) -> Self {
         FisherError::new(ErrorKind::BrokenChannel)
+    }
+}
+
+
+impl<T> From<sync::PoisonError<T>> for FisherError {
+
+    fn from(_: sync::PoisonError<T>) -> Self {
+        FisherError::new(ErrorKind::PoisonedLock)
     }
 }
 

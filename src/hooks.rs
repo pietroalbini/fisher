@@ -16,12 +16,9 @@
 use std::fs::{read_dir, canonicalize, ReadDir, File};
 use std::path::{Path, PathBuf};
 use std::collections::{HashMap, VecDeque};
-use std::collections::hash_map::Keys as HashMapKeys;
-use std::collections::hash_map::Values as HashMapValues;
-use std::slice::Iter as SliceIter;
 use std::os::unix::fs::PermissionsExt;
 use std::io::{BufReader, BufRead};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 use regex::Regex;
 use serde_json;
@@ -188,33 +185,87 @@ impl Hook {
 }
 
 
-pub struct HookNamesIter<'a> {
-    iter: HashMapKeys<'a, String, Arc<Hook>>,
-}
-
-impl<'a> Iterator for HookNamesIter<'a> {
-    type Item = &'a String;
-
-    fn next(&mut self) -> Option<&'a String> {
-        self.iter.next()
-    }
-}
-
-
 pub struct HooksIter<'a> {
-    iter: HashMapValues<'a, String, Arc<Hook>>,
+    guard: RwLockReadGuard<'a, HooksInner>,
+    count: usize,
+}
+
+impl<'a> HooksIter<'a> {
+
+    fn new(guard: RwLockReadGuard<'a, HooksInner>) -> Self {
+        HooksIter {
+            guard: guard,
+            count: 0,
+        }
+    }
 }
 
 impl<'a> Iterator for HooksIter<'a> {
-    type Item = &'a Arc<Hook>;
+    type Item = Arc<Hook>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+        self.count += 1;
+        self.guard.hooks.get(self.count - 1).cloned()
     }
 }
 
 
-#[derive(Debug)]
+pub struct HookNamesIter<'a> {
+    iter: HooksIter<'a>,
+}
+
+impl<'a> HookNamesIter<'a> {
+
+    fn new(iter: HooksIter<'a>) -> Self {
+        HookNamesIter {
+            iter: iter,
+        }
+    }
+}
+
+impl<'a> Iterator for HookNamesIter<'a> {
+    type Item = String;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|hook| hook.name().to_string())
+    }
+}
+
+
+pub struct StatusHooksIter<'a> {
+    guard: RwLockReadGuard<'a, HooksInner>,
+    kind: StatusEventKind,
+    count: usize,
+}
+
+impl<'a> StatusHooksIter<'a> {
+
+    fn new(guard: RwLockReadGuard<'a, HooksInner>, kind: StatusEventKind)
+           -> Self {
+        StatusHooksIter {
+            guard: guard,
+            kind: kind,
+            count: 0
+        }
+    }
+}
+
+impl<'a> Iterator for StatusHooksIter<'a> {
+    type Item = HookProvider;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.count += 1;
+
+        if let Some(all) = self.guard.status_hooks.get(&self.kind) {
+            all.get(self.count - 1).cloned()
+        } else {
+            None
+        }
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub struct HookProvider {
     pub hook: Arc<Hook>,
     pub provider: Arc<Provider>,
@@ -222,21 +273,27 @@ pub struct HookProvider {
 
 
 #[derive(Debug)]
-pub struct Hooks {
+struct HooksInner {
+    hooks: Vec<Arc<Hook>>,
+    by_id: HashMap<HookId, Arc<Hook>>,
     by_name: HashMap<String, Arc<Hook>>,
     status_hooks: HashMap<StatusEventKind, Vec<HookProvider>>,
 }
 
-impl Hooks {
+impl HooksInner {
 
     pub fn new() -> Self {
-        Hooks {
+        HooksInner {
+            hooks: Vec::new(),
+            by_id: HashMap::new(),
             by_name: HashMap::new(),
             status_hooks: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, hook: Arc<Hook>) {
+        self.hooks.push(hook.clone());
+        self.by_id.insert(hook.id(), hook.clone());
         self.by_name.insert(hook.name().to_string(), hook.clone());
 
         for provider in &hook.providers {
@@ -257,26 +314,114 @@ impl Hooks {
     pub fn get_by_name(&self, name: &str) -> Option<Arc<Hook>> {
         self.by_name.get(name).cloned()
     }
+}
+
+
+#[derive(Debug)]
+pub struct Hooks {
+    inner: Arc<RwLock<HooksInner>>,
+}
+
+impl Hooks {
+
+    pub fn id_exists(&self, id: &HookId) -> bool {
+        match self.inner.read() {
+            Ok(inner) => inner.by_id.contains_key(id),
+            Err(poisoned) => poisoned.get_ref().by_id.contains_key(id),
+        }
+    }
+
+    pub fn get_by_name(&self, name: &str) -> Option<Arc<Hook>> {
+        match self.inner.read() {
+            Ok(inner) => inner.get_by_name(name),
+            Err(poisoned) => poisoned.get_ref().get_by_name(name),
+        }
+    }
 
     pub fn iter(&self) -> HooksIter {
-        HooksIter {
-            iter: self.by_name.values()
+        match self.inner.read() {
+            Ok(guard) => HooksIter::new(guard),
+            Err(poisoned) => HooksIter::new(poisoned.into_inner()),
         }
     }
 
     pub fn names(&self) -> HookNamesIter {
-        HookNamesIter {
-            iter: self.by_name.keys()
+        HookNamesIter::new(self.iter())
+    }
+
+    pub fn status_hooks_iter(&self, kind: StatusEventKind) -> StatusHooksIter {
+        match self.inner.read() {
+            Ok(guard) => StatusHooksIter::new(guard, kind),
+            Err(poisoned) => StatusHooksIter::new(poisoned.into_inner(), kind),
+        }
+    }
+}
+
+
+#[derive(Debug)]
+pub struct HooksBlueprint {
+    added: Vec<Arc<Hook>>,
+    collect_paths: Vec<(PathBuf, bool)>,
+
+    inner: Arc<RwLock<HooksInner>>,
+    state: Arc<State>,
+}
+
+impl HooksBlueprint {
+
+    pub fn new(state: Arc<State>) -> HooksBlueprint {
+        HooksBlueprint {
+            added: Vec::new(),
+            collect_paths: Vec::new(),
+
+            inner: Arc::new(RwLock::new(HooksInner::new())),
+            state: state,
         }
     }
 
-    pub fn status_hooks_iter(&self, kind: StatusEventKind)
-                             -> SliceIter<HookProvider> {
-        if let Some(hook_providers) = self.status_hooks.get(&kind) {
-            hook_providers.iter()
-        } else {
-            // Return an empty iterator if there is no hook for this kind
-            (&[]).iter()
+    pub fn insert(&mut self, hook: Arc<Hook>) -> FisherResult<()> {
+        self.added.push(hook);
+
+        self.reload()?;
+        Ok(())
+    }
+
+    pub fn collect_path<P: AsRef<Path>>(&mut self, path: P, recursive: bool)
+                                      -> FisherResult<()> {
+        self.collect_paths.push((path.as_ref().to_path_buf(), recursive));
+
+        self.reload()?;
+        Ok(())
+    }
+
+    pub fn reload(&mut self) -> FisherResult<()> {
+        let mut inner = HooksInner::new();
+
+        // Add manually added hooks
+        for hook in &self.added {
+            inner.insert(hook.clone());
+        }
+
+        // Collect hooks from paths
+        let mut collector;
+        for &(ref p, recursive) in &self.collect_paths {
+            collector = HooksCollector::new(p, self.state.clone(), recursive)?;
+            for hook in collector {
+                inner.insert(hook?);
+            }
+        }
+
+        {
+            let mut to_update = self.inner.write()?;
+            *to_update = inner;
+        }
+
+        Ok(())
+    }
+
+    pub fn hooks(&self) -> Hooks {
+        Hooks {
+            inner: self.inner.clone(),
         }
     }
 }
@@ -386,7 +531,7 @@ mod tests {
     use providers::StatusEventKind;
     use state::State;
 
-    use super::{Hook, Hooks, HooksCollector};
+    use super::{Hook, HooksCollector, HooksBlueprint};
 
 
     macro_rules! assert_hook {
@@ -584,25 +729,103 @@ mod tests {
             r#"echo "hi";"#
         );
 
-        let mut hooks = Hooks::new();
-        hooks.insert(assert_hook!(base, "test.sh"));
-        hooks.insert(assert_hook!(base, "status1.sh"));
-        hooks.insert(assert_hook!(base, "status2.sh"));
+        let mut blueprint = HooksBlueprint::new(Arc::new(State::new()));
+        blueprint.collect_path(&base, false).unwrap();
+
+        let hooks = blueprint.hooks();
 
         assert_eq!(
             hooks.status_hooks_iter(StatusEventKind::JobCompleted)
-                 .map(|hp| hp.hook.name())
-                 .collect::<Vec<&str>>(),
-            vec!["status1.sh"]
+                 .map(|hp| hp.hook.name().to_string())
+                 .collect::<Vec<String>>(),
+            vec!["status1.sh".to_string()]
         );
         assert_eq!(
-            hooks.status_hooks_iter(StatusEventKind::JobFailed)
-                 .map(|hp| hp.hook.name())
-                 .collect::<Vec<&str>>(),
-            vec!["status1.sh", "status2.sh"]
+            {
+                let mut status = hooks.status_hooks_iter(StatusEventKind::JobFailed)
+                                      .map(|hp| hp.hook.name().to_string())
+                                      .collect::<Vec<String>>();
+                status.sort();
+                status
+            },
+            vec!["status1.sh".to_string(), "status2.sh".to_string()]
         );
 
         fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn test_hooks_blueprint() {
+        let base = utils::create_temp_dir().unwrap();
+        let other = utils::create_temp_dir().unwrap();
+
+        create_hook!(base, "a.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Testing: something"#,
+            r#"echo "a";"#
+        );
+
+        create_hook!(base, "b.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Testing: something"#,
+            r#"echo "b";"#
+        );
+
+        create_hook!(other, "c.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Testing: something"#,
+            r#"echo "c";"#
+        );
+
+        let mut blueprint = HooksBlueprint::new(Arc::new(State::new()));
+        blueprint.insert(assert_hook!(other, "c.sh")).unwrap();
+        blueprint.collect_path(&base, false).unwrap();
+
+        let hooks = blueprint.hooks();
+
+        // Check if all the hooks were loaded
+        let mut names = hooks.names().collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(names, vec![
+            "a.sh".to_string(),
+            "b.sh".to_string(),
+            "c.sh".to_string(),
+        ]);
+
+        // Update the hooks in the directory
+        fs::remove_file(&base.join("b.sh")).unwrap();
+        create_hook!(base, "d.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Testing: something"#,
+            r#"echo "d";"#
+        );
+
+        // Do a reload of the hooks
+        blueprint.reload().unwrap();
+
+        // Check if changes were applied
+        let mut names = hooks.names().collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(names, vec![
+            "a.sh".to_string(),
+            "c.sh".to_string(),
+            "d.sh".to_string(),
+        ]);
+
+        // Do an invalid reload
+        fs::remove_dir_all(&base).unwrap();
+        assert!(blueprint.reload().is_err());
+
+        // Ensure no changes were applied
+        let mut names = hooks.names().collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(names, vec![
+            "a.sh".to_string(),
+            "c.sh".to_string(),
+            "d.sh".to_string(),
+        ]);
+
+        fs::remove_dir_all(&other).unwrap();
     }
 
     #[test]

@@ -17,6 +17,7 @@ mod api;
 mod scheduled_job;
 mod scheduler;
 mod thread;
+mod timer;
 
 pub use self::api::{Processor, ProcessorApi, HealthDetails};
 #[cfg(test)] pub use processor::scheduler::SchedulerInput as ProcessorInput;
