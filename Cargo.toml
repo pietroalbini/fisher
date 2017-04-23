@@ -1,6 +1,6 @@
 [package]
 name = "fisher"
-version = "1.0.0-beta.4"
+version = "1.0.0-beta.5"
 license = "GPL-3.0"
 
 description = "Webhooks catcher written in Rust"

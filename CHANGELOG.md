@@ -2,7 +2,9 @@
 
 This document contains what changed in each release of Fisher.
 
-### Next release
+### Fisher 1.0.0-beta.5
+
+*Released on April 23th, 2017.*
 
 * **New features:**
 
