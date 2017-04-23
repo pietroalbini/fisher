@@ -2,6 +2,12 @@
 
 This document contains what changed in each release of Fisher.
 
+### Next release
+
+* **New features:**
+
+    * Add support for reloading the hooks on the fly with the SIGUSR1 signal
+
 ### Fisher 1.0.0-beta.4
 
 *Released on April 10th, 2017.*
