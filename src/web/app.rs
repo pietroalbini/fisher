@@ -19,7 +19,7 @@ use std::net::SocketAddr;
 
 use tiny_http::Method;
 
-use errors::FisherResult;
+use fisher_common::errors::Result;
 use hooks::Hooks;
 use processor::ProcessorApi;
 use web::http::HttpServer;
@@ -36,7 +36,7 @@ impl WebApp {
 
     pub fn new(hooks: Arc<Hooks>, enable_health: bool, behind_proxies: u8,
                bind: &str, processor: ProcessorApi)
-               -> FisherResult<Self> {
+               -> Result<Self> {
         let locked = Arc::new(AtomicBool::new(false));
 
         // Create the web api

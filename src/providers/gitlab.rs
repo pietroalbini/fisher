@@ -16,7 +16,7 @@
 use serde_json;
 
 use providers::prelude::*;
-use errors::ErrorKind;
+use fisher_common::errors::ErrorKind;
 
 
 lazy_static! {
@@ -39,7 +39,7 @@ pub struct GitLabProvider {
 
 impl ProviderTrait for GitLabProvider {
 
-    fn new(config: &str) -> FisherResult<Self> {
+    fn new(config: &str) -> Result<Self> {
         let inst: GitLabProvider = serde_json::from_str(config)?;
 
         // Check the validity of the events

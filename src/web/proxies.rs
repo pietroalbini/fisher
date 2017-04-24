@@ -16,7 +16,7 @@
 use std::net::IpAddr;
 
 use requests::Request;
-use errors::{FisherResult, ErrorKind};
+use fisher_common::errors::{Result, ErrorKind};
 use utils;
 
 
@@ -33,7 +33,7 @@ impl ProxySupport {
         }
     }
 
-    pub fn source_ip(&self, req: &Request) -> FisherResult<IpAddr> {
+    pub fn source_ip(&self, req: &Request) -> Result<IpAddr> {
         let req = req.web()?;
         let original = req.source;
 
@@ -63,7 +63,7 @@ impl ProxySupport {
         }
     }
 
-    pub fn fix_request(&self, req: &mut Request) -> FisherResult<()> {
+    pub fn fix_request(&self, req: &mut Request) -> Result<()> {
         let fixed_ip = self.source_ip(req)?;
 
         if let Request::Web(ref mut req) = *req {
@@ -82,7 +82,7 @@ mod tests {
     use std::str::FromStr;
 
     use utils::testing::*;
-    use errors::ErrorKind;
+    use fisher_common::errors::ErrorKind;
     use requests::Request;
 
     use super::ProxySupport;

@@ -20,7 +20,7 @@ use jobs::{Job, JobOutput, Context};
 use providers::StatusEvent;
 use hooks::{Hooks, HookId};
 use utils::Serial;
-use errors::FisherResult;
+use fisher_common::errors::Result;
 use requests::Request;
 use state::State;
 
@@ -85,7 +85,7 @@ pub struct SchedulerInternalApi {
 
 impl SchedulerInternalApi {
 
-    pub fn record_output(&self, output: JobOutput) -> FisherResult<()> {
+    pub fn record_output(&self, output: JobOutput) -> Result<()> {
         let event = if output.success {
             StatusEvent::JobCompleted(output)
         } else {
@@ -97,7 +97,7 @@ impl SchedulerInternalApi {
     }
 
     pub fn job_ended(&self, thread: ThreadId, job: &ScheduledJob)
-                     -> FisherResult<()> {
+                     -> Result<()> {
         self.input.send(SchedulerInput::JobEnded(thread, job.hook_id()))?;
         Ok(())
     }
@@ -160,7 +160,7 @@ impl Scheduler {
         self.input_send.clone()
     }
 
-    pub fn run(mut self) -> FisherResult<()> {
+    pub fn run(mut self) -> Result<()> {
         for _ in 0..self.max_threads {
             self.spawn_thread();
         }

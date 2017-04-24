@@ -18,7 +18,7 @@ use std::time::Duration;
 use std::sync::mpsc;
 use std::fmt;
 
-use errors::{ErrorKind, FisherResult};
+use fisher_common::errors::{ErrorKind, Result};
 
 
 struct Task {
@@ -63,7 +63,7 @@ impl Timer {
     }
 
     pub fn add_task<F: Fn() + 'static + Send>(&self, seconds: u64, handler: F)
-                                              -> FisherResult<()> {
+                                              -> Result<()> {
         self.input.send(TimerInput::AddTask(Task {
             handler: Box::new(handler),
             interval: seconds,
@@ -74,13 +74,13 @@ impl Timer {
     }
 
     #[cfg(test)]
-    pub fn enter_test_mode(&self) -> FisherResult<()> {
+    pub fn enter_test_mode(&self) -> Result<()> {
         self.input.send(TimerInput::EnterTestMode)?;
         Ok(())
     }
 
     #[cfg(test)]
-    pub fn test_tick(&self) -> FisherResult<()> {
+    pub fn test_tick(&self) -> Result<()> {
         let (result_send, result_recv) = mpsc::channel();
         self.input.send(TimerInput::TestTick(result_send))?;
 
@@ -90,7 +90,7 @@ impl Timer {
         Ok(())
     }
 
-    pub fn stop(self) -> FisherResult<()> {
+    pub fn stop(self) -> Result<()> {
         self.input.send(TimerInput::Stop)?;
         if self.handle.join().is_err() {
             return Err(ErrorKind::ThreadCrashed.into());

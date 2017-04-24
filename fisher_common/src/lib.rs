@@ -12,3 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+//! This crate contains all the common code used by the Fisher application.
+//! All the other sub-crates then depends on this crate to get access to
+//! the features.
+
+extern crate ansi_term;
+extern crate serde_json;
+
+pub mod errors;

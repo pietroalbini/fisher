@@ -34,7 +34,6 @@ extern crate fisher_common;
 #[macro_use] mod utils;
 mod providers;
 mod hooks;
-mod errors;
 mod processor;
 mod jobs;
 mod web;
@@ -45,6 +44,4 @@ mod state;
 
 // Public API
 pub use app::{Fisher, RunningFisher};
-pub use errors::FisherResult as Result;
-pub use errors::FisherError as Error;
-pub use errors::ErrorKind;
+pub use fisher_common::errors::*;

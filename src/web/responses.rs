@@ -15,7 +15,7 @@
 
 use serde_json;
 
-use errors::FisherError;
+use fisher_common::errors::Error;
 use processor::HealthDetails;
 
 
@@ -23,7 +23,7 @@ use processor::HealthDetails;
 pub enum Response {
     NotFound,
     Forbidden,
-    BadRequest(FisherError),
+    BadRequest(Error),
     Unavailable,
     Ok,
     HealthStatus(HealthDetails),
@@ -76,7 +76,7 @@ mod tests {
     use serde_json;
 
     use processor::HealthDetails;
-    use errors::{FisherError, ErrorKind};
+    use fisher_common::errors::{Error, ErrorKind};
     use super::Response;
 
 
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn test_bad_request() {
         // This is just a dummy error
-        let error = FisherError::new(ErrorKind::NotBehindProxy);
+        let error = Error::new(ErrorKind::NotBehindProxy);
         let error_msg = format!("{}", error);
 
         let response = Response::BadRequest(error);

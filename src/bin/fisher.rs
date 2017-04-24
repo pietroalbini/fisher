@@ -102,22 +102,7 @@ fn parse_cli() -> fisher::Result<CliArgs> {
 fn print_err<T>(result: fisher::Result<T>) -> fisher::Result<T> {
     // Show a nice error message
     if let Err(ref error) = result {
-        println!("{} {}",
-            ::ansi_term::Colour::Red.bold().paint("Error:"),
-            error,
-        );
-        if let Some(location) = error.location() {
-            println!("{} {}",
-                ::ansi_term::Colour::Yellow.bold().paint("Location:"),
-                location,
-            );
-        }
-        if let Some(hook) = error.processing() {
-            println!("{} {}",
-                ::ansi_term::Colour::Yellow.bold().paint("While processing:"),
-                hook,
-            );
-        }
+        error.pretty_print();
     }
 
     result

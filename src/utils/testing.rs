@@ -29,7 +29,7 @@ use web::{WebApp, WebRequest};
 use requests::Request;
 use processor::{ProcessorApi, ProcessorInput, HealthDetails};
 use state::State;
-use errors::FisherResult;
+use fisher_common::errors::Result;
 use utils;
 
 
@@ -372,7 +372,7 @@ impl TestingEnv {
         self.hooks.get_by_name(name).map(|hook| hook.id())
     }
 
-    pub fn reload_hooks(&mut self) -> FisherResult<()> {
+    pub fn reload_hooks(&mut self) -> Result<()> {
         self.hooks_blueprint.reload()
     }
 
@@ -456,7 +456,7 @@ impl WaitingJob {
         self.job.take()
     }
 
-    pub fn unlock(&mut self) -> FisherResult<()> {
+    pub fn unlock(&mut self) -> Result<()> {
         if self.locked {
             fs::File::create(&self.lock_path)?;
             self.locked = false;
@@ -471,7 +471,7 @@ impl WaitingJob {
 }
 
 
-pub fn wrapper<F: Fn(&mut TestingEnv) -> FisherResult<()>>(function: F) {
+pub fn wrapper<F: Fn(&mut TestingEnv) -> Result<()>>(function: F) {
     let mut env = TestingEnv::new();
     let result = function(&mut env);
     env.cleanup();

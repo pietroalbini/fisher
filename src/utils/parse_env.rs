@@ -13,10 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use errors::{FisherResult, ErrorKind};
+use fisher_common::errors::{Result, ErrorKind};
 
 
-pub fn parse_env(line: &str) -> FisherResult<(&str, &str)> {
+pub fn parse_env(line: &str) -> Result<(&str, &str)> {
     if let Some(pos) = line.find('=') {
         let (key, value) = line.split_at(pos);
         Ok((key, &value[1..]))

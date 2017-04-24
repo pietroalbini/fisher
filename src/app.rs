@@ -21,7 +21,7 @@ use std::sync::Arc;
 use hooks::{HookNamesIter, Hooks, HooksBlueprint, Hook};
 use processor::Processor;
 use web::WebApp;
-use errors::FisherResult;
+use fisher_common::errors::Result;
 use state::State;
 use utils;
 
@@ -80,19 +80,19 @@ impl<'a> Fisher<'a> {
         let _ = self.environment.insert(key, value);
     }
 
-    pub fn raw_env(&mut self, env: &str) -> FisherResult<()> {
+    pub fn raw_env(&mut self, env: &str) -> Result<()> {
         let (key, value) = utils::parse_env(env)?;
         self.env(key.into(), value.into());
         Ok(())
     }
 
-    pub fn add_hook<H: IntoHook>(&mut self, hook: H) -> FisherResult<()> {
+    pub fn add_hook<H: IntoHook>(&mut self, hook: H) -> Result<()> {
         self.hooks_blueprint.insert(hook.into_hook())?;
         Ok(())
     }
 
     pub fn collect_hooks<P: AsRef<Path>>(&mut self, path: P, recursive: bool)
-                                         -> FisherResult<()> {
+                                         -> Result<()> {
         self.hooks_blueprint.collect_path(path, recursive)?;
         Ok(())
     }
@@ -101,7 +101,7 @@ impl<'a> Fisher<'a> {
         self.hooks.names()
     }
 
-    pub fn start(self) -> FisherResult<RunningFisher> {
+    pub fn start(self) -> Result<RunningFisher> {
         // Finalize the hooks
         let hooks = Arc::new(self.hooks);
 
@@ -156,7 +156,7 @@ impl RunningFisher {
         self.web_api.addr()
     }
 
-    pub fn reload(&mut self) -> FisherResult<()> {
+    pub fn reload(&mut self) -> Result<()> {
         let processor = self.processor.api();
 
         self.web_api.lock();
@@ -173,7 +173,7 @@ impl RunningFisher {
         result
     }
 
-    pub fn stop(self) -> FisherResult<()> {
+    pub fn stop(self) -> Result<()> {
         self.web_api.lock();
         self.processor.stop()?;
         self.web_api.stop();

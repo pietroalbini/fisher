@@ -26,7 +26,7 @@ use serde_json;
 use providers::{Provider, StatusEventKind};
 use requests::{Request, RequestType};
 use state::State;
-use errors::FisherResult;
+use fisher_common::errors::{Result, ErrorLocation};
 
 
 pub type HookId = usize;
@@ -88,7 +88,7 @@ pub struct Hook {
 impl Hook {
 
     fn load(name: String, exec: String, state: &Arc<State>)
-            -> FisherResult<Hook> {
+            -> Result<Hook> {
         let headers = Hook::load_headers(&exec)?;
 
         Ok(Hook {
@@ -101,7 +101,7 @@ impl Hook {
         })
     }
 
-    fn load_headers(file: &str) -> FisherResult<LoadHeadersOutput> {
+    fn load_headers(file: &str) -> Result<LoadHeadersOutput> {
         let f = File::open(file).unwrap();
         let reader = BufReader::new(f);
 
@@ -134,8 +134,9 @@ impl Hook {
                         providers.push(Arc::new(provider));
                     },
                     Err(mut error) => {
-                        error.set_file(file.into());
-                        error.set_line(line_number);
+                        error.set_location(
+                            ErrorLocation::File(file.into(), Some(line_number))
+                        );
                         return Err(error);
                     }
                 }
@@ -379,7 +380,7 @@ impl HooksBlueprint {
         }
     }
 
-    pub fn insert(&mut self, hook: Arc<Hook>) -> FisherResult<()> {
+    pub fn insert(&mut self, hook: Arc<Hook>) -> Result<()> {
         self.added.push(hook);
 
         self.reload()?;
@@ -387,14 +388,14 @@ impl HooksBlueprint {
     }
 
     pub fn collect_path<P: AsRef<Path>>(&mut self, path: P, recursive: bool)
-                                      -> FisherResult<()> {
+                                      -> Result<()> {
         self.collect_paths.push((path.as_ref().to_path_buf(), recursive));
 
         self.reload()?;
         Ok(())
     }
 
-    pub fn reload(&mut self) -> FisherResult<()> {
+    pub fn reload(&mut self) -> Result<()> {
         let mut inner = HooksInner::new();
 
         // Add manually added hooks
@@ -437,7 +438,7 @@ pub struct HooksCollector {
 impl HooksCollector {
 
     pub fn new<P: AsRef<Path>>(base: P, state: Arc<State>, recursive: bool)
-                               -> FisherResult<Self> {
+                               -> Result<Self> {
         let mut dirs = VecDeque::new();
         dirs.push_front(read_dir(&base)?);
 
@@ -449,7 +450,7 @@ impl HooksCollector {
         })
     }
 
-    fn collect_file(&mut self, e: PathBuf) -> FisherResult<Option<Arc<Hook>>> {
+    fn collect_file(&mut self, e: PathBuf) -> Result<Option<Arc<Hook>>> {
         if e.is_dir() {
             if self.recursive {
                 self.dirs.push_back(read_dir(&e)?);
@@ -477,7 +478,7 @@ impl HooksCollector {
 }
 
 impl Iterator for HooksCollector {
-    type Item = FisherResult<Arc<Hook>>;
+    type Item = Result<Arc<Hook>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -527,7 +528,7 @@ mod tests {
 
     use utils::testing::*;
     use utils;
-    use errors::ErrorKind;
+    use fisher_common::errors::ErrorKind;
     use providers::StatusEventKind;
     use state::State;
 

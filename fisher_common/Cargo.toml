@@ -4,3 +4,5 @@ version = "0.1.0"
 authors = ["Pietro Albini <pietro@pietroalbini.org>"]
 
 [dependencies]
+ansi_term="^0.9"
+serde_json="^1.0"

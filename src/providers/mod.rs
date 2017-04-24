@@ -27,7 +27,7 @@ pub mod prelude {
 
     pub use providers::ProviderTrait;
     pub use requests::{Request, RequestType};
-    pub use errors::FisherResult;
+    pub use fisher_common::errors::Result;
 }
 
 
@@ -38,7 +38,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use requests::{Request, RequestType};
-use errors::{FisherResult, ErrorKind};
+use fisher_common::errors::{Result, ErrorKind};
 
 
 /// This trait should be implemented by every Fisher provider
@@ -47,7 +47,7 @@ pub trait ProviderTrait: ::std::fmt::Debug {
 
     /// This method should create a new instance of the provider, from a
     /// given configuration string
-    fn new(&str) -> FisherResult<Self> where Self: Sized;
+    fn new(&str) -> Result<Self> where Self: Sized;
 
     /// This method should validate an incoming request, returning its
     /// type if the request is valid
@@ -61,7 +61,7 @@ pub trait ProviderTrait: ::std::fmt::Debug {
     /// This means, if you want to add extra files in there you should use
     /// this. You're not required to implement this method
     fn prepare_directory(&self, _req: &Request, _path: &PathBuf)
-                         -> FisherResult<()> {
+                         -> Result<()> {
         Ok(())
     }
 
@@ -87,7 +87,7 @@ macro_rules! ProviderEnum {
 
         impl Provider {
 
-            pub fn new(name: &str, config: &str) -> FisherResult<Provider> {
+            pub fn new(name: &str, config: &str) -> Result<Provider> {
                 match name {
                     $(
                         #[cfg($cfg)]
@@ -128,7 +128,7 @@ macro_rules! ProviderEnum {
             }
 
             pub fn prepare_directory(&self, req: &Request, path: &PathBuf)
-                                    -> FisherResult<()> {
+                                    -> Result<()> {
                 match *self {
                     $(
                         #[cfg($cfg)]

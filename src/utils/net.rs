@@ -16,13 +16,13 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 
-use errors::FisherResult;
+use fisher_common::errors::Result;
 
 
 pub type Headers = HashMap<String, String>;
 
 
-pub fn parse_forwarded_for(headers: &Headers) -> FisherResult<Vec<IpAddr>> {
+pub fn parse_forwarded_for(headers: &Headers) -> Result<Vec<IpAddr>> {
     let mut result = vec![];
 
     if let Some(header) = headers.get("X-Forwarded-For".into()) {

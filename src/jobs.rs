@@ -28,7 +28,7 @@ use hooks::{Hook, HookId};
 use utils;
 use requests::Request;
 use providers::Provider;
-use errors::FisherResult;
+use fisher_common::errors::Result;
 use native;
 
 
@@ -105,7 +105,7 @@ impl Job {
         }
     }
 
-    pub fn process(&self, ctx: &Context) -> FisherResult<JobOutput> {
+    pub fn process(&self, ctx: &Context) -> Result<JobOutput> {
         let mut command = process::Command::new(&self.hook.exec());
 
         // Prepare the command's environment variables
@@ -187,7 +187,7 @@ impl Job {
     }
 
     fn save_request_body(&self, base: &PathBuf)
-                        -> FisherResult<Option<PathBuf>> {
+                        -> Result<Option<PathBuf>> {
         // Get the request body, even if some request kinds don't have one
         let body = match self.request {
             Request::Web(ref req) => &req.body,

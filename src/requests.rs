@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use errors::{FisherResult, ErrorKind};
+use fisher_common::errors::{Result, ErrorKind};
 use web::WebRequest;
 use providers::StatusEvent;
 
@@ -34,7 +34,7 @@ pub enum Request {
 
 impl Request {
 
-    pub fn web(&self) -> FisherResult<&WebRequest> {
+    pub fn web(&self) -> Result<&WebRequest> {
         if let Request::Web(ref req) = *self {
             Ok(req)
         } else {
@@ -42,7 +42,7 @@ impl Request {
         }
     }
 
-    pub fn status(&self) -> FisherResult<&StatusEvent> {
+    pub fn status(&self) -> Result<&StatusEvent> {
         if let Request::Status(ref req) = *self {
             Ok(req)
         } else {

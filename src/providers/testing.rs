@@ -19,7 +19,7 @@ use std::fs::File;
 use std::io::Write;
 
 use providers::prelude::*;
-use errors::ErrorKind;
+use fisher_common::errors::ErrorKind;
 
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ pub struct TestingProvider {
 
 impl ProviderTrait for TestingProvider {
 
-    fn new(config: &str) -> FisherResult<Self> {
+    fn new(config: &str) -> Result<Self> {
         // If the configuration is "yes", then it's correct
         if config != "FAIL" {
             Ok(TestingProvider {
@@ -96,7 +96,7 @@ impl ProviderTrait for TestingProvider {
     }
 
     fn prepare_directory(&self, _req: &Request, path: &PathBuf)
-                         -> FisherResult<()> {
+                         -> Result<()> {
         // Create a test file
         let mut dest = path.clone();
         dest.push("prepared");
