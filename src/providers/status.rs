@@ -105,7 +105,7 @@ impl StatusProvider {
 
 impl ProviderTrait for StatusProvider {
 
-    fn new(config: &str) -> FisherResult<Self> {
+    fn new(config: &str) -> Result<Self> {
         Ok(serde_json::from_str(config)?)
     }
 
@@ -171,7 +171,7 @@ impl ProviderTrait for StatusProvider {
     }
 
     fn prepare_directory(&self, req: &Request, path: &PathBuf)
-                         -> FisherResult<()> {
+                         -> Result<()> {
         let req = req.status()?;
 
         macro_rules! new_file {

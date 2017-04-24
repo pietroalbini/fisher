@@ -18,7 +18,7 @@ use ring;
 
 use providers::prelude::*;
 use utils;
-use errors::ErrorKind;
+use fisher_common::prelude::*;
 
 
 lazy_static! {
@@ -47,7 +47,7 @@ pub struct GitHubProvider {
 
 impl ProviderTrait for GitHubProvider {
 
-    fn new(input: &str) -> FisherResult<GitHubProvider> {
+    fn new(input: &str) -> Result<GitHubProvider> {
         let inst: GitHubProvider = serde_json::from_str(input)?;
 
         if let Some(ref events) = inst.events {

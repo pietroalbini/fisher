@@ -13,10 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use errors::{FisherResult, ErrorKind};
+use fisher_common::prelude::*;
 
 
-pub fn from_hex(input: &str) -> FisherResult<Vec<u8>> {
+pub fn from_hex(input: &str) -> Result<Vec<u8>> {
     let mut result = Vec::with_capacity(input.len() / 2);
 
     let mut pending: u8 = 0;
@@ -54,7 +54,7 @@ pub fn from_hex(input: &str) -> FisherResult<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use errors::ErrorKind;
+    use fisher_common::prelude::*;
 
     use super::from_hex;
 

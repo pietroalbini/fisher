@@ -23,7 +23,7 @@ use std::thread;
 use regex::{self, Regex};
 use tiny_http::{self, Method};
 
-use errors::FisherResult;
+use fisher_common::prelude::*;
 use requests::Request;
 use web::responses::Response;
 use web::proxies::ProxySupport;
@@ -152,7 +152,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
         );
     }
 
-    pub fn listen(&mut self, bind: &str) -> FisherResult<SocketAddr> {
+    pub fn listen(&mut self, bind: &str) -> Result<SocketAddr> {
         macro_rules! header {
             ($value:expr) => {
                 $value.parse::<tiny_http::Header>().unwrap()

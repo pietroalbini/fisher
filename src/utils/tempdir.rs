@@ -18,19 +18,23 @@ use std::fs;
 use std::os::unix::fs::DirBuilderExt;
 use std::io;
 use std::path;
-use std::sync;
+use std::sync::Mutex;
 
 use rand::{self, Rng};
 #[cfg(test)] use rand::{SeedableRng};
 
-use errors;
-use errors::FisherResult;
+use fisher_common::prelude::*;
 
 
 lazy_static! {
-    static ref CREATOR: sync::Mutex<TempDirCreator> = {
-        let creator = errors::unwrap(TempDirCreator::new("fisher"));
-        sync::Mutex::new(creator)
+    static ref CREATOR: Mutex<TempDirCreator> = {
+        match TempDirCreator::new("fisher") {
+            Ok(creator) => Mutex::new(creator),
+            Err(error) => {
+                error.pretty_print();
+                ::std::process::exit(1);
+            },
+        }
     };
 }
 
@@ -42,7 +46,7 @@ struct TempDirCreator {
 
 impl TempDirCreator {
 
-    fn new(prefix: &str) -> FisherResult<Self> {
+    fn new(prefix: &str) -> Result<Self> {
         // This might fail because it's not able to seed
         let rng = rand::StdRng::new()?;
 
@@ -52,7 +56,7 @@ impl TempDirCreator {
         })
     }
 
-    fn create(&mut self) -> FisherResult<path::PathBuf> {
+    fn create(&mut self) -> Result<path::PathBuf> {
         // The OS's base temp directory
         let base = env::temp_dir();
 
@@ -90,7 +94,7 @@ impl TempDirCreator {
 }
 
 
-pub fn create_temp_dir() -> FisherResult<path::PathBuf> {
+pub fn create_temp_dir() -> Result<path::PathBuf> {
     let mut creator = CREATOR.lock().unwrap();
     creator.create()
 }

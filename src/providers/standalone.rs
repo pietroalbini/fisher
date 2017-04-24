@@ -45,7 +45,7 @@ impl StandaloneProvider {
 
 impl ProviderTrait for StandaloneProvider {
 
-    fn new(config: &str) -> FisherResult<Self> {
+    fn new(config: &str) -> Result<Self> {
         // Check if it's possible to create a new instance and return it
         let inst = serde_json::from_str(config)?;
         Ok(inst)

@@ -19,7 +19,7 @@ use std::sync::{Arc, mpsc};
 use jobs::Job;
 use hooks::Hooks;
 use state::State;
-use errors::FisherResult;
+use fisher_common::prelude::*;
 
 use super::scheduler::{Scheduler, SchedulerInput};
 #[cfg(test)] use super::scheduler::DebugDetails;
@@ -39,7 +39,7 @@ impl Processor {
 
     pub fn new(max_threads: u16, hooks: Arc<Hooks>,
                environment: HashMap<String, String>, state: Arc<State>)
-               -> FisherResult<Self> {
+               -> Result<Self> {
         // Retrieve wanted information from the spawned thread
         let (input_send, input_recv) = mpsc::sync_channel(0);
         let (wait_send, wait_recv) = mpsc::channel();
@@ -71,7 +71,7 @@ impl Processor {
         Ok(processor)
     }
 
-    pub fn stop(self) -> FisherResult<()> {
+    pub fn stop(self) -> Result<()> {
         // Stop the timer
         self.timer.stop()?;
 
@@ -104,35 +104,35 @@ impl ProcessorApi {
         }
     }
 
-    pub fn queue(&self, job: Job, priority: isize) -> FisherResult<()> {
+    pub fn queue(&self, job: Job, priority: isize) -> Result<()> {
         self.input.send(SchedulerInput::Job(job, priority))?;
         Ok(())
     }
 
-    pub fn health_status(&self) -> FisherResult<HealthDetails> {
+    pub fn health_status(&self) -> Result<HealthDetails> {
         let (res_send, res_recv) = mpsc::channel();
         self.input.send(SchedulerInput::HealthStatus(res_send))?;
         Ok(res_recv.recv()?)
     }
 
-    pub fn cleanup(&self) -> FisherResult<()> {
+    pub fn cleanup(&self) -> Result<()> {
         self.input.send(SchedulerInput::Cleanup)?;
         Ok(())
     }
 
     #[cfg(test)]
-    pub fn debug_details(&self) -> FisherResult<DebugDetails> {
+    pub fn debug_details(&self) -> Result<DebugDetails> {
         let (res_send, res_recv) = mpsc::channel();
         self.input.send(SchedulerInput::DebugDetails(res_send))?;
         Ok(res_recv.recv()?)
     }
 
-    pub fn lock(&self) -> FisherResult<()> {
+    pub fn lock(&self) -> Result<()> {
         self.input.send(SchedulerInput::Lock)?;
         Ok(())
     }
 
-    pub fn unlock(&self) -> FisherResult<()> {
+    pub fn unlock(&self) -> Result<()> {
         self.input.send(SchedulerInput::Unlock)?;
         Ok(())
     }

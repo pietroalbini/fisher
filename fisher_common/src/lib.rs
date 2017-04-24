@@ -13,35 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// Optional support for compiling with clippy
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+//! This crate contains all the common code used by the Fisher application.
+//! All the other sub-crates then depends on this crate to get access to
+//! the features.
 
-extern crate regex;
 extern crate ansi_term;
-extern crate url;
-extern crate rand;
-extern crate tiny_http;
-extern crate libc;
-#[macro_use] extern crate serde_json;
-#[macro_use] extern crate serde_derive;
-#[macro_use] extern crate lazy_static;
-#[cfg(feature = "provider-github")] extern crate ring;
-#[cfg(test)] extern crate hyper;
+extern crate serde_json;
 
-extern crate fisher_common;
-
-#[macro_use] mod utils;
-mod providers;
-mod hooks;
-mod processor;
-mod jobs;
-mod web;
-mod app;
-mod requests;
-mod native;
-mod state;
-
-// Public API
-pub use app::{Fisher, RunningFisher};
-pub use fisher_common::prelude::*;
+pub mod errors;
+pub mod prelude;

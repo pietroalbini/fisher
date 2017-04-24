@@ -20,7 +20,7 @@ use std::fmt;
 use jobs::Context;
 use hooks::HookId;
 use state::State;
-use errors;
+use fisher_common::prelude::*;
 
 use super::scheduled_job::ScheduledJob;
 use super::scheduler::SchedulerInternalApi;
@@ -68,8 +68,12 @@ impl Thread {
                                 }
                             },
                             Err(mut error) => {
-                                error.set_hook(job.job().hook_name().into());
-                                let _ = errors::print_err::<()>(Err(error));
+                                error.set_location(
+                                    ErrorLocation::HookProcessing(
+                                        job.job().hook_name().to_string()
+                                    )
+                                );
+                                error.pretty_print();
                             }
                         }
 
