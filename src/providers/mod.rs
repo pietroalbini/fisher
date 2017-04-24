@@ -27,7 +27,7 @@ pub mod prelude {
 
     pub use providers::ProviderTrait;
     pub use requests::{Request, RequestType};
-    pub use fisher_common::errors::Result;
+    pub use fisher_common::prelude::*;
 }
 
 
@@ -38,7 +38,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use requests::{Request, RequestType};
-use fisher_common::errors::{Result, ErrorKind};
+use fisher_common::prelude::*;
 
 
 /// This trait should be implemented by every Fisher provider

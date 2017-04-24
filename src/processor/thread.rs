@@ -20,7 +20,7 @@ use std::fmt;
 use jobs::Context;
 use hooks::HookId;
 use state::State;
-use fisher_common::errors::ErrorLocation;
+use fisher_common::prelude::*;
 
 use super::scheduled_job::ScheduledJob;
 use super::scheduler::SchedulerInternalApi;

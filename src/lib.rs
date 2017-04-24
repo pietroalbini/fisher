@@ -44,4 +44,4 @@ mod state;
 
 // Public API
 pub use app::{Fisher, RunningFisher};
-pub use fisher_common::errors::*;
+pub use fisher_common::prelude::*;

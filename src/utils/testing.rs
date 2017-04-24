@@ -29,7 +29,7 @@ use web::{WebApp, WebRequest};
 use requests::Request;
 use processor::{ProcessorApi, ProcessorInput, HealthDetails};
 use state::State;
-use fisher_common::errors::Result;
+use fisher_common::prelude::*;
 use utils;
 
 

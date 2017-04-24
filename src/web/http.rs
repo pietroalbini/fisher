@@ -23,7 +23,7 @@ use std::thread;
 use regex::{self, Regex};
 use tiny_http::{self, Method};
 
-use fisher_common::errors::Result;
+use fisher_common::prelude::*;
 use requests::Request;
 use web::responses::Response;
 use web::proxies::ProxySupport;

@@ -28,7 +28,7 @@ use hooks::{Hook, HookId};
 use utils;
 use requests::Request;
 use providers::Provider;
-use fisher_common::errors::Result;
+use fisher_common::prelude::*;
 use native;
 
 

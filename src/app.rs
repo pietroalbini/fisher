@@ -21,7 +21,7 @@ use std::sync::Arc;
 use hooks::{HookNamesIter, Hooks, HooksBlueprint, Hook};
 use processor::Processor;
 use web::WebApp;
-use fisher_common::errors::Result;
+use fisher_common::prelude::*;
 use state::State;
 use utils;
 

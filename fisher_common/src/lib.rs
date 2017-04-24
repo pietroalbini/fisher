@@ -21,3 +21,4 @@ extern crate ansi_term;
 extern crate serde_json;
 
 pub mod errors;
+pub mod prelude;

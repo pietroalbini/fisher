@@ -19,7 +19,7 @@ use std::net::SocketAddr;
 
 use tiny_http::Method;
 
-use fisher_common::errors::Result;
+use fisher_common::prelude::*;
 use hooks::Hooks;
 use processor::ProcessorApi;
 use web::http::HttpServer;

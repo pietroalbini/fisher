@@ -26,7 +26,7 @@ use serde_json;
 use providers::{Provider, StatusEventKind};
 use requests::{Request, RequestType};
 use state::State;
-use fisher_common::errors::{Result, ErrorLocation};
+use fisher_common::prelude::*;
 
 
 pub type HookId = usize;
@@ -528,7 +528,7 @@ mod tests {
 
     use utils::testing::*;
     use utils;
-    use fisher_common::errors::ErrorKind;
+    use fisher_common::prelude::*;
     use providers::StatusEventKind;
     use state::State;
 

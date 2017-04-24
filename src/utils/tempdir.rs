@@ -23,7 +23,7 @@ use std::sync::Mutex;
 use rand::{self, Rng};
 #[cfg(test)] use rand::{SeedableRng};
 
-use fisher_common::errors::Result;
+use fisher_common::prelude::*;
 
 
 lazy_static! {

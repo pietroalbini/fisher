@@ -19,7 +19,7 @@ use std::sync::{Arc, mpsc};
 use jobs::Job;
 use hooks::Hooks;
 use state::State;
-use fisher_common::errors::Result;
+use fisher_common::prelude::*;
 
 use super::scheduler::{Scheduler, SchedulerInput};
 #[cfg(test)] use super::scheduler::DebugDetails;

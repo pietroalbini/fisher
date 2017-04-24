@@ -15,7 +15,7 @@
 
 use serde_json;
 
-use fisher_common::errors::Error;
+use fisher_common::prelude::*;
 use processor::HealthDetails;
 
 
@@ -76,7 +76,7 @@ mod tests {
     use serde_json;
 
     use processor::HealthDetails;
-    use fisher_common::errors::{Error, ErrorKind};
+    use fisher_common::prelude::*;
     use super::Response;
 
 

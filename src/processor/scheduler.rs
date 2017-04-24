@@ -20,7 +20,7 @@ use jobs::{Job, JobOutput, Context};
 use providers::StatusEvent;
 use hooks::{Hooks, HookId};
 use utils::Serial;
-use fisher_common::errors::Result;
+use fisher_common::prelude::*;
 use requests::Request;
 use state::State;
 

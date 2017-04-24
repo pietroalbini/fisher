@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use fisher_common::errors::{Result, ErrorKind};
+use fisher_common::prelude::*;
 use web::WebRequest;
 use providers::StatusEvent;
 

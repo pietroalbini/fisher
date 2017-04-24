@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Pietro Albini
+// Copyright (C) 2017 Pietro Albini
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,30 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use fisher_common::prelude::*;
+//! Prelude for Fisher.
+//!
+//! This module re-exports useful things used by all the Fisher code, to be
+//! easily included.
 
-
-pub fn parse_env(line: &str) -> Result<(&str, &str)> {
-    if let Some(pos) = line.find('=') {
-        let (key, value) = line.split_at(pos);
-        Ok((key, &value[1..]))
-    } else {
-        Err(ErrorKind::InvalidInput(
-            format!("Not a valid environment definition: {}", line)
-        ).into())
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::parse_env;
-
-
-    #[test]
-    fn test_parse_env() {
-        assert!(parse_env("b").is_err());
-        assert_eq!(parse_env("a=b").unwrap(), ("a", "b"));
-        assert_eq!(parse_env("a=b=c").unwrap(), ("a", "b=c"));
-    }
-}
+pub use errors::{Result, Error, ErrorKind, ErrorLocation};

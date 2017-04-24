@@ -18,7 +18,7 @@ use ring;
 
 use providers::prelude::*;
 use utils;
-use fisher_common::errors::ErrorKind;
+use fisher_common::prelude::*;
 
 
 lazy_static! {

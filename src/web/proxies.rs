@@ -16,7 +16,7 @@
 use std::net::IpAddr;
 
 use requests::Request;
-use fisher_common::errors::{Result, ErrorKind};
+use fisher_common::prelude::*;
 use utils;
 
 
@@ -82,7 +82,7 @@ mod tests {
     use std::str::FromStr;
 
     use utils::testing::*;
-    use fisher_common::errors::ErrorKind;
+    use fisher_common::prelude::*;
     use requests::Request;
 
     use super::ProxySupport;

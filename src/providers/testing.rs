@@ -19,7 +19,7 @@ use std::fs::File;
 use std::io::Write;
 
 use providers::prelude::*;
-use fisher_common::errors::ErrorKind;
+use fisher_common::prelude::*;
 
 
 #[derive(Debug)]
