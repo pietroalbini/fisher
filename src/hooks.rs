@@ -23,13 +23,11 @@ use std::sync::{Arc, RwLock, RwLockReadGuard};
 use regex::Regex;
 use serde_json;
 
+use fisher_common::prelude::*;
+use fisher_common::state::{State, IdKind, UniqueId};
+
 use providers::{Provider, StatusEventKind};
 use requests::{Request, RequestType};
-use state::State;
-use fisher_common::prelude::*;
-
-
-pub type HookId = usize;
 
 
 lazy_static! {
@@ -77,7 +75,7 @@ struct LoadHeadersOutput {
 
 #[derive(Debug)]
 pub struct Hook {
-    id: usize,
+    id: UniqueId,
     name: String,
     exec: String,
     priority: isize,
@@ -92,7 +90,7 @@ impl Hook {
         let headers = Hook::load_headers(&exec)?;
 
         Ok(Hook {
-            id: state.next_hook_id(),
+            id: state.next_id(IdKind::HookId),
             name: name,
             exec: exec,
             priority: headers.preferences.priority(),
@@ -164,7 +162,7 @@ impl Hook {
         }
     }
 
-    pub fn id(&self) -> HookId {
+    pub fn id(&self) -> UniqueId {
         self.id
     }
 
@@ -276,7 +274,7 @@ pub struct HookProvider {
 #[derive(Debug)]
 struct HooksInner {
     hooks: Vec<Arc<Hook>>,
-    by_id: HashMap<HookId, Arc<Hook>>,
+    by_id: HashMap<UniqueId, Arc<Hook>>,
     by_name: HashMap<String, Arc<Hook>>,
     status_hooks: HashMap<StatusEventKind, Vec<HookProvider>>,
 }
@@ -325,7 +323,7 @@ pub struct Hooks {
 
 impl Hooks {
 
-    pub fn id_exists(&self, id: &HookId) -> bool {
+    pub fn id_exists(&self, id: &UniqueId) -> bool {
         match self.inner.read() {
             Ok(inner) => inner.by_id.contains_key(id),
             Err(poisoned) => poisoned.get_ref().by_id.contains_key(id),
@@ -526,11 +524,12 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
+    use fisher_common::state::State;
+
     use utils::testing::*;
     use utils;
     use fisher_common::prelude::*;
     use providers::StatusEventKind;
-    use state::State;
 
     use super::{Hook, HooksCollector, HooksBlueprint};
 
@@ -938,9 +937,13 @@ mod tests {
             r#"echo "Hello world 2"#
         );
 
-        assert_eq!(assert_hook!(&state, base, "hook1.sh").id(), 0);
-        assert_eq!(assert_hook!(&state, base, "hook2.sh").id(), 1);
-        assert_eq!(assert_hook!(&state, base, "hook1.sh").id(), 2);
+        let id1 = assert_hook!(&state, base, "hook1.sh").id();
+        let id2 = assert_hook!(&state, base, "hook1.sh").id();
+        let id3 = assert_hook!(&state, base, "hook1.sh").id();
+
+        assert!(id1 < id2);
+        assert!(id2 < id3);
+        assert!(id1 < id3);
 
         fs::remove_dir_all(&base).unwrap();
     }

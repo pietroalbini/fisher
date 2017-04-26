@@ -24,11 +24,13 @@ use std::io::Write;
 use std::sync::Arc;
 use std::net::IpAddr;
 
-use hooks::{Hook, HookId};
+use fisher_common::prelude::*;
+use fisher_common::state::UniqueId;
+
+use hooks::Hook;
 use utils;
 use requests::Request;
 use providers::Provider;
-use fisher_common::prelude::*;
 use native;
 
 
@@ -84,7 +86,7 @@ impl Job {
     }
 
     #[inline]
-    pub fn hook_id(&self) -> HookId {
+    pub fn hook_id(&self) -> UniqueId {
         self.hook.id()
     }
 

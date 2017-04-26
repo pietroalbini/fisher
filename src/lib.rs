@@ -40,7 +40,6 @@ mod web;
 mod app;
 mod requests;
 mod native;
-mod state;
 
 // Public API
 pub use app::{Fisher, RunningFisher};

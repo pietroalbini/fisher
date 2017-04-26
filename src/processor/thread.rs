@@ -17,16 +17,13 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 use std::fmt;
 
-use jobs::Context;
-use hooks::HookId;
-use state::State;
 use fisher_common::prelude::*;
+use fisher_common::state::{State, IdKind, UniqueId};
+
+use jobs::Context;
 
 use super::scheduled_job::ScheduledJob;
 use super::scheduler::SchedulerInternalApi;
-
-
-pub type ThreadId = usize;
 
 
 #[derive(Debug)]
@@ -37,8 +34,8 @@ enum ThreadInput {
 
 
 pub struct Thread {
-    id: ThreadId,
-    currently_running: Option<HookId>,
+    id: UniqueId,
+    currently_running: Option<UniqueId>,
 
     should_stop: bool,
 
@@ -51,7 +48,7 @@ impl Thread {
     pub fn new(processor: SchedulerInternalApi, ctx: Arc<Context>,
                state: &Arc<State>) -> Thread {
         let (input_send, input_recv) = mpsc::channel();
-        let id = state.next_thread_id();
+        let id = state.next_id(IdKind::ThreadId);
 
         let handle = thread::spawn(move || {
             for input in input_recv.iter() {
@@ -117,11 +114,11 @@ impl Thread {
         self.handle.join().unwrap();
     }
 
-    pub fn id(&self) -> ThreadId {
+    pub fn id(&self) -> UniqueId {
         self.id
     }
 
-    pub fn currently_running(&self) -> Option<HookId> {
+    pub fn currently_running(&self) -> Option<UniqueId> {
         self.currently_running
     }
 

@@ -15,8 +15,9 @@
 
 use std::cmp::Ordering;
 
+use fisher_common::state::UniqueId;
+
 use jobs::Job;
-use hooks::HookId;
 use utils::Serial;
 
 
@@ -45,7 +46,7 @@ impl ScheduledJob {
         self.job.trigger_status_hooks()
     }
 
-    pub fn hook_id(&self) -> HookId {
+    pub fn hook_id(&self) -> UniqueId {
         self.job.hook_id()
     }
 }

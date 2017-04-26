@@ -16,15 +16,16 @@
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, mpsc};
 
+use fisher_common::prelude::*;
+use fisher_common::state::{State, UniqueId};
+
 use jobs::{Job, JobOutput, Context};
 use providers::StatusEvent;
-use hooks::{Hooks, HookId};
+use hooks::Hooks;
 use utils::Serial;
-use fisher_common::prelude::*;
 use requests::Request;
-use state::State;
 
-use super::thread::{Thread, ThreadId};
+use super::thread::Thread;
 use super::scheduled_job::ScheduledJob;
 
 
@@ -34,7 +35,7 @@ const STATUS_EVENTS_PRIORITY: isize = 1000;
 #[cfg(test)]
 #[derive(Debug)]
 pub struct DebugDetails {
-    pub waiting: HashMap<HookId, usize>,
+    pub waiting: HashMap<UniqueId, usize>,
 }
 
 #[cfg(test)]
@@ -74,7 +75,7 @@ pub enum SchedulerInput {
     Unlock,
 
     StopSignal,
-    JobEnded(ThreadId, HookId),
+    JobEnded(UniqueId, UniqueId),
 }
 
 
@@ -96,7 +97,7 @@ impl SchedulerInternalApi {
         Ok(())
     }
 
-    pub fn job_ended(&self, thread: ThreadId, job: &ScheduledJob)
+    pub fn job_ended(&self, thread: UniqueId, job: &ScheduledJob)
                      -> Result<()> {
         self.input.send(SchedulerInput::JobEnded(thread, job.hook_id()))?;
         Ok(())
@@ -114,8 +115,8 @@ pub struct Scheduler {
     locked: bool,
     should_stop: bool,
     queue: BinaryHeap<ScheduledJob>,
-    waiting: HashMap<HookId, BinaryHeap<ScheduledJob>>,
-    threads: HashMap<ThreadId, Thread>,
+    waiting: HashMap<UniqueId, BinaryHeap<ScheduledJob>>,
+    threads: HashMap<UniqueId, Thread>,
 
     input_send: mpsc::Sender<SchedulerInput>,
     input_recv: mpsc::Receiver<SchedulerInput>,
@@ -418,7 +419,7 @@ impl Scheduler {
         }
     }
 
-    fn is_running(&self, hook: HookId) -> bool {
+    fn is_running(&self, hook: UniqueId) -> bool {
         for thread in self.threads.values() {
             if thread.currently_running() == Some(hook) {
                 return true;
@@ -437,8 +438,9 @@ mod tests {
     use std::collections::{HashMap, VecDeque};
     use std::sync::Arc;
 
+    use fisher_common::state::State;
+
     use utils::testing::*;
-    use state::State;
     use requests::Request;
 
     use super::super::Processor;

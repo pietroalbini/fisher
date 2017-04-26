@@ -22,3 +22,4 @@ extern crate serde_json;
 
 pub mod errors;
 pub mod prelude;
+pub mod state;

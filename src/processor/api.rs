@@ -16,10 +16,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, mpsc};
 
+use fisher_common::prelude::*;
+use fisher_common::state::State;
+
 use jobs::Job;
 use hooks::Hooks;
-use state::State;
-use fisher_common::prelude::*;
 
 use super::scheduler::{Scheduler, SchedulerInput};
 #[cfg(test)] use super::scheduler::DebugDetails;

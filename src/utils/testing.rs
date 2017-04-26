@@ -23,13 +23,14 @@ use std::fs;
 use hyper::client as hyper;
 use hyper::method::Method;
 
-use hooks::{HookId, Hooks, HooksBlueprint};
+use fisher_common::prelude::*;
+use fisher_common::state::{State, UniqueId};
+
+use hooks::{Hooks, HooksBlueprint};
 use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
 use processor::{ProcessorApi, ProcessorInput, HealthDetails};
-use state::State;
-use fisher_common::prelude::*;
 use utils;
 
 
@@ -368,7 +369,7 @@ impl TestingEnv {
         self.hooks.clone()
     }
 
-    pub fn hook_id_of(&self, name: &str) -> Option<HookId> {
+    pub fn hook_id_of(&self, name: &str) -> Option<UniqueId> {
         self.hooks.get_by_name(name).map(|hook| hook.id())
     }
 
