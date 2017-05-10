@@ -2,6 +2,12 @@
 
 This document contains what changed in each release of Fisher.
 
+### Fisher 1.0.0-beta.6
+
+*Released on May 10th, 2017.*
+
+* Update dependencies versions
+
 ### Fisher 1.0.0-beta.5
 
 *Released on April 23th, 2017.*
