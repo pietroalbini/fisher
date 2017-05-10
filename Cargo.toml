@@ -1,6 +1,6 @@
 [package]
 name = "fisher"
-version = "1.0.0-beta.5"
+version = "1.0.0-beta.6"
 license = "GPL-3.0"
 
 description = "Webhooks catcher written in Rust"
@@ -31,7 +31,7 @@ serde_json="^1.0"
 fisher_common = { version="^0.1", path="fisher_common" }
 
 # Dependencies for the "provider-github" feature
-ring = { version="^0.7", optional=true }
+ring = { version="^0.9.4", optional=true }
 
 # Clippy is optional
 clippy = { version="^0.0", optional=true }
