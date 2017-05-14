@@ -1,2 +1,4 @@
-/target
 /build
+
+/target
+/fisher_common/target

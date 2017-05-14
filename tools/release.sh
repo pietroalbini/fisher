@@ -55,6 +55,14 @@ upload_to_files() {
 
 upload_to_crates() {
     git -c commit.gpgsign=false stash save --include-untracked
+
+    # Upload all the submodules
+    for sub in fisher_common; do
+        cd "${sub}"
+        cargo publish
+        cd ..
+    done
+
     cargo publish
     git stash pop
 }
