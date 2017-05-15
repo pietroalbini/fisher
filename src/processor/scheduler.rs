@@ -20,10 +20,8 @@ use fisher_common::prelude::*;
 use fisher_common::state::{State, UniqueId};
 
 use jobs::{Job, JobOutput, Context};
-use providers::StatusEvent;
 use hooks::Hooks;
 use utils::Serial;
-use requests::Request;
 
 use super::thread::Thread;
 use super::scheduled_job::ScheduledJob;
@@ -65,7 +63,7 @@ pub struct HealthDetails {
 pub enum SchedulerInput {
     Job(Job, isize),
     HealthStatus(mpsc::Sender<HealthDetails>),
-    QueueStatusEvent(StatusEvent),
+    ProcessOutput(JobOutput),
 
     Cleanup,
 
@@ -87,13 +85,7 @@ pub struct SchedulerInternalApi {
 impl SchedulerInternalApi {
 
     pub fn record_output(&self, output: JobOutput) -> Result<()> {
-        let event = if output.success {
-            StatusEvent::JobCompleted(output)
-        } else {
-            StatusEvent::JobFailed(output)
-        };
-
-        self.input.send(SchedulerInput::QueueStatusEvent(event))?;
+        self.input.send(SchedulerInput::ProcessOutput(output))?;
         Ok(())
     }
 
@@ -135,7 +127,7 @@ impl Scheduler {
         // Populate the waiting HashMap with non-parallel hooks
         let mut waiting = HashMap::new();
         for hook in hooks.iter() {
-            if ! hook.parallel() {
+            if ! hook.can_be_parallel() {
                 waiting.insert(hook.id(), BinaryHeap::new());
             }
         }
@@ -198,16 +190,14 @@ impl Scheduler {
                     })?;
                 },
 
-                SchedulerInput::QueueStatusEvent(event) => {
-                    for hook in self.hooks.status_hooks_iter(event.kind()) {
-                        to_schedule.push(ScheduledJob::new(
-                            Job::new(
-                                hook.hook.clone(),
-                                Some(hook.provider.clone()),
-                                Request::Status(event.clone()),
-                            ), STATUS_EVENTS_PRIORITY, serial.clone(),
-                        ));
-                        serial.next();
+                SchedulerInput::ProcessOutput(output) => {
+                    if let Some(jobs) = self.hooks.jobs_after_output(output) {
+                        for job in jobs {
+                            to_schedule.push(ScheduledJob::new(
+                                job, STATUS_EVENTS_PRIORITY, serial.clone(),
+                            ));
+                            serial.next();
+                        }
                     }
 
                     // This is a separated step due to mutable borrows
@@ -346,7 +336,7 @@ impl Scheduler {
 
         // Add new hooks
         for hook in self.hooks.iter() {
-            if hook.parallel() {
+            if hook.can_be_parallel() {
                 continue;
             }
             if self.waiting.contains_key(&hook.id()) {

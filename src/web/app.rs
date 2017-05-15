@@ -20,6 +20,7 @@ use std::net::SocketAddr;
 use tiny_http::Method;
 
 use fisher_common::prelude::*;
+
 use hooks::Hooks;
 use processor::ProcessorApi;
 use web::http::HttpServer;
@@ -93,6 +94,8 @@ mod tests {
     use hyper::method::Method;
     use hyper::header::Headers;
 
+    use fisher_common::prelude::*;
+
     use utils::testing::*;
     use processor::{HealthDetails, ProcessorInput};
 
@@ -138,7 +141,7 @@ mod tests {
 
         // Assert the right job is queued
         if let ProcessorInput::Job(job, _) = input.unwrap() {
-            assert_eq!(job.hook_name(), "example.sh");
+            assert_eq!(job.script_name(), "example.sh");
         } else {
             panic!("Wrong processor input received");
         }

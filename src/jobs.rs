@@ -80,17 +80,6 @@ impl Job {
         }
     }
 
-    #[inline]
-    pub fn hook_name(&self) -> &str {
-        self.hook.name()
-    }
-
-    #[inline]
-    pub fn hook_id(&self) -> UniqueId {
-        self.hook.id()
-    }
-
-    #[inline]
     pub fn request_ip(&self) -> IpAddr {
         match self.request {
             Request::Web(ref req) => req.source,
@@ -98,7 +87,6 @@ impl Job {
         }
     }
 
-    #[inline]
     pub fn trigger_status_hooks(&self) -> bool {
         if let Some(ref provider) = self.provider {
             provider.trigger_status_hooks(&self.request)
@@ -107,7 +95,7 @@ impl Job {
         }
     }
 
-    pub fn process(&self, ctx: &Context) -> Result<JobOutput> {
+    fn process(&self, ctx: &Context) -> Result<JobOutput> {
         let mut command = process::Command::new(&self.hook.exec());
 
         // Prepare the command's environment variables
@@ -207,6 +195,24 @@ impl Job {
     }
 }
 
+impl JobTrait for Job {
+    type Context = Context;
+    type Output = JobOutput;
+    type Script = Hook;
+
+    fn execute(&self, ctx: &Context) -> Result<JobOutput> {
+        self.process(ctx)
+    }
+
+    fn script_id(&self) -> UniqueId {
+        self.hook.id()
+    }
+
+    fn script_name(&self) -> &str {
+        self.hook.name()
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct JobOutput {
@@ -219,6 +225,8 @@ pub struct JobOutput {
 
     pub hook_name: String,
     pub request_ip: IpAddr,
+
+    pub trigger_status_hooks: bool,
 }
 
 impl<'a> From<(&'a Job, process::Output)> for JobOutput {
@@ -232,8 +240,10 @@ impl<'a> From<(&'a Job, process::Output)> for JobOutput {
             exit_code: data.1.status.code(),
             signal: data.1.status.signal(),
 
-            hook_name: data.0.hook_name().into(),
+            hook_name: data.0.script_name().into(),
             request_ip: data.0.request_ip(),
+
+            trigger_status_hooks: data.0.trigger_status_hooks(),
         }
     }
 }
@@ -243,6 +253,8 @@ impl<'a> From<(&'a Job, process::Output)> for JobOutput {
 mod tests {
     use std::env;
     use std::collections::HashMap;
+
+    use fisher_common::prelude::*;
 
     use utils::testing::*;
     use utils;
@@ -298,7 +310,7 @@ mod tests {
         let env = TestingEnv::new();
 
         let job = env.create_job("example.sh", dummy_web_request().into());
-        assert_eq!(job.hook_name(), "example.sh".to_string());
+        assert_eq!(job.script_name(), "example.sh");
 
         env.cleanup();
     }

@@ -98,7 +98,7 @@ impl<'a> Fisher<'a> {
         Ok(())
     }
 
-    pub fn hook_names<'b>(&'b self) -> HookNamesIter<'b> {
+    pub fn hook_names(&self) -> HookNamesIter {
         self.hooks.names()
     }
 

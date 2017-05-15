@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::collections::{HashMap, VecDeque};
 use std::os::unix::fs::PermissionsExt;
 use std::io::{BufReader, BufRead};
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 
 use regex::Regex;
 use serde_json;
@@ -26,8 +26,9 @@ use serde_json;
 use fisher_common::prelude::*;
 use fisher_common::state::{State, IdKind, UniqueId};
 
-use providers::{Provider, StatusEventKind};
+use providers::{Provider, StatusEvent, StatusEventKind};
 use requests::{Request, RequestType};
+use jobs::{Job, JobOutput};
 
 
 lazy_static! {
@@ -162,10 +163,6 @@ impl Hook {
         }
     }
 
-    pub fn id(&self) -> UniqueId {
-        self.id
-    }
-
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -177,52 +174,64 @@ impl Hook {
     pub fn priority(&self) -> isize {
         self.priority
     }
+}
 
-    pub fn parallel(&self) -> bool {
+impl ScriptTrait for Hook {
+    type Id = UniqueId;
+
+    fn id(&self) -> UniqueId {
+        self.id
+    }
+
+    fn can_be_parallel(&self) -> bool {
         self.parallel
     }
 }
 
 
-pub struct HooksIter<'a> {
-    guard: RwLockReadGuard<'a, HooksInner>,
+pub struct HooksIter {
+    inner: Arc<RwLock<HooksInner>>,
     count: usize,
 }
 
-impl<'a> HooksIter<'a> {
+impl HooksIter {
 
-    fn new(guard: RwLockReadGuard<'a, HooksInner>) -> Self {
+    fn new(inner: Arc<RwLock<HooksInner>>) -> Self {
         HooksIter {
-            guard: guard,
+            inner,
             count: 0,
         }
     }
 }
 
-impl<'a> Iterator for HooksIter<'a> {
+impl Iterator for HooksIter {
     type Item = Arc<Hook>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.count += 1;
-        self.guard.hooks.get(self.count - 1).cloned()
+
+        match self.inner.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }.hooks.get(self.count - 1).cloned()
     }
 }
 
 
-pub struct HookNamesIter<'a> {
-    iter: HooksIter<'a>,
+pub struct HookNamesIter {
+    iter: HooksIter,
 }
 
-impl<'a> HookNamesIter<'a> {
+impl HookNamesIter {
 
-    fn new(iter: HooksIter<'a>) -> Self {
+    fn new(iter: HooksIter) -> Self {
         HookNamesIter {
             iter: iter,
         }
     }
 }
 
-impl<'a> Iterator for HookNamesIter<'a> {
+impl Iterator for HookNamesIter {
     type Item = String;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -231,32 +240,43 @@ impl<'a> Iterator for HookNamesIter<'a> {
 }
 
 
-pub struct StatusHooksIter<'a> {
-    guard: RwLockReadGuard<'a, HooksInner>,
-    kind: StatusEventKind,
+pub struct StatusJobsIter {
+    inner: Arc<RwLock<HooksInner>>,
+    event: StatusEvent,
     count: usize,
 }
 
-impl<'a> StatusHooksIter<'a> {
+impl StatusJobsIter {
 
-    fn new(guard: RwLockReadGuard<'a, HooksInner>, kind: StatusEventKind)
-           -> Self {
-        StatusHooksIter {
-            guard: guard,
-            kind: kind,
+    fn new(inner: Arc<RwLock<HooksInner>>, event: StatusEvent) -> Self {
+        StatusJobsIter {
+            inner,
+            event,
             count: 0
         }
     }
 }
 
-impl<'a> Iterator for StatusHooksIter<'a> {
-    type Item = HookProvider;
+impl Iterator for StatusJobsIter {
+    type Item = Job;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.count += 1;
 
-        if let Some(all) = self.guard.status_hooks.get(&self.kind) {
-            all.get(self.count - 1).cloned()
+        let inner = match self.inner.read() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+
+        if let Some(all) = inner.status_hooks.get(&self.event.kind()) {
+            if let Some(hp) = all.get(self.count - 1).cloned() {
+                Some(Job::new(
+                    hp.hook, Some(hp.provider),
+                    Request::Status(self.event.clone()),
+                ))
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -323,13 +343,6 @@ pub struct Hooks {
 
 impl Hooks {
 
-    pub fn id_exists(&self, id: &UniqueId) -> bool {
-        match self.inner.read() {
-            Ok(inner) => inner.by_id.contains_key(id),
-            Err(poisoned) => poisoned.get_ref().by_id.contains_key(id),
-        }
-    }
-
     pub fn get_by_name(&self, name: &str) -> Option<Arc<Hook>> {
         match self.inner.read() {
             Ok(inner) => inner.get_by_name(name),
@@ -337,22 +350,40 @@ impl Hooks {
         }
     }
 
-    pub fn iter(&self) -> HooksIter {
-        match self.inner.read() {
-            Ok(guard) => HooksIter::new(guard),
-            Err(poisoned) => HooksIter::new(poisoned.into_inner()),
-        }
-    }
-
     pub fn names(&self) -> HookNamesIter {
         HookNamesIter::new(self.iter())
     }
+}
 
-    pub fn status_hooks_iter(&self, kind: StatusEventKind) -> StatusHooksIter {
+impl ScriptsRepositoryTrait for Hooks {
+    type Script = Hook;
+    type Job = Job;
+    type ScriptsIter = HooksIter;
+    type JobsIter = StatusJobsIter;
+
+    fn id_exists(&self, id: &UniqueId) -> bool {
         match self.inner.read() {
-            Ok(guard) => StatusHooksIter::new(guard, kind),
-            Err(poisoned) => StatusHooksIter::new(poisoned.into_inner(), kind),
+            Ok(inner) => inner.by_id.contains_key(id),
+            Err(poisoned) => poisoned.get_ref().by_id.contains_key(id),
         }
+    }
+
+    fn iter(&self) -> HooksIter {
+        HooksIter::new(self.inner.clone())
+    }
+
+    fn jobs_after_output(&self, output: JobOutput) -> Option<StatusJobsIter> {
+        if ! output.trigger_status_hooks {
+            return None;
+        }
+
+        let event = if output.success {
+            StatusEvent::JobCompleted(output)
+        } else {
+            StatusEvent::JobFailed(output)
+        };
+
+        Some(StatusJobsIter::new(self.inner.clone(), event))
     }
 }
 
@@ -707,7 +738,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hooks_status_hooks_iter() {
+    fn test_hooks_status_hooks_collection() {
         let base = utils::create_temp_dir().unwrap();
 
         // Create a standard hook
@@ -735,14 +766,17 @@ mod tests {
         let hooks = blueprint.hooks();
 
         assert_eq!(
-            hooks.status_hooks_iter(StatusEventKind::JobCompleted)
+            hooks.inner.read().unwrap().status_hooks
+                 .get(&StatusEventKind::JobCompleted).unwrap().iter()
                  .map(|hp| hp.hook.name().to_string())
                  .collect::<Vec<String>>(),
             vec!["status1.sh".to_string()]
         );
         assert_eq!(
             {
-                let mut status = hooks.status_hooks_iter(StatusEventKind::JobFailed)
+                let mut status = hooks.inner.read().unwrap().status_hooks
+                                      .get(&StatusEventKind::JobFailed)
+                                      .unwrap().iter()
                                       .map(|hp| hp.hook.name().to_string())
                                       .collect::<Vec<String>>();
                 status.sort();

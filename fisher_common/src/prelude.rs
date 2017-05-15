@@ -19,3 +19,4 @@
 //! easily included.
 
 pub use errors::{Result, Error, ErrorKind, ErrorLocation};
+pub use traits::*;

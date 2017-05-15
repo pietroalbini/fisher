@@ -16,8 +16,9 @@
 use std::cmp::Ordering;
 
 use fisher_common::state::UniqueId;
+use fisher_common::prelude::*;
 
-use jobs::Job;
+use jobs::{Job, Context, JobOutput};
 use utils::Serial;
 
 
@@ -38,16 +39,16 @@ impl ScheduledJob {
         }
     }
 
-    pub fn job(&self) -> &Job {
-        &self.job
-    }
-
-    pub fn trigger_status_hooks(&self) -> bool {
-        self.job.trigger_status_hooks()
+    pub fn execute(&self, ctx: &Context) -> Result<JobOutput> {
+        self.job.execute(ctx)
     }
 
     pub fn hook_id(&self) -> UniqueId {
-        self.job.hook_id()
+        self.job.script_id()
+    }
+
+    pub fn hook_name(&self) -> &str {
+        self.job.script_name()
     }
 }
 

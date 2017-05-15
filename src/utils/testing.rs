@@ -80,6 +80,8 @@ pub fn dummy_job_output() -> JobOutput {
 
         hook_name: "test".into(),
         request_ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+
+        trigger_status_hooks: true,
     }
 }
 

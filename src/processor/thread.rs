@@ -55,19 +55,17 @@ impl Thread {
                 match input {
                     // A new job should be processed
                     ThreadInput::Process(job) => {
-                        let result = job.job().process(&ctx);
+                        let result = job.execute(&ctx);
 
                         // Display the error if there is one
                         match result {
                             Ok(output) => {
-                                if job.trigger_status_hooks() {
-                                    processor.record_output(output).unwrap();
-                                }
+                                processor.record_output(output).unwrap();
                             },
                             Err(mut error) => {
                                 error.set_location(
                                     ErrorLocation::HookProcessing(
-                                        job.job().hook_name().to_string()
+                                        job.hook_name().to_string()
                                     )
                                 );
                                 error.pretty_print();
