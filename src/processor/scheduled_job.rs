@@ -16,8 +16,8 @@
 use std::cmp::Ordering;
 
 use fisher_common::prelude::*;
+use fisher_common::serial::Serial;
 
-use utils::Serial;
 use super::types::{Job, JobContext, JobOutput, ScriptId};
 
 

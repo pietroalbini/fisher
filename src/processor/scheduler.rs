@@ -18,8 +18,7 @@ use std::sync::{Arc, mpsc};
 
 use fisher_common::prelude::*;
 use fisher_common::state::{State, UniqueId};
-
-use utils::Serial;
+use fisher_common::serial::Serial;
 
 use super::thread::Thread;
 use super::scheduled_job::ScheduledJob;
@@ -160,11 +159,9 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
 
                 SchedulerInput::Job(job, priority) => {
                     self.queue_job(ScheduledJob::new(
-                        job, priority, serial.clone(),
+                        job, priority, serial.incr(),
                     ));
                     self.run_jobs();
-
-                    serial.next();
                 },
 
                 SchedulerInput::HealthStatus(return_to) => {
@@ -189,9 +186,8 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                     if let Some(jobs) = self.hooks.jobs_after_output(output) {
                         for job in jobs {
                             to_schedule.push(ScheduledJob::new(
-                                job, STATUS_EVENTS_PRIORITY, serial.clone(),
+                                job, STATUS_EVENTS_PRIORITY, serial.incr(),
                             ));
-                            serial.next();
                         }
                     }
 
