@@ -16,37 +16,37 @@
 use std::sync::{Arc, mpsc};
 use std::thread;
 use std::fmt;
+use std::ops::Deref;
 
 use fisher_common::prelude::*;
 use fisher_common::state::{State, IdKind, UniqueId};
 
-use jobs::Context;
-
 use super::scheduled_job::ScheduledJob;
 use super::scheduler::SchedulerInternalApi;
+use super::types::{ScriptId, JobContext};
 
 
 #[derive(Debug)]
-enum ThreadInput {
-    Process(ScheduledJob),
+enum ThreadInput<S: ScriptsRepositoryTrait> {
+    Process(ScheduledJob<S>),
     StopSignal,
 }
 
 
-pub struct Thread {
+pub struct Thread<S: ScriptsRepositoryTrait + 'static> {
     id: UniqueId,
-    currently_running: Option<UniqueId>,
+    currently_running: Option<ScriptId<S>>,
 
     should_stop: bool,
 
     handle: thread::JoinHandle<()>,
-    input: mpsc::Sender<ThreadInput>,
+    input: mpsc::Sender<ThreadInput<S>>,
 }
 
-impl Thread {
+impl<S: ScriptsRepositoryTrait> Thread<S> {
 
-    pub fn new(processor: SchedulerInternalApi, ctx: Arc<Context>,
-               state: &Arc<State>) -> Thread {
+    pub fn new(processor: SchedulerInternalApi<S>, ctx: Arc<JobContext<S>>,
+               state: &Arc<State>) -> Self {
         let (input_send, input_recv) = mpsc::channel();
         let id = state.next_id(IdKind::ThreadId);
 
@@ -55,7 +55,7 @@ impl Thread {
                 match input {
                     // A new job should be processed
                     ThreadInput::Process(job) => {
-                        let result = job.execute(&ctx);
+                        let result = job.execute(ctx.deref());
 
                         // Display the error if there is one
                         match result {
@@ -93,7 +93,7 @@ impl Thread {
     }
 
     // Here, None equals to success, and Some(job) equals to failure
-    pub fn process(&mut self, job: ScheduledJob) -> Option<ScheduledJob> {
+    pub fn process(&mut self, job: ScheduledJob<S>) -> Option<ScheduledJob<S>> {
         // Do some consistency checks
         if self.should_stop || self.busy() {
             return Some(job);
@@ -116,7 +116,7 @@ impl Thread {
         self.id
     }
 
-    pub fn currently_running(&self) -> Option<UniqueId> {
+    pub fn currently_running(&self) -> Option<ScriptId<S>> {
         self.currently_running
     }
 
@@ -129,7 +129,7 @@ impl Thread {
     }
 }
 
-impl fmt::Debug for Thread {
+impl<S: ScriptsRepositoryTrait> fmt::Debug for Thread<S> {
 
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Thread {{ busy: {}, should_stop: {} }}",

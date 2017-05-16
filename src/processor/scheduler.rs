@@ -19,12 +19,11 @@ use std::sync::{Arc, mpsc};
 use fisher_common::prelude::*;
 use fisher_common::state::{State, UniqueId};
 
-use jobs::{Job, JobOutput, Context};
-use hooks::Hooks;
 use utils::Serial;
 
 use super::thread::Thread;
 use super::scheduled_job::ScheduledJob;
+use super::types::{ScriptId, Job, JobOutput, JobContext};
 
 
 const STATUS_EVENTS_PRIORITY: isize = 1000;
@@ -32,14 +31,14 @@ const STATUS_EVENTS_PRIORITY: isize = 1000;
 
 #[cfg(test)]
 #[derive(Debug)]
-pub struct DebugDetails {
-    pub waiting: HashMap<UniqueId, usize>,
+pub struct DebugDetails<S: ScriptsRepositoryTrait> {
+    pub waiting: HashMap<ScriptId<S>, usize>,
 }
 
 #[cfg(test)]
-impl DebugDetails {
+impl<S: ScriptsRepositoryTrait> DebugDetails<S> {
 
-    fn from_scheduler(scheduler: &Scheduler) -> Self {
+    fn from_scheduler(scheduler: &Scheduler<S>) -> Self {
         let waiting = scheduler.waiting.iter()
             .map(|(key, value)| (*key, value.len()))
             .collect();
@@ -60,36 +59,36 @@ pub struct HealthDetails {
 
 
 #[derive(Clone)]
-pub enum SchedulerInput {
-    Job(Job, isize),
+pub enum SchedulerInput<S: ScriptsRepositoryTrait> {
+    Job(Job<S>, isize),
     HealthStatus(mpsc::Sender<HealthDetails>),
-    ProcessOutput(JobOutput),
+    ProcessOutput(JobOutput<S>),
 
     Cleanup,
 
-    #[cfg(test)] DebugDetails(mpsc::Sender<DebugDetails>),
+    #[cfg(test)] DebugDetails(mpsc::Sender<DebugDetails<S>>),
 
     Lock,
     Unlock,
 
     StopSignal,
-    JobEnded(UniqueId, UniqueId),
+    JobEnded(UniqueId, ScriptId<S>),
 }
 
 
 #[derive(Debug, Clone)]
-pub struct SchedulerInternalApi {
-    input: mpsc::Sender<SchedulerInput>,
+pub struct SchedulerInternalApi<S: ScriptsRepositoryTrait> {
+    input: mpsc::Sender<SchedulerInput<S>>,
 }
 
-impl SchedulerInternalApi {
+impl<S: ScriptsRepositoryTrait> SchedulerInternalApi<S> {
 
-    pub fn record_output(&self, output: JobOutput) -> Result<()> {
+    pub fn record_output(&self, output: JobOutput<S>) -> Result<()> {
         self.input.send(SchedulerInput::ProcessOutput(output))?;
         Ok(())
     }
 
-    pub fn job_ended(&self, thread: UniqueId, job: &ScheduledJob)
+    pub fn job_ended(&self, thread: UniqueId, job: &ScheduledJob<S>)
                      -> Result<()> {
         self.input.send(SchedulerInput::JobEnded(thread, job.hook_id()))?;
         Ok(())
@@ -98,31 +97,27 @@ impl SchedulerInternalApi {
 
 
 #[derive(Debug)]
-pub struct Scheduler {
+pub struct Scheduler<S: ScriptsRepositoryTrait + 'static> {
     max_threads: u16,
-    hooks: Arc<Hooks>,
-    jobs_context: Arc<Context>,
+    hooks: Arc<S>,
+    jobs_context: Arc<JobContext<S>>,
     state: Arc<State>,
 
     locked: bool,
     should_stop: bool,
-    queue: BinaryHeap<ScheduledJob>,
-    waiting: HashMap<UniqueId, BinaryHeap<ScheduledJob>>,
-    threads: HashMap<UniqueId, Thread>,
+    queue: BinaryHeap<ScheduledJob<S>>,
+    waiting: HashMap<ScriptId<S>, BinaryHeap<ScheduledJob<S>>>,
+    threads: HashMap<UniqueId, Thread<S>>,
 
-    input_send: mpsc::Sender<SchedulerInput>,
-    input_recv: mpsc::Receiver<SchedulerInput>,
+    input_send: mpsc::Sender<SchedulerInput<S>>,
+    input_recv: mpsc::Receiver<SchedulerInput<S>>,
 }
 
-impl Scheduler {
+impl<S: ScriptsRepositoryTrait> Scheduler<S> {
 
-    pub fn new(max_threads: u16, hooks: Arc<Hooks>,
-           environment: HashMap<String, String>, state: Arc<State>) -> Self {
+    pub fn new(max_threads: u16, hooks: Arc<S>, ctx: Arc<JobContext<S>>,
+               state: Arc<State>) -> Self {
         let (input_send, input_recv) = mpsc::channel();
-
-        let jobs_context = Arc::new(Context {
-            environment: environment,
-        });
 
         // Populate the waiting HashMap with non-parallel hooks
         let mut waiting = HashMap::new();
@@ -135,7 +130,7 @@ impl Scheduler {
         Scheduler {
             max_threads: max_threads,
             hooks: hooks,
-            jobs_context: jobs_context,
+            jobs_context: ctx,
             state: state,
 
             locked: false,
@@ -149,7 +144,7 @@ impl Scheduler {
         }
     }
 
-    pub fn input(&self) -> mpsc::Sender<SchedulerInput> {
+    pub fn input(&self) -> mpsc::Sender<SchedulerInput<S>> {
         self.input_send.clone()
     }
 
@@ -373,7 +368,7 @@ impl Scheduler {
         }
     }
 
-    fn queue_job(&mut self, job: ScheduledJob) {
+    fn queue_job(&mut self, job: ScheduledJob<S>) {
         let hook_id = job.hook_id();
 
         // Put the job in waiting if it can't be parallel and
@@ -388,7 +383,7 @@ impl Scheduler {
         self.queue.push(job);
     }
 
-    fn get_job(&mut self) -> Option<ScheduledJob> {
+    fn get_job(&mut self) -> Option<ScheduledJob<S>> {
         loop {
             if let Some(job) = self.queue.pop() {
                 let hook_id = job.hook_id();
@@ -409,7 +404,7 @@ impl Scheduler {
         }
     }
 
-    fn is_running(&self, hook: UniqueId) -> bool {
+    fn is_running(&self, hook: ScriptId<S>) -> bool {
         for thread in self.threads.values() {
             if thread.currently_running() == Some(hook) {
                 return true;
@@ -425,13 +420,14 @@ impl Scheduler {
 mod tests {
     use std::fs::File;
     use std::io::Read;
-    use std::collections::{HashMap, VecDeque};
+    use std::collections::VecDeque;
     use std::sync::Arc;
 
     use fisher_common::state::State;
 
     use utils::testing::*;
     use requests::Request;
+    use jobs::Context;
 
     use super::super::Processor;
 
@@ -441,7 +437,7 @@ mod tests {
         let env = TestingEnv::new();
 
         let processor = Processor::new(
-            1, env.hooks(), HashMap::new(), Arc::new(State::new()),
+            1, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
         ).unwrap();
         processor.stop().unwrap();
 
@@ -454,7 +450,7 @@ mod tests {
         let mut env = TestingEnv::new();
 
         let processor = Processor::new(
-            1, env.hooks(), HashMap::new(), Arc::new(State::new()),
+            1, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
         ).unwrap();
 
         // Prepare a request
@@ -483,7 +479,7 @@ mod tests {
         let mut env = TestingEnv::new();
 
         let processor = Processor::new(
-            threads, env.hooks(), HashMap::new(), Arc::new(State::new()),
+            threads, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
         ).unwrap();
 
         let api = processor.api();
@@ -552,7 +548,7 @@ mod tests {
         let mut env = TestingEnv::new();
 
         let processor = Processor::new(
-            2, env.hooks(), HashMap::new(), Arc::new(State::new()),
+            2, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
         ).unwrap();
         let api = processor.api();
 
@@ -598,7 +594,7 @@ mod tests {
         let mut env = TestingEnv::new();
 
         let processor = Processor::new(
-            1, env.hooks(), HashMap::new(), Arc::new(State::new()),
+            1, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
         ).unwrap();
         let api = processor.api();
 
@@ -639,7 +635,7 @@ mod tests {
     fn test_cleanup_hooks() {
         wrapper(|env| {
             let processor = Processor::new(
-                1, env.hooks(), HashMap::new(), env.state(),
+                1, env.hooks(), Arc::new(Context::default()), env.state(),
             )?;
             let api = processor.api();
 

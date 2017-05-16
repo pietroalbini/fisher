@@ -13,41 +13,37 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
 use std::sync::{Arc, mpsc};
 
 use fisher_common::prelude::*;
 use fisher_common::state::State;
 
-use jobs::Job;
-use hooks::Hooks;
-
 use super::scheduler::{Scheduler, SchedulerInput};
 #[cfg(test)] use super::scheduler::DebugDetails;
 use super::timer::Timer;
+use super::types::{Job, JobContext};
 
 pub use super::scheduler::HealthDetails;
 
 
 #[derive(Debug)]
-pub struct Processor {
-    input: mpsc::Sender<SchedulerInput>,
+pub struct Processor<S: ScriptsRepositoryTrait + 'static> {
+    input: mpsc::Sender<SchedulerInput<S>>,
     timer: Timer,
     wait: mpsc::Receiver<()>,
 }
 
-impl Processor {
+impl<S: ScriptsRepositoryTrait> Processor<S> {
 
-    pub fn new(max_threads: u16, hooks: Arc<Hooks>,
-               environment: HashMap<String, String>, state: Arc<State>)
-               -> Result<Self> {
+    pub fn new(max_threads: u16, hooks: Arc<S>, ctx: Arc<JobContext<S>>,
+               state: Arc<State>) -> Result<Self> {
         // Retrieve wanted information from the spawned thread
         let (input_send, input_recv) = mpsc::sync_channel(0);
         let (wait_send, wait_recv) = mpsc::channel();
 
         ::std::thread::spawn(move || {
             let inner = Scheduler::new(
-                max_threads, hooks, environment, state,
+                max_threads, hooks, ctx, state,
             );
             input_send.send(inner.input()).unwrap();
 
@@ -83,7 +79,7 @@ impl Processor {
         Ok(())
     }
 
-    pub fn api(&self) -> ProcessorApi {
+    pub fn api(&self) -> ProcessorApi<S> {
         ProcessorApi {
             input: self.input.clone(),
         }
@@ -92,20 +88,20 @@ impl Processor {
 
 
 #[derive(Debug, Clone)]
-pub struct ProcessorApi {
-    input: mpsc::Sender<SchedulerInput>,
+pub struct ProcessorApi<S: ScriptsRepositoryTrait> {
+    input: mpsc::Sender<SchedulerInput<S>>,
 }
 
-impl ProcessorApi {
+impl<S: ScriptsRepositoryTrait> ProcessorApi<S> {
 
     #[cfg(test)]
-    pub fn mock(input: mpsc::Sender<SchedulerInput>) -> Self {
+    pub fn mock(input: mpsc::Sender<SchedulerInput<S>>) -> Self {
         ProcessorApi {
             input: input,
         }
     }
 
-    pub fn queue(&self, job: Job, priority: isize) -> Result<()> {
+    pub fn queue(&self, job: Job<S>, priority: isize) -> Result<()> {
         self.input.send(SchedulerInput::Job(job, priority))?;
         Ok(())
     }
@@ -122,7 +118,7 @@ impl ProcessorApi {
     }
 
     #[cfg(test)]
-    pub fn debug_details(&self) -> Result<DebugDetails> {
+    pub fn debug_details(&self) -> Result<DebugDetails<S>> {
         let (res_send, res_recv) = mpsc::channel();
         self.input.send(SchedulerInput::DebugDetails(res_send))?;
         Ok(res_recv.recv()?)

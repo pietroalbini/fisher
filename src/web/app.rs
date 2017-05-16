@@ -36,7 +36,7 @@ pub struct WebApp {
 impl WebApp {
 
     pub fn new(hooks: Arc<Hooks>, enable_health: bool, behind_proxies: u8,
-               bind: &str, processor: ProcessorApi)
+               bind: &str, processor: ProcessorApi<Hooks>)
                -> Result<Self> {
         let locked = Arc::new(AtomicBool::new(false));
 

@@ -13,12 +13,23 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-mod api;
-mod scheduled_job;
-mod scheduler;
-mod thread;
-mod timer;
-mod types;
+use fisher_common::prelude::*;
 
-pub use self::api::{Processor, ProcessorApi, HealthDetails};
-#[cfg(test)] pub use processor::scheduler::SchedulerInput as ProcessorInput;
+
+pub type Job<S> = <S as ScriptsRepositoryTrait>::Job;
+
+pub type JobContext<S> = <
+    <S as ScriptsRepositoryTrait>::Job as JobTrait<
+        <S as ScriptsRepositoryTrait>::Script
+    >
+>::Context;
+
+pub type JobOutput<S> = <
+    <S as ScriptsRepositoryTrait>::Job as JobTrait<
+        <S as ScriptsRepositoryTrait>::Script
+    >
+>::Output;
+
+pub type ScriptId<S> = <
+    <S as ScriptsRepositoryTrait>::Script as ScriptTrait
+>::Id;

@@ -25,7 +25,7 @@ use web::responses::Response;
 
 #[derive(Clone)]
 pub struct WebApi {
-    processor: Arc<Mutex<ProcessorApi>>,
+    processor: Arc<Mutex<ProcessorApi<Hooks>>>,
     hooks: Arc<Hooks>,
     locked: Arc<AtomicBool>,
 
@@ -34,7 +34,7 @@ pub struct WebApi {
 
 impl WebApi {
 
-    pub fn new(processor: ProcessorApi,
+    pub fn new(processor: ProcessorApi<Hooks>,
                hooks: Arc<Hooks>, locked: Arc<AtomicBool>,
                health_enabled: bool) -> Self {
         WebApi {

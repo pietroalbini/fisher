@@ -193,8 +193,8 @@ pub fn sample_hooks() -> PathBuf {
 
 
 enum FakeProcessorInput {
-    Recv(mpsc::Sender<ProcessorInput>),
-    TryRecv(mpsc::Sender<Option<ProcessorInput>>),
+    Recv(mpsc::Sender<ProcessorInput<Hooks>>),
+    TryRecv(mpsc::Sender<Option<ProcessorInput<Hooks>>>),
     Stop,
 }
 
@@ -261,7 +261,7 @@ impl WebAppInstance {
         self.client.request(method, &format!("{}{}", self.url, url))
     }
 
-    pub fn processor_input(&self) -> Option<ProcessorInput> {
+    pub fn processor_input(&self) -> Option<ProcessorInput<Hooks>> {
         let (resp_send, resp_recv) = mpsc::channel();
 
         // Request to the fake processor if there are inputs

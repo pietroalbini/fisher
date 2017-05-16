@@ -24,6 +24,7 @@ use fisher_common::state::State;
 use hooks::{HookNamesIter, Hooks, HooksBlueprint, Hook};
 use processor::Processor;
 use web::WebApp;
+use jobs::Context;
 use utils;
 
 
@@ -106,9 +107,13 @@ impl<'a> Fisher<'a> {
         // Finalize the hooks
         let hooks = Arc::new(self.hooks);
 
+        let context = Arc::new(Context {
+            environment: self.environment,
+        });
+
         // Start the processor
         let processor = Processor::new(
-            self.max_threads, hooks.clone(), self.environment,
+            self.max_threads, hooks.clone(), context,
             self.state.clone(),
         )?;
         let processor_api = processor.api();
@@ -137,14 +142,14 @@ impl<'a> Fisher<'a> {
 
 
 pub struct RunningFisher {
-    processor: Processor,
+    processor: Processor<Hooks>,
     web_api: WebApp,
     hooks_blueprint: HooksBlueprint,
 }
 
 impl RunningFisher {
 
-    fn new(processor: Processor, web_api: WebApp,
+    fn new(processor: Processor<Hooks>, web_api: WebApp,
            hooks_blueprint: HooksBlueprint) -> Self {
         RunningFisher {
             processor: processor,

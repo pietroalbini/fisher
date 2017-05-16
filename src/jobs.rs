@@ -195,10 +195,9 @@ impl Job {
     }
 }
 
-impl JobTrait for Job {
+impl JobTrait<Hook> for Job {
     type Context = Context;
     type Output = JobOutput;
-    type Script = Hook;
 
     fn execute(&self, ctx: &Context) -> Result<JobOutput> {
         self.process(ctx)

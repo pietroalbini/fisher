@@ -15,23 +15,22 @@
 
 use std::cmp::Ordering;
 
-use fisher_common::state::UniqueId;
 use fisher_common::prelude::*;
 
-use jobs::{Job, Context, JobOutput};
 use utils::Serial;
+use super::types::{Job, JobContext, JobOutput, ScriptId};
 
 
 #[derive(Debug)]
-pub struct ScheduledJob {
-    job: Job,
+pub struct ScheduledJob<S: ScriptsRepositoryTrait> {
+    job: Job<S>,
     priority: isize,
     serial: Serial,
 }
 
-impl ScheduledJob {
+impl<S: ScriptsRepositoryTrait> ScheduledJob<S> {
 
-    pub fn new(job: Job, priority: isize, serial: Serial) -> ScheduledJob {
+    pub fn new(job: Job<S>, priority: isize, serial: Serial) -> Self {
         ScheduledJob {
             job: job,
             priority: priority,
@@ -39,11 +38,11 @@ impl ScheduledJob {
         }
     }
 
-    pub fn execute(&self, ctx: &Context) -> Result<JobOutput> {
+    pub fn execute(&self, ctx: &JobContext<S>) -> Result<JobOutput<S>> {
         self.job.execute(ctx)
     }
 
-    pub fn hook_id(&self) -> UniqueId {
+    pub fn hook_id(&self) -> ScriptId<S> {
         self.job.script_id()
     }
 
@@ -52,9 +51,9 @@ impl ScheduledJob {
     }
 }
 
-impl Ord for ScheduledJob {
+impl<S: ScriptsRepositoryTrait> Ord for ScheduledJob<S> {
 
-    fn cmp(&self, other: &ScheduledJob) -> Ordering {
+    fn cmp(&self, other: &ScheduledJob<S>) -> Ordering {
         let priority_ord = self.priority.cmp(&other.priority);
 
         if priority_ord == Ordering::Equal {
@@ -65,19 +64,18 @@ impl Ord for ScheduledJob {
     }
 }
 
-impl PartialOrd for ScheduledJob {
+impl<S: ScriptsRepositoryTrait> PartialOrd for ScheduledJob<S> {
 
-    fn partial_cmp(&self, other: &ScheduledJob) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &ScheduledJob<S>) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for ScheduledJob {
+impl<S: ScriptsRepositoryTrait> PartialEq for ScheduledJob<S> {
 
-    fn eq(&self, other: &ScheduledJob) -> bool {
+    fn eq(&self, other: &ScheduledJob<S>) -> bool {
         self.priority == other.priority
     }
 }
 
-impl Eq for ScheduledJob {}
-
+impl<S: ScriptsRepositoryTrait> Eq for ScheduledJob<S> {}
