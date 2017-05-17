@@ -414,242 +414,278 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-    use std::io::Read;
     use std::collections::VecDeque;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex, mpsc};
 
+    use fisher_common::prelude::*;
     use fisher_common::state::State;
 
-    use utils::testing::*;
-    use requests::Request;
-    use jobs::Context;
-
+    use super::super::test_utils::*;
     use super::super::Processor;
 
 
     #[test]
     fn test_processor_starting() {
-        let env = TestingEnv::new();
+        test_wrapper(|| {
 
-        let processor = Processor::new(
-            1, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
-        ).unwrap();
-        processor.stop().unwrap();
+            let repo = Arc::new(Repository::<()>::new());
 
-        env.cleanup();
+            let processor = Processor::new(
+                1, repo, Arc::new(()), Arc::new(State::new()),
+            ).unwrap();
+            processor.stop()?;
+
+            Ok(())
+        });
     }
 
 
     #[test]
     fn test_processor_clean_stop() {
-        let mut env = TestingEnv::new();
+        test_wrapper(|| {
 
-        let processor = Processor::new(
-            1, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
-        ).unwrap();
+            let repo = Repository::<()>::new();
 
-        // Prepare a request
-        let mut out = env.tempdir();
-        out.push("ok");
+            let (long_send, long_recv) = mpsc::channel();
+            repo.add_script("long", true, move |_| {
+                long_send.send(())?;
+                Ok(())
+            });
 
-        let mut req = dummy_web_request();
-        req.params.insert("env".into(), out.to_str().unwrap().to_string());
+            let repo = Arc::new(repo);
+            let processor = Processor::new(
+                1, repo.clone(), Arc::new(()), Arc::new(State::new()),
+            )?;
 
-        // Queue a dummy job
-        let job = env.create_job("long.sh", Request::Web(req));
-        processor.api().queue(job, 0).unwrap();
+            processor.api().queue(
+                repo.job("long", ()).unwrap(), 0
+            )?;
 
-        // Exit immediately -- this forces the processor to wait since the job
-        // sleeps for half a second
-        processor.stop().unwrap();
+            // Exit immediately -- this forces the processor to wait since the
+            // job sleeps for half a second
+            processor.stop()?;
 
-        // Check if the job was not killed
-        assert!(out.exists(), "job was killed before it completed");
+            // Check if the job was not killed
+            assert!(
+                long_recv.try_recv().is_ok(),
+                "job was killed before it completed"
+            );
 
-        env.cleanup();
+            Ok(())
+        });
     }
 
 
-    fn run_multiple_append(threads: u16, prioritized: bool) -> String {
-        let mut env = TestingEnv::new();
+    fn run_multiple_append(threads: u16, prioritized: bool) -> Result<String> {
+        let repo = Repository::<char>::new();
 
+        let (append_send, append_recv) = mpsc::channel();
+        repo.add_script("append", true, move |arg| {
+            append_send.send(arg)?;
+            Ok(())
+        });
+
+        let repo = Arc::new(repo);
         let processor = Processor::new(
-            threads, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
-        ).unwrap();
+            threads, repo.clone(), Arc::new(()), Arc::new(State::new()),
+        )?;
 
         let api = processor.api();
-        let mut out = env.tempdir();
-        out.push("out");
 
         // Prevent jobs from being run
-        api.lock().unwrap();
+        api.lock()?;
 
         // Queue ten different jobs
-        let mut req;
-        let mut job;
         let mut priority = 0;
-        for chr in 0..10 {
-            req = dummy_web_request();
-            req.params.insert("env".into(), format!("{}>{}",
-                out.to_str().unwrap(), chr,
-            ));
-
+        for chr in 0u8..10u8 {
             if prioritized {
                 priority = chr / 2;
             }
 
-            job = env.create_job("append-val.sh", Request::Web(req));
-            api.queue(job, priority).unwrap();
+            api.queue(
+                repo.job("append", (chr + '0' as u8) as char).unwrap(),
+                priority as isize,
+            )?;
         }
 
         // Allow the processor to work
-        api.unlock().unwrap();
+        api.unlock()?;
 
-        processor.stop().unwrap();
+        processor.stop()?;
 
-        // Read the content of the file
-        let mut file = File::open(&out).unwrap();
+        // Collect the result from the channel
         let mut output = String::new();
-        file.read_to_string(&mut output).unwrap();
-
-        env.cleanup();
-
-        output.replace("\n", "")
+        while let Ok(part) = append_recv.try_recv() {
+            output.push(part);
+        }
+        Ok(output)
     }
 
 
     #[test]
     fn test_processor_one_thread_correct_order() {
-        let output = run_multiple_append(1, false);
+        let output = run_multiple_append(1, false).unwrap();
         assert_eq!(output.as_str(), "0123456789");
     }
 
 
     #[test]
     fn test_processor_one_thread_correct_order_prioritized() {
-        let output = run_multiple_append(1, true);
+        let output = run_multiple_append(1, true).unwrap();
         assert_eq!(output.as_str(), "8967452301");
     }
 
 
     #[test]
     fn test_processor_multiple_threads() {
-        let output = run_multiple_append(4, false);
+        let output = run_multiple_append(4, false).unwrap();
         assert_eq!(output.len(), 10);
     }
 
     #[test]
     fn test_non_parallel_processing() {
-        let mut env = TestingEnv::new();
+        test_wrapper(|| {
 
-        let processor = Processor::new(
-            2, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
-        ).unwrap();
-        let api = processor.api();
+            let repo = Repository::<Arc<Mutex<mpsc::Receiver<()>>>>::new();
 
-        // Queue ten jobs
-        let mut waiters = VecDeque::new();
-        for _ in 0..10 {
-            let mut waiting = env.waiting_job(false);
-            api.queue(waiting.take_job().unwrap(), 0).unwrap();
-            waiters.push_back(waiting);
-        }
+            repo.add_script("wait", false, |recv| {
+                recv.lock()?.recv()?;
+                Ok(())
+            });
 
-        // Get the status
-        while let Some(mut waiting) = waiters.pop_front() {
-            // Only one job should be running
-            let mut status;
-            loop {
-                status = api.health_status().unwrap();
-                if status.queued_jobs == waiters.len() {
-                    break;
-                } else if status.queued_jobs != waiters.len() + 1 {
-                    panic!(
-                        "Wrong number of queued jobs: {}", status.queued_jobs
-                    );
-                }
+            let repo = Arc::new(repo);
+            let processor = Processor::new(
+                2, repo.clone(), Arc::new(()), Arc::new(State::new()),
+            )?;
+            let api = processor.api();
+
+            // Queue ten jobs
+            let mut waiters = VecDeque::new();
+            for _ in 0..10 {
+                let (unlock_send, unlock_recv) = mpsc::channel();
+
+                api.queue(
+                    repo.job("wait",
+                        Arc::new(Mutex::new(unlock_recv))
+                    ).unwrap(), 0
+                )?;
+                waiters.push_back(unlock_send);
             }
 
-            assert_eq!(status.busy_threads, 1);
-            assert_eq!(status.max_threads, 2);
+            // Get the status
+            while let Some(waiting) = waiters.pop_front() {
+                // Only one job should be running
+                let mut status;
+                loop {
+                    status = api.health_status()?;
+                    if status.queued_jobs == waiters.len() {
+                        break;
+                    } else if status.queued_jobs != waiters.len() + 1 {
+                        panic!(
+                            "Wrong number of queued jobs: {}",
+                            status.queued_jobs
+                        );
+                    }
+                }
 
-            waiting.unlock().unwrap();
+                assert_eq!(status.busy_threads, 1);
+                assert_eq!(status.max_threads, 2);
 
-            // Wait for the job to be executed
-            while ! waiting.executed() {}
-        }
+                // Unlock this, thanks
+                waiting.send(())?;
+            }
 
-        processor.stop().unwrap();
+            processor.stop()?;
 
-        env.cleanup();
+            Ok(())
+        });
     }
 
     #[test]
     fn test_health_status() {
-        let mut env = TestingEnv::new();
+        test_wrapper(|| {
+            let repo = Repository::<
+                Option<Arc<Mutex<mpsc::Receiver<()>>>>
+            >::new();
 
-        let processor = Processor::new(
-            1, env.hooks(), Arc::new(Context::default()), Arc::new(State::new()),
-        ).unwrap();
-        let api = processor.api();
+            repo.add_script("noop", true, |_| { Ok(()) });
+            repo.add_script("wait", true, |recv| {
+                let recv = recv.unwrap();
+                recv.lock()?.recv()?;
+                Ok(())
+            });
 
-        // Queue a wait job
-        let mut waiting = env.waiting_job(true);
-        api.queue(waiting.take_job().unwrap(), 0).unwrap();
+            let repo = Arc::new(repo);
+            let processor = Processor::new(
+                1, repo.clone(), Arc::new(()), Arc::new(State::new()),
+            )?;
+            let api = processor.api();
 
-        // Queue ten extra jobs
-        let mut req;
-        let mut job;
-        for _ in 0..10 {
-            req = Request::Web(dummy_web_request());
-            job = env.create_job("example.sh", req);
-            api.queue(job, 0).unwrap();
-        }
+            // Queue a wait job
+            let (waiting_send, waiting_recv) = mpsc::channel();
+            api.queue(repo.job("wait", Some(
+                Arc::new(Mutex::new(waiting_recv))
+            )).unwrap(), 0)?;
 
-        // Get the health status of the processor
-        let status = api.health_status().unwrap();
+            // Queue ten extra jobs
+            for _ in 0..10 {
+                api.queue(repo.job("noop", None).unwrap(), 0)?;
+            }
 
-        // Check if the health details are correct
-        assert_eq!(status.queued_jobs, 10);
-        assert_eq!(status.busy_threads, 1);
-        assert_eq!(status.max_threads, 1);
+            // Get the health status of the processor
+            let status = api.health_status()?;
 
-        // Create the file the first job is waiting for
-        waiting.unlock().unwrap();
+            // Check if the health details are correct
+            assert_eq!(status.queued_jobs, 10);
+            assert_eq!(status.busy_threads, 1);
+            assert_eq!(status.max_threads, 1);
 
-        processor.stop().unwrap();
+            // Create the file the first job is waiting for
+            waiting_send.send(())?;
 
-        // The file should not exist -- the first job removes it
-        assert!(waiting.executed());
+            processor.stop()?;
 
-        env.cleanup();
+            Ok(())
+        });
     }
 
 
     #[test]
     fn test_cleanup_hooks() {
-        wrapper(|env| {
+        test_wrapper(|| {
+            let repo = Repository::<Arc<Mutex<mpsc::Receiver<()>>>>::new();
+
+            repo.add_script("wait", false, |recv| {
+                recv.lock()?.recv()?;
+                Ok(())
+            });
+
+            let repo = Arc::new(repo);
             let processor = Processor::new(
-                1, env.hooks(), Arc::new(Context::default()), env.state(),
+                1, repo.clone(), Arc::new(()), Arc::new(State::new()),
             )?;
             let api = processor.api();
 
             let mut waitings = VecDeque::new();
             for _ in 0..10 {
-                let mut waiting = env.waiting_job(true);
-                api.queue(waiting.take_job().unwrap(), 1)?;
-                waitings.push_back(waiting);
+                let (unlock_send, unlock_recv) = mpsc::channel();
+
+                api.queue(
+                    repo.job("wait",
+                        Arc::new(Mutex::new(unlock_recv))
+                    ).unwrap(), 0
+                )?;
+                waitings.push_back(unlock_send);
             }
 
-            let old_hook_id = env.hook_id_of("wait.sh").unwrap();
+            let old_hook_id = repo.hook_id_of("wait").unwrap();
 
             let debug = api.debug_details()?;
             assert_eq!(debug.waiting.get(&old_hook_id), Some(&9));
 
             // Execute only 5 out of 10 waiting jobs
-            for mut waiting in waitings.drain(..5) {
-                waiting.unlock()?;
+            for waiting in waitings.drain(..5) {
+                waiting.send(())?;
             }
 
             // Wait until the previous operation ended
@@ -658,10 +694,10 @@ mod tests {
             let debug = api.debug_details()?;
             assert_eq!(debug.waiting.get(&old_hook_id), Some(&4));
 
-            // Reload the hooks
-            env.reload_hooks()?;
+            // Reload the scripts
+            repo.recreate_scripts();
 
-            let new_hook_id = env.hook_id_of("wait.sh").unwrap();
+            let new_hook_id = repo.hook_id_of("wait").unwrap();
             assert!(new_hook_id != old_hook_id);
 
             // The new hook id shouldn't be present yet
@@ -677,8 +713,8 @@ mod tests {
             assert_eq!(debug.waiting.get(&old_hook_id), Some(&4));
             assert_eq!(debug.waiting.get(&new_hook_id), Some(&0));
 
-            for mut waiting in waitings.drain(..) {
-                waiting.unlock()?;
+            for waiting in waitings.drain(..) {
+                waiting.send(())?;
             }
 
             // Wait until the previous operation ended

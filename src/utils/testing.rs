@@ -23,8 +23,7 @@ use std::fs;
 use hyper::client as hyper;
 use hyper::method::Method;
 
-use fisher_common::prelude::*;
-use fisher_common::state::{State, UniqueId};
+use fisher_common::state::State;
 
 use hooks::{Hooks, HooksBlueprint};
 use jobs::{Job, JobOutput};
@@ -145,18 +144,6 @@ pub fn sample_hooks() -> PathBuf {
         r#"## Fisher-Testing: {}"#,
         r#"sleep 0.5"#,
         r#"echo "ok" > ${FISHER_TESTING_ENV}"#
-    );
-
-    create_hook!(tempdir, "wait.sh",
-        r#"#!/bin/bash"#,
-        r#"## Fisher: {"parallel": false}"#,
-        r#"## Fisher-Testing: {}"#,
-        r#"while true; do"#,
-        r#"    if [[ -f "${FISHER_TESTING_ENV}" ]]; then"#,
-        r#"        break"#,
-        r#"    fi"#,
-        r#"done"#,
-        r#"rm "${FISHER_TESTING_ENV}""#
     );
 
     create_hook!(tempdir, "append-val.sh",
@@ -317,8 +304,6 @@ impl WebAppInstance {
 
 pub struct TestingEnv {
     hooks: Arc<Hooks>,
-    hooks_blueprint: HooksBlueprint,
-    state: Arc<State>,
     remove_dirs: Vec<String>,
 }
 
@@ -334,14 +319,8 @@ impl TestingEnv {
 
         TestingEnv {
             hooks: Arc::new(hooks_blueprint.hooks()),
-            hooks_blueprint: hooks_blueprint,
-            state: state,
             remove_dirs: vec![hooks_dir],
         }
-    }
-
-    pub fn state(&self) -> Arc<State> {
-        self.state.clone()
     }
 
     // CLEANUP
@@ -357,28 +336,6 @@ impl TestingEnv {
         }
     }
 
-    // UTILITIES
-
-    pub fn tempdir(&mut self) -> PathBuf {
-        let dir = utils::create_temp_dir().unwrap();
-        self.delete_also(dir.to_str().unwrap());
-        dir
-    }
-
-    // HOOKS UTILITIES
-
-    pub fn hooks(&self) -> Arc<Hooks> {
-        self.hooks.clone()
-    }
-
-    pub fn hook_id_of(&self, name: &str) -> Option<UniqueId> {
-        self.hooks.get_by_name(name).map(|hook| hook.id())
-    }
-
-    pub fn reload_hooks(&mut self) -> Result<()> {
-        self.hooks_blueprint.reload()
-    }
-
     // JOBS UTILITIES
 
     pub fn create_job(&self, hook_name: &str, req: Request) -> Job {
@@ -386,10 +343,6 @@ impl TestingEnv {
         let (_, provider) = hook.validate(&req);
 
         Job::new(hook.clone(), provider, req)
-    }
-
-    pub fn waiting_job(&mut self, trigger_status_hooks: bool) -> WaitingJob {
-        WaitingJob::new(self, trigger_status_hooks)
     }
 
     // WEB TESTING
@@ -424,62 +377,5 @@ impl NextHealthCheck {
             },
             Err(..) => panic!("No ProcessorInput received!"),
         };
-    }
-}
-
-
-pub struct WaitingJob {
-    lock_path: PathBuf,
-    locked: bool,
-    job: Option<Job>,
-}
-
-impl WaitingJob {
-
-    fn new(env: &mut TestingEnv, trigger_status_hooks: bool) -> Self {
-        let lock_path = env.tempdir().join("lock");
-
-        let mut req = dummy_web_request();
-        req.params.insert("env".into(), lock_path.to_str().unwrap().into());
-
-        if ! trigger_status_hooks {
-            req.params.insert("ignore_status_hooks".into(), String::new());
-        }
-
-        let job = env.create_job("wait.sh", Request::Web(req));
-
-        WaitingJob {
-            lock_path: lock_path,
-            locked: true,
-            job: Some(job),
-        }
-    }
-
-    pub fn take_job(&mut self) -> Option<Job> {
-        self.job.take()
-    }
-
-    pub fn unlock(&mut self) -> Result<()> {
-        if self.locked {
-            fs::File::create(&self.lock_path)?;
-            self.locked = false;
-        }
-
-        Ok(())
-    }
-
-    pub fn executed(&self) -> bool {
-        (! self.locked) && fs::metadata(&self.lock_path).is_err()
-    }
-}
-
-
-pub fn wrapper<F: Fn(&mut TestingEnv) -> Result<()>>(function: F) {
-    let mut env = TestingEnv::new();
-    let result = function(&mut env);
-    env.cleanup();
-
-    if let Err(error) = result {
-        panic!("{}", error);
     }
 }
