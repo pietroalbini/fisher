@@ -21,6 +21,8 @@ FILES_BASE="public/releases/fisher"
 
 RELEASE_BRANCH_PREFIX="release/"
 
+SUBCRATES="fisher_common fisher_processor"
+
 
 # Detect source directory
 # Thanks to http://stackoverflow.com/a/246128/2204144
@@ -57,7 +59,7 @@ upload_to_crates() {
     git -c commit.gpgsign=false stash save --include-untracked
 
     # Upload all the submodules
-    for sub in fisher_common; do
+    for sub in "${SUBCRATES}"; do
         cd "${sub}"
         cargo publish
         cd ..

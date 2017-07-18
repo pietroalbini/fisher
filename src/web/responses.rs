@@ -16,7 +16,7 @@
 use serde_json;
 
 use fisher_common::prelude::*;
-use processor::HealthDetails;
+use fisher_common::structs::HealthDetails;
 
 
 #[derive(Debug)]
@@ -75,8 +75,9 @@ impl Response {
 mod tests {
     use serde_json;
 
-    use processor::HealthDetails;
     use fisher_common::prelude::*;
+    use fisher_common::structs::HealthDetails;
+
     use super::Response;
 
 

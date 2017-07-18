@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::fmt::Debug;
 
 use prelude::*;
+use structs::HealthDetails;
 
 
 /// This trait represents a script that can be run by Fisher.
@@ -85,4 +86,24 @@ pub trait JobTrait<S: ScriptTrait> {
 
     /// Get the name of the underlying script.
     fn script_name(&self) -> &str;
+}
+
+
+/// This trait represents the API of the processor
+pub trait ProcessorApiTrait<S: ScriptsRepositoryTrait>: Send {
+
+    /// Queue a new job into the processor.
+    fn queue(&self, job: S::Job, priority: isize) -> Result<()>;
+
+    /// Get some insights about the health of the processor.
+    fn health_details(&self) -> Result<HealthDetails>;
+
+    /// Execute periodic cleanup tasks on the processor.
+    fn cleanup(&self) -> Result<()>;
+
+    /// Lock the processor, preventing new jobs to be run.
+    fn lock(&self) -> Result<()>;
+
+    /// Unlock the processor, allowing new jobs to be run.
+    fn unlock(&self) -> Result<()>;
 }

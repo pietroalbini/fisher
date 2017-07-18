@@ -29,6 +29,7 @@ serde_derive="^1.0"
 serde_json="^1.0"
 
 fisher_common = { version="^0.1", path="fisher_common" }
+fisher_processor = { version="^0.1", path="fisher_processor" }
 
 # Dependencies for the "provider-github" feature
 ring = { version="^0.9.4", optional=true }

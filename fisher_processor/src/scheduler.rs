@@ -19,6 +19,7 @@ use std::sync::{Arc, mpsc};
 use fisher_common::prelude::*;
 use fisher_common::state::{State, UniqueId};
 use fisher_common::serial::Serial;
+use fisher_common::structs::HealthDetails;
 
 use super::thread::Thread;
 use super::scheduled_job::ScheduledJob;
@@ -46,14 +47,6 @@ impl<S: ScriptsRepositoryTrait> DebugDetails<S> {
             waiting: waiting,
         }
     }
-}
-
-
-#[derive(Clone, Debug, Serialize)]
-pub struct HealthDetails {
-    pub queued_jobs: usize,
-    pub busy_threads: u16,
-    pub max_threads: u16,
 }
 
 
@@ -577,7 +570,7 @@ mod tests {
                 // Only one job should be running
                 let mut status;
                 loop {
-                    status = api.health_status()?;
+                    status = api.health_details()?;
                     if status.queued_jobs == waiters.len() {
                         break;
                     } else if status.queued_jobs != waiters.len() + 1 {
@@ -602,7 +595,7 @@ mod tests {
     }
 
     #[test]
-    fn test_health_status() {
+    fn test_health_details() {
         test_wrapper(|| {
             let repo = Repository::<
                 Option<Arc<Mutex<mpsc::Receiver<()>>>>
@@ -633,7 +626,7 @@ mod tests {
             }
 
             // Get the health status of the processor
-            let status = api.health_status()?;
+            let status = api.health_details()?;
 
             // Check if the health details are correct
             assert_eq!(status.queued_jobs, 10);
@@ -689,7 +682,7 @@ mod tests {
             }
 
             // Wait until the previous operation ended
-            while api.health_status()?.queued_jobs != 4 { }
+            while api.health_details()?.queued_jobs != 4 { }
 
             let debug = api.debug_details()?;
             assert_eq!(debug.waiting.get(&old_hook_id), Some(&4));
@@ -718,7 +711,7 @@ mod tests {
             }
 
             // Wait until the previous operation ended
-            while api.health_status()?.busy_threads != 0 { }
+            while api.health_details()?.busy_threads != 0 { }
 
             // Execute a second cleanup
             api.cleanup()?;

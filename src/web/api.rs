@@ -16,26 +16,26 @@
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use fisher_common::prelude::*;
+
 use requests::{Request, RequestType};
 use hooks::Hooks;
 use jobs::Job;
-use processor::ProcessorApi;
 use web::responses::Response;
 
 
 #[derive(Clone)]
-pub struct WebApi {
-    processor: Arc<Mutex<ProcessorApi<Hooks>>>,
+pub struct WebApi<A: ProcessorApiTrait<Hooks>> {
+    processor: Arc<Mutex<A>>,
     hooks: Arc<Hooks>,
     locked: Arc<AtomicBool>,
 
     health_enabled: bool,
 }
 
-impl WebApi {
+impl<A: ProcessorApiTrait<Hooks>> WebApi<A> {
 
-    pub fn new(processor: ProcessorApi<Hooks>,
-               hooks: Arc<Hooks>, locked: Arc<AtomicBool>,
+    pub fn new(processor: A, hooks: Arc<Hooks>, locked: Arc<AtomicBool>,
                health_enabled: bool) -> Self {
         WebApi {
             processor: Arc::new(Mutex::new(processor)),
@@ -85,7 +85,7 @@ impl WebApi {
     pub fn get_health(&self, _req: &Request, _args: Vec<String>) -> Response {
         if self.health_enabled {
             Response::HealthStatus(
-                self.processor.lock().unwrap().health_status().unwrap()
+                self.processor.lock().unwrap().health_details().unwrap()
             )
         } else {
             Response::Forbidden

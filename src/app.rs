@@ -20,9 +20,9 @@ use std::sync::Arc;
 
 use fisher_common::prelude::*;
 use fisher_common::state::State;
+use fisher_processor::{Processor, ProcessorApi};
 
 use hooks::{HookNamesIter, Hooks, HooksBlueprint, Hook};
-use processor::Processor;
 use web::WebApp;
 use jobs::Context;
 use utils;
@@ -143,13 +143,13 @@ impl<'a> Fisher<'a> {
 
 pub struct RunningFisher {
     processor: Processor<Hooks>,
-    web_api: WebApp,
+    web_api: WebApp<ProcessorApi<Hooks>>,
     hooks_blueprint: HooksBlueprint,
 }
 
 impl RunningFisher {
 
-    fn new(processor: Processor<Hooks>, web_api: WebApp,
+    fn new(processor: Processor<Hooks>, web_api: WebApp<ProcessorApi<Hooks>>,
            hooks_blueprint: HooksBlueprint) -> Self {
         RunningFisher {
             processor: processor,

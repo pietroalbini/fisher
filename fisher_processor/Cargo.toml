@@ -1,15 +1,13 @@
 [package]
-name = "fisher_common"
+name = "fisher_processor"
 version = "0.1.0"
 license = "GPL-3.0"
 
-description = "Common code for the fisher crate"
+description = "Processor of the Fisher crate"
 authors = ["Pietro Albini <pietro@pietroalbini.org>"]
 
 repository = "https://github.com/pietroalbini/fisher"
 
 [dependencies]
-ansi_term="^0.9"
-serde="^1.0"
-serde_derive="^1.0"
-serde_json="^1.0"
+
+fisher_common = { version="^0.1", path="../fisher_common" }
