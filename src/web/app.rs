@@ -22,21 +22,20 @@ use tiny_http::Method;
 use fisher_common::prelude::*;
 
 use hooks::Hooks;
-use processor::ProcessorApi;
 use web::http::HttpServer;
 use web::api::WebApi;
 
 
-pub struct WebApp {
-    server: HttpServer<WebApi>,
+pub struct WebApp<A: ProcessorApiTrait<Hooks> + 'static> {
+    server: HttpServer<WebApi<A>>,
     addr: SocketAddr,
     locked: Arc<AtomicBool>,
 }
 
-impl WebApp {
+impl<A: ProcessorApiTrait<Hooks>> WebApp<A> {
 
     pub fn new(hooks: Arc<Hooks>, enable_health: bool, behind_proxies: u8,
-               bind: &str, processor: ProcessorApi<Hooks>)
+               bind: &str, processor: A)
                -> Result<Self> {
         let locked = Arc::new(AtomicBool::new(false));
 
@@ -97,7 +96,6 @@ mod tests {
     use fisher_common::prelude::*;
 
     use utils::testing::*;
-    use processor::{HealthDetails, ProcessorInput};
 
 
     #[test]
@@ -137,10 +135,9 @@ mod tests {
 
         // Assert a job is queued
         let input = inst.processor_input();
-        assert!(input.is_some());
 
         // Assert the right job is queued
-        if let ProcessorInput::Job(job, _) = input.unwrap() {
+        if let ProcessorApiCall::Queue(job, _) = input.unwrap() {
             assert_eq!(job.script_name(), "example.sh");
         } else {
             panic!("Wrong processor input received");
@@ -218,12 +215,6 @@ mod tests {
         let testing_env = TestingEnv::new();
         let mut inst = testing_env.start_web(true, 0);
 
-        let check_after = inst.next_health(HealthDetails {
-            queued_jobs: 1,
-            busy_threads: 2,
-            max_threads: 3,
-        });
-
         // Assert the request is OK
         let mut res = inst.request(Method::Get, "/health").send().unwrap();
         assert_eq!(res.status, StatusCode::Ok);
@@ -250,9 +241,6 @@ mod tests {
             result.get("max_threads").unwrap().as_u64().unwrap(),
             3 as u64
         );
-
-        // Check if there were any problems into the next_health thread
-        check_after.check();
 
         inst.stop();
         testing_env.cleanup();

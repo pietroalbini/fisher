@@ -17,14 +17,16 @@ use std::sync::{Arc, mpsc};
 
 use fisher_common::prelude::*;
 use fisher_common::state::State;
+use fisher_common::structs::HealthDetails;
 
-use super::scheduler::{Scheduler, SchedulerInput};
-#[cfg(test)] use super::scheduler::DebugDetails;
-use super::timer::Timer;
-use super::types::{Job, JobContext};
+use scheduler::{Scheduler, SchedulerInput};
+#[cfg(test)] use scheduler::DebugDetails;
+use timer::Timer;
+use types::{Job, JobContext};
 
-pub use super::scheduler::HealthDetails;
 
+/// This struct allows you to spawn a new processor, stop it and get its
+/// [`ProcessorApi`](struct.ProcessorApi.html).
 
 #[derive(Debug)]
 pub struct Processor<S: ScriptsRepositoryTrait + 'static> {
@@ -35,6 +37,8 @@ pub struct Processor<S: ScriptsRepositoryTrait + 'static> {
 
 impl<S: ScriptsRepositoryTrait> Processor<S> {
 
+    /// Create a new processor with the provided configuration. The returned
+    /// struct allows you to control it.
     pub fn new(max_threads: u16, hooks: Arc<S>, ctx: Arc<JobContext<S>>,
                state: Arc<State>) -> Result<Self> {
         // Retrieve wanted information from the spawned thread
@@ -68,6 +72,7 @@ impl<S: ScriptsRepositoryTrait> Processor<S> {
         Ok(processor)
     }
 
+    /// Stop this processor, and return only when the processor is stopped.
     pub fn stop(self) -> Result<()> {
         // Stop the timer
         self.timer.stop()?;
@@ -79,6 +84,7 @@ impl<S: ScriptsRepositoryTrait> Processor<S> {
         Ok(())
     }
 
+    /// Get a struct allowing you to control the processor.
     pub fn api(&self) -> ProcessorApi<S> {
         ProcessorApi {
             input: self.input.clone(),
@@ -86,6 +92,8 @@ impl<S: ScriptsRepositoryTrait> Processor<S> {
     }
 }
 
+
+/// This struct allows you to interact with a running processor.
 
 #[derive(Debug, Clone)]
 pub struct ProcessorApi<S: ScriptsRepositoryTrait> {
@@ -95,41 +103,37 @@ pub struct ProcessorApi<S: ScriptsRepositoryTrait> {
 impl<S: ScriptsRepositoryTrait> ProcessorApi<S> {
 
     #[cfg(test)]
-    pub fn mock(input: mpsc::Sender<SchedulerInput<S>>) -> Self {
-        ProcessorApi {
-            input: input,
-        }
-    }
-
-    pub fn queue(&self, job: Job<S>, priority: isize) -> Result<()> {
-        self.input.send(SchedulerInput::Job(job, priority))?;
-        Ok(())
-    }
-
-    pub fn health_status(&self) -> Result<HealthDetails> {
-        let (res_send, res_recv) = mpsc::channel();
-        self.input.send(SchedulerInput::HealthStatus(res_send))?;
-        Ok(res_recv.recv()?)
-    }
-
-    pub fn cleanup(&self) -> Result<()> {
-        self.input.send(SchedulerInput::Cleanup)?;
-        Ok(())
-    }
-
-    #[cfg(test)]
     pub fn debug_details(&self) -> Result<DebugDetails<S>> {
         let (res_send, res_recv) = mpsc::channel();
         self.input.send(SchedulerInput::DebugDetails(res_send))?;
         Ok(res_recv.recv()?)
     }
+}
 
-    pub fn lock(&self) -> Result<()> {
+impl<S: ScriptsRepositoryTrait> ProcessorApiTrait<S> for ProcessorApi<S> {
+
+    fn queue(&self, job: Job<S>, priority: isize) -> Result<()> {
+        self.input.send(SchedulerInput::Job(job, priority))?;
+        Ok(())
+    }
+
+    fn health_details(&self) -> Result<HealthDetails> {
+        let (res_send, res_recv) = mpsc::channel();
+        self.input.send(SchedulerInput::HealthStatus(res_send))?;
+        Ok(res_recv.recv()?)
+    }
+
+    fn cleanup(&self) -> Result<()> {
+        self.input.send(SchedulerInput::Cleanup)?;
+        Ok(())
+    }
+
+    fn lock(&self) -> Result<()> {
         self.input.send(SchedulerInput::Lock)?;
         Ok(())
     }
 
-    pub fn unlock(&self) -> Result<()> {
+    fn unlock(&self) -> Result<()> {
         self.input.send(SchedulerInput::Unlock)?;
         Ok(())
     }
