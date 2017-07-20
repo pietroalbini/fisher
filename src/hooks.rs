@@ -25,10 +25,12 @@ use serde_json;
 
 use fisher_common::prelude::*;
 use fisher_common::state::{State, IdKind, UniqueId};
+use fisher_common::structs::jobs::JobOutput;
+use fisher_common::structs::requests::{StatusEvent, StatusEventKind};
+use fisher_common::structs::requests::{Request, RequestType};
 
-use providers::{Provider, StatusEvent, StatusEventKind};
-use requests::{Request, RequestType};
-use jobs::{Job, JobOutput};
+use providers::Provider;
+use jobs::Job;
 
 
 lazy_static! {
@@ -377,11 +379,11 @@ impl ScriptsRepositoryTrait for Hooks {
     }
 
     fn jobs_after_output(&self, output: JobOutput) -> Option<StatusJobsIter> {
-        if ! output.trigger_status_hooks {
+        if ! output.job.trigger_status_hooks {
             return None;
         }
 
-        let event = if output.success {
+        let event = if output.exit.success() {
             StatusEvent::JobCompleted(output)
         } else {
             StatusEvent::JobFailed(output)
@@ -559,13 +561,13 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
+    use fisher_common::prelude::*;
     use fisher_common::state::State;
+    use fisher_common::structs::requests::StatusEventKind;
+    use fisher_common::structs::requests::{Request, RequestKind};
 
     use utils::testing::*;
     use utils;
-    use fisher_common::prelude::*;
-    use providers::StatusEventKind;
-    use requests::{Request, RequestType};
 
     use super::{Hook, HooksCollector, HooksBlueprint};
 

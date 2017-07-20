@@ -16,65 +16,13 @@
 use std::fs;
 use std::io::Write;
 use std::slice::Iter as SliceIter;
-use std::net::IpAddr;
 
 use serde_json;
 
+use fisher_common::structs::jobs::ProcessExit;
+use fisher_common::structs::requests::{StatusEvent, StatusEventKind};
+
 use providers::prelude::*;
-use jobs::JobOutput;
-
-
-#[derive(Debug, Clone)]
-pub enum StatusEvent {
-    JobCompleted(JobOutput),
-    JobFailed(JobOutput),
-}
-
-impl StatusEvent {
-
-    #[inline]
-    pub fn kind(&self) -> StatusEventKind {
-        match *self {
-            StatusEvent::JobCompleted(..) => StatusEventKind::JobCompleted,
-            StatusEvent::JobFailed(..) => StatusEventKind::JobFailed,
-        }
-    }
-
-    #[inline]
-    pub fn hook_name(&self) -> &String {
-        match *self {
-            StatusEvent::JobCompleted(ref output) |
-            StatusEvent::JobFailed(ref output) => &output.hook_name,
-        }
-    }
-
-    #[inline]
-    pub fn source_ip(&self) -> IpAddr {
-        match *self {
-            StatusEvent::JobCompleted(ref output) |
-            StatusEvent::JobFailed(ref output) => output.request_ip,
-        }
-    }
-}
-
-
-#[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, Deserialize)]
-pub enum StatusEventKind {
-    #[serde(rename = "job_completed")]
-    JobCompleted,
-    #[serde(rename = "job_failed")]
-    JobFailed,
-}
-
-impl StatusEventKind {
-
-    fn name(&self) -> &str {
-        match *self {
-            StatusEventKind::JobCompleted => "job_completed",
-            StatusEventKind::JobFailed => "job_failed",
-        }
-    }
-}
 
 
 #[derive(Debug, Deserialize)]
@@ -118,7 +66,7 @@ impl ProviderTrait for StatusProvider {
         }
 
         // The hook name must be allowed
-        if ! self.hook_allowed(req.hook_name()) {
+        if ! self.hook_allowed(req.script_name()) {
             return RequestType::Invalid;
         }
 
@@ -141,7 +89,7 @@ impl ProviderTrait for StatusProvider {
         }
 
         env.insert("EVENT".into(), req.kind().name().into());
-        env.insert("HOOK_NAME".into(), req.hook_name().clone());
+        env.insert("HOOK_NAME".into(), req.script_name().into());
 
         // Event-specific env
         match *req {
@@ -152,18 +100,17 @@ impl ProviderTrait for StatusProvider {
             },
             StatusEvent::JobFailed(ref output) => {
                 env.insert("SUCCESS".into(), "0".into());
-                env.insert(
-                    "EXIT_CODE".into(),
-                    if let Some(code) = output.exit_code {
-                        format!("{}", code)
-                    } else { String::new() }
-                );
-                env.insert(
-                    "SIGNAL".into(),
-                    if let Some(signal) = output.signal {
-                        format!("{}", signal)
-                    } else { String::new() }
-                );
+
+                match output.exit {
+                    ProcessExit::ExitCode(code) => {
+                        env.insert("EXIT_CODE".into(), code.to_string());
+                        env.insert("SIGNAL".into(), String::new());
+                    },
+                    ProcessExit::Signal(signal) => {
+                        env.insert("EXIT_CODE".into(), String::new());
+                        env.insert("SIGNAL".into(), signal.to_string());
+                    },
+                }
             },
         }
 
@@ -210,9 +157,11 @@ impl ProviderTrait for StatusProvider {
 mod tests {
     use std::fs;
 
+    use fisher_common::structs::jobs::ProcessExit;
+    use fisher_common::structs::requests::RequestType;
+
     use utils::testing::*;
     use utils;
-    use requests::RequestType;
     use providers::ProviderTrait;
 
     use super::{StatusEvent, StatusProvider};
@@ -325,9 +274,7 @@ mod tests {
 
         // Try with a job_failed event
         let mut output = dummy_job_output();
-        output.success = false;
-        output.exit_code = None;
-        output.signal = Some(9);
+        output.exit = ProcessExit::Signal(9);
 
         let env = provider.env(&StatusEvent::JobFailed(output).into());
         assert_eq!(env.len(), 5);

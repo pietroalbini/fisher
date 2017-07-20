@@ -15,7 +15,6 @@
 
 mod http;
 mod app;
-mod requests;
 mod responses;
 mod proxies;
 
@@ -24,4 +23,3 @@ mod api;
 
 pub use self::http::HttpServer;
 pub use self::app::WebApp;
-pub use self::requests::WebRequest;

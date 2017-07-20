@@ -25,11 +25,12 @@ use hyper::method::Method;
 use fisher_common::prelude::*;
 use fisher_common::state::State;
 use fisher_common::structs::HealthDetails;
+use fisher_common::structs::jobs::{JobOutput, JobDetails, ProcessExit};
+use fisher_common::structs::requests::{Request, WebRequest};
 
 use hooks::{Hooks, HooksBlueprint};
-use jobs::{Job, JobOutput};
-use web::{WebApp, WebRequest};
-use requests::Request;
+use web::WebApp;
+use jobs::Job;
 use utils;
 
 
@@ -73,14 +74,13 @@ pub fn dummy_job_output() -> JobOutput {
         stdout: "hello world".into(),
         stderr: "something happened".into(),
 
-        success: true,
-        exit_code: Some(0),
-        signal: None,
+        exit: ProcessExit::ExitCode(0),
 
-        hook_name: "test".into(),
-        request_ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-
-        trigger_status_hooks: true,
+        job: JobDetails {
+            script_name: "test".into(),
+            ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            trigger_status_hooks: true,
+        }
     }
 }
 

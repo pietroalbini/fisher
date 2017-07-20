@@ -38,7 +38,6 @@ mod hooks;
 mod jobs;
 mod web;
 mod app;
-mod requests;
 mod native;
 
 // Public API

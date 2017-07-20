@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::collections::HashMap;
 use std::net::{SocketAddr, TcpStream, Shutdown};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -22,9 +23,11 @@ use std::thread;
 
 use regex::{self, Regex};
 use tiny_http::{self, Method};
+use url::form_urlencoded;
 
 use fisher_common::prelude::*;
-use requests::Request;
+use fisher_common::structs::requests::{Request, WebRequest};
+
 use web::responses::Response;
 use web::proxies::ProxySupport;
 
@@ -194,7 +197,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
                 }
 
                 // Convert the request to a Fisher request
-                let mut req = Request::Web((&mut request).into());
+                let mut req = Request::Web(create_webrequest(&mut request));
 
                 let response = (|| {
                     if *request.method() == ignored_method {
@@ -270,6 +273,50 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
 }
 
 
+fn create_webrequest(from: &mut tiny_http::Request) -> WebRequest {
+    // Get the source IP
+    let source = from.remote_addr().ip();
+
+    // Get the headers
+    let mut headers = HashMap::new();
+    for header in from.headers() {
+        headers.insert(
+            header.field.as_str().as_str().to_string(),
+            header.value.as_str().to_string(),
+        );
+    }
+
+    // Get the body
+    let mut body = String::new();
+    from.as_reader().read_to_string(&mut body).unwrap();
+
+    // Get the querystring
+    let url = from.url();
+    let params = if url.contains('?') {
+        let query = url.rsplitn(2, '?').nth(0).unwrap();
+        params_from_query(query)
+    } else {
+        HashMap::new()
+    };
+
+    WebRequest {
+        source: source,
+        headers: headers,
+        params: params,
+        body: body,
+    }
+}
+
+
+pub fn params_from_query(query: &str) -> HashMap<String, String> {
+    let mut hashmap = HashMap::new();
+    for (a, b) in form_urlencoded::parse(query.as_bytes()).into_owned() {
+        hashmap.insert(a, b);
+    }
+    hashmap
+}
+
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -278,7 +325,8 @@ mod tests {
     use hyper;
     use hyper::status::StatusCode;
 
-    use requests::Request;
+    use fisher_common::structs::requests::Request;
+
     use web::responses::Response;
     use utils::testing::*;
     use super::{Route, Handler, HttpServer};

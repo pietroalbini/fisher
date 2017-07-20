@@ -17,8 +17,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use fisher_common::prelude::*;
+use fisher_common::structs::requests::{Request, RequestType};
 
-use requests::{Request, RequestType};
 use hooks::Hooks;
 use jobs::Job;
 use web::responses::Response;

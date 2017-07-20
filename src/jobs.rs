@@ -26,10 +26,11 @@ use std::net::IpAddr;
 
 use fisher_common::prelude::*;
 use fisher_common::state::UniqueId;
+use fisher_common::structs::jobs::{JobOutput, JobDetails, ProcessExit};
+use fisher_common::structs::requests::Request;
 
 use hooks::Hook;
 use utils;
-use requests::Request;
 use providers::Provider;
 use native;
 
@@ -146,7 +147,7 @@ impl Job {
         fs::remove_dir_all(&working_directory)?;
 
         // Return the job output
-        Ok((self, output).into())
+        Ok(create_job_output(self, output))
     }
 
     fn prepare_env(&self, command: &mut process::Command) {
@@ -213,6 +214,7 @@ impl JobTrait<Hook> for Job {
 }
 
 
+/*
 #[derive(Debug, Clone)]
 pub struct JobOutput {
     pub stdout: String,
@@ -227,23 +229,27 @@ pub struct JobOutput {
 
     pub trigger_status_hooks: bool,
 }
+*/
 
-impl<'a> From<(&'a Job, process::Output)> for JobOutput {
 
-    fn from(data: (&'a Job, process::Output)) -> JobOutput {
-        JobOutput {
-            stdout: String::from_utf8_lossy(&data.1.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&data.1.stderr).into_owned(),
+fn create_job_output(job: &Job, output: process::Output) -> JobOutput {
+    JobOutput {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
 
-            success: data.1.status.success(),
-            exit_code: data.1.status.code(),
-            signal: data.1.status.signal(),
+        exit: if let Some(code) = output.status.code() {
+            ProcessExit::ExitCode(code)
+        } else if let Some(signal) = output.status.signal() {
+            ProcessExit::Signal(signal)
+        } else {
+            unreachable!();
+        },
 
-            hook_name: data.0.script_name().into(),
-            request_ip: data.0.request_ip(),
-
-            trigger_status_hooks: data.0.trigger_status_hooks(),
-        }
+        job: JobDetails {
+            script_name: job.script_name().into(),
+            ip: job.request_ip(),
+            trigger_status_hooks: job.trigger_status_hooks(),
+        },
     }
 }
 
@@ -254,6 +260,7 @@ mod tests {
     use std::collections::HashMap;
 
     use fisher_common::prelude::*;
+    use fisher_common::structs::jobs::ProcessExit;
 
     use utils::testing::*;
     use utils;
@@ -322,13 +329,13 @@ mod tests {
         // The "example" hook should be processed without problems
         let job = env.create_job("example.sh", dummy_web_request().into());
         let result = job.process(&ctx).unwrap();
-        assert!(result.success);
-        assert_eq!(result.exit_code, Some(0));
+        assert!(result.exit.success());
+        assert_eq!(result.exit, ProcessExit::ExitCode(0));
 
         let job = env.create_job("failing.sh", dummy_web_request().into());
         let result = job.process(&ctx).unwrap();
-        assert!(! result.success);
-        assert_eq!(result.exit_code, Some(1));
+        assert!(! result.exit.success());
+        assert_eq!(result.exit, ProcessExit::ExitCode(1));
 
         env.cleanup();
     }

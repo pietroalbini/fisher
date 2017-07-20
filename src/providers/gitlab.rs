@@ -143,9 +143,9 @@ fn normalize_event_name(input: &str) -> &str {
 mod tests {
     use std::collections::HashMap;
 
+    use fisher_common::structs::requests::{Request, RequestType, WebRequest};
+
     use utils::testing::*;
-    use requests::{Request, RequestType};
-    use web::WebRequest;
     use providers::ProviderTrait;
 
     use super::{GITLAB_EVENTS, GitLabProvider, normalize_event_name};

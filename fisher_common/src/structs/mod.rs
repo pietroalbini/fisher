@@ -15,6 +15,9 @@
 
 //! Structs used by Fisher.
 
+pub mod jobs;
+pub mod requests;
+
 
 /// This struct contains some information about how the processor is feeling.
 

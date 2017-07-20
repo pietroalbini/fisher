@@ -15,8 +15,9 @@
 
 use std::net::IpAddr;
 
-use requests::Request;
 use fisher_common::prelude::*;
+use fisher_common::structs::requests::Request;
+
 use utils;
 
 
@@ -81,9 +82,10 @@ mod tests {
     use std::net::IpAddr;
     use std::str::FromStr;
 
+    use fisher_common::structs::requests::Request;
+
     use utils::testing::*;
     use fisher_common::prelude::*;
-    use requests::Request;
 
     use super::ProxySupport;
 

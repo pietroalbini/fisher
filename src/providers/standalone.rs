@@ -90,8 +90,9 @@ impl ProviderTrait for StandaloneProvider {
 mod tests {
     use std::collections::HashMap;
 
+    use fisher_common::structs::requests::RequestType;
+
     use utils::testing::*;
-    use requests::RequestType;
     use providers::ProviderTrait;
 
     use super::StandaloneProvider;

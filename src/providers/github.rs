@@ -181,8 +181,9 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use fisher_common::structs::requests::RequestType;
+
     use utils::testing::*;
-    use requests::RequestType;
     use providers::ProviderTrait;
 
     use super::{GITHUB_EVENTS, GitHubProvider, verify_signature};

@@ -25,19 +25,17 @@ pub mod prelude {
     pub use std::collections::HashMap;
     pub use std::path::PathBuf;
 
-    pub use providers::ProviderTrait;
-    pub use requests::{Request, RequestType};
     pub use fisher_common::prelude::*;
+    pub use fisher_common::structs::requests::{Request, RequestType};
+
+    pub use providers::ProviderTrait;
 }
-
-
-pub use self::status::{StatusEvent, StatusEventKind};
 
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use requests::{Request, RequestType};
+use fisher_common::structs::requests::{Request, RequestType};
 use fisher_common::prelude::*;
 
 

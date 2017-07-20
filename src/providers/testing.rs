@@ -121,8 +121,9 @@ mod tests {
     use std::net::IpAddr;
     use std::str::FromStr;
 
+    use fisher_common::structs::requests::RequestType;
+
     use utils::testing::*;
-    use requests::RequestType;
     use providers::ProviderTrait;
 
     use super::TestingProvider;
