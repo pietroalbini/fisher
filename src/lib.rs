@@ -23,6 +23,7 @@ extern crate url;
 extern crate rand;
 extern crate tiny_http;
 extern crate libc;
+extern crate nix;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate lazy_static;
