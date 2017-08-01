@@ -23,6 +23,7 @@ rand="^0.3"
 tiny_http="^0.5"
 libc="^0.2"
 signal="^0.3"
+nix="^0.9"
 
 serde="^1.0"
 serde_derive="^1.0"

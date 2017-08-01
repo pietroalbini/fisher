@@ -13,19 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use libc;
+use nix::unistd::{setpgid, Pid};
 
 
 pub fn isolate_process() {
-    // Change the process group ID
-    // This prevents signals to propagate
-    unsafe {
-        // This shouldn't cause any error at all  -pietro
-        setpgid(0, 0);
-    }
-}
-
-
-extern {
-    fn setpgid(pid: libc::pid_t, pgid: libc::pid_t) -> libc::c_int;
+    // If a new process group is not created, the job still works fine
+    let _ = setpgid(Pid::this(), Pid::from_raw(0));
 }
