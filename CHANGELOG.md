@@ -2,6 +2,12 @@
 
 This document contains what changed in each release of Fisher.
 
+### Fisher 1.0.0-beta.7
+
+*Released on August 16th, 2017.*
+
+* Fix hooks with multiple providers not validated properly
+
 ### Fisher 1.0.0-beta.6
 
 *Released on May 10th, 2017.*

@@ -10,4 +10,4 @@ repository = "https://github.com/pietroalbini/fisher"
 
 [dependencies]
 
-fisher_common = { version="^0.1", path="../fisher_common" }
+fisher_common = { version="^0.2", path="../fisher_common" }

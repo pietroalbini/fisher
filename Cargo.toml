@@ -1,6 +1,6 @@
 [package]
 name = "fisher"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 license = "GPL-3.0"
 
 description = "Webhooks catcher written in Rust"
@@ -28,7 +28,7 @@ serde="^1.0"
 serde_derive="^1.0"
 serde_json="^1.0"
 
-fisher_common = { version="^0.1", path="fisher_common" }
+fisher_common = { version="^0.2", path="fisher_common" }
 fisher_processor = { version="^0.1", path="fisher_processor" }
 
 # Dependencies for the "provider-github" feature
