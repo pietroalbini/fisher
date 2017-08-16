@@ -155,7 +155,11 @@ impl Hook {
         if ! self.providers.is_empty() {
             // Check every provider if they're present
             for provider in &self.providers {
-                return (provider.validate(req), Some(provider.clone()))
+                let result = provider.validate(req);
+
+                if result != RequestType::Invalid {
+                    return (provider.validate(req), Some(provider.clone()))
+                }
             }
             (RequestType::Invalid, None)
         } else {
@@ -561,6 +565,7 @@ mod tests {
     use utils;
     use fisher_common::prelude::*;
     use providers::StatusEventKind;
+    use requests::{Request, RequestType};
 
     use super::{Hook, HooksCollector, HooksBlueprint};
 
@@ -978,6 +983,51 @@ mod tests {
         assert!(id1 < id2);
         assert!(id2 < id3);
         assert!(id1 < id3);
+
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+
+    #[test]
+    fn test_validate() {
+        let state = Arc::new(State::new());
+        let base = utils::create_temp_dir().unwrap();
+
+        create_hook!(base, "single.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Testing: {}"#,
+            r#"echo "ok""#
+        );
+
+        create_hook!(base, "failing.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Standalone: {"secret": "hi"}"#,
+            r#"echo "ok""#
+        );
+
+        create_hook!(base, "multiple1.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Testing: {}"#,
+            r#"## Fisher-Standalone: {"secret": "hi"}"#
+        );
+
+        create_hook!(base, "multiple2.sh",
+            r#"#!/bin/bash"#,
+            r#"## Fisher-Standalone: {"secret": "hi"}"#,
+            r#"## Fisher-Testing: {}"#
+        );
+
+        let single = assert_hook!(&state, base, "single.sh");
+        let failing = assert_hook!(&state, base, "failing.sh");
+        let multiple1 = assert_hook!(&state, base, "multiple1.sh");
+        let multiple2 = assert_hook!(&state, base, "multiple2.sh");
+
+        let req = Request::Web(dummy_web_request());
+
+        assert!(single.validate(&req).0 == RequestType::ExecuteHook);
+        assert!(failing.validate(&req).0 == RequestType::Invalid);
+        assert!(multiple1.validate(&req).0 == RequestType::ExecuteHook);
+        assert!(multiple2.validate(&req).0 == RequestType::ExecuteHook);
 
         fs::remove_dir_all(&base).unwrap();
     }
