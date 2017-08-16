@@ -158,7 +158,7 @@ impl Hook {
                 let result = provider.validate(req);
 
                 if result != RequestType::Invalid {
-                    return (provider.validate(req), Some(provider.clone()))
+                    return (result, Some(provider.clone()))
                 }
             }
             (RequestType::Invalid, None)
