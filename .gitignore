@@ -1,5 +1,7 @@
 /build
 
+/docs/book
+
 /target
 /fisher_common/target
 /fisher_processor/target
