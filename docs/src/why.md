@@ -1,4 +1,4 @@
-# Why should you use Fisher
+# Why you should use Fisher
 
 There are a lot of ways to catch and act on incoming webhooks out there, such
 as simple CGI scripts, small dedicated web applications or even other projects
