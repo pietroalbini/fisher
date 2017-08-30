@@ -38,3 +38,43 @@ $ cargo build --release
 ```
 
 The binary will be available in `target/release/fisher`.
+
+## Starting Fisher at boot time
+
+If you want to start Fisher at boot, you should create a new systemd service
+(if your distribution uses systemd as the init). Place the following file in
+`/etc/systemd/system/fisher.service`:
+
+```
+[Unit]
+Description=The Fisher webhooks catcher
+
+[Service]
+ExecStart=/usr/local/bin/fisher /srv/webhooks
+ExecReload=/bin/kill -USR1 $MAINPID
+
+User=fisher
+Group=fisher
+
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+This service assumes your system is configured this way:
+
+- The Fisher binary is located in `/usr/local/bin/fisher`
+- The scripts directory is located in `/srv/webhooks`
+- Fisher is executed by the `fisher` user
+
+If those things don't match your server configuration, you must change them in
+the service file. Then, you can manage Fisher like every other systemd service:
+
+```
+$ systemctl start fisher
+$ systemctl stop fisher
+$ systemctl restart fisher
+$ systemctl reload fisher
+$ systemctl status fisher
+```
