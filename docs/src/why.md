@@ -1,6 +1,6 @@
 # Why you should use Fisher
 
-There are a lot of ways to catch and act on incoming webhooks out there, such
+There's a lot of ways to catch and act on incoming webhooks out there, such
 as simple CGI scripts, small dedicated web applications or even other projects
 similar to Fisher. Fisher has multiple advantages over them, though.
 
@@ -11,7 +11,8 @@ Fisher is made to be simple to operate and monitor.
 There is no need to create a configuration file listing all the available
 webhooks, or to use a specific naming convention for the scripts in the
 filesystem: you just need to put all the scripts in a directory, and Fisher
-will automatically scan it and load all the *executable* files as new webhooks.
+will automatically scan them and load all the *executable* files as new
+webhooks.
 
 Because there is no centralized configuration file, each script is configured
 by adding comments to the top of its source file: this allows you to keep all
@@ -48,9 +49,9 @@ execution, which is set also as the `$HOME` to avoid dotfiles being written
 somewhere else. This allows, for example, to execute multiple instances of the
 same script in parallel.
 
-To guarantee reproducibility, the execution environment is cleaned of most of
-the existing environment variables: only a few of them are kept by default, and
-you can manually add custom ones if you need them.
+To guarantee reproducibility, the execution environment is stripped out of most
+of the existing environment variables: only a few of them are kept by default,
+and you can manually add custom ones if you need them.
 
 ## Advanced scheduling
 
@@ -59,7 +60,7 @@ deterministic, and it has multiple features to control the order in which the
 scripts are executed.
 
 One of those features is scripts priority: you can specify what's the priority
-of each scripts, and higher-priority scripts in the queue will be executed
+of each script, and higher-priority scripts in the queue will be executed
 before the others. This ensures the most important webhooks will be processed
 right away!
 
@@ -72,15 +73,15 @@ in parallel.
 
 ## Easy monitoring
 
-Fisher allows itself to be easy monitored, to give you all the diagnostics
-information you need.
+Fisher can be easily monitored, to give you all the diagnostics information you
+need.
 
-There is an endpoint, `/health`, you can use to do black-box monitoring: it
-returns a few numbers (such as the number of webhooks in the queue) you can use
-to build graphs or trigger alerts after they reach a certain threshold.
+There is an endpoint, `/health`, which you can use to do black-box monitoring:
+it returns a few numbers (such as the number of webhooks in the queue), that you
+can use to build graphs or trigger alerts after they reach a certain threshold.
 
 If you need insights why a webhook failed, you can also create *status hooks*,
-special scripts executed after a script is run. Status hooks receives all the
+special scripts executed after a script is run. Status hooks receive all the
 details about the previous execution, such as standard output/error and exit
 code. You can use them to log jobs into your existing systems, or to alert you
 when something fails.
