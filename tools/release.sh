@@ -21,7 +21,7 @@ FILES_BASE="public/releases/fisher"
 
 RELEASE_BRANCH_PREFIX="release/"
 
-SUBCRATES="fisher_common fisher_processor"
+SUBCRATES="fisher_common"
 
 
 # Detect source directory

@@ -19,10 +19,10 @@ use fisher_common::prelude::*;
 use fisher_common::state::State;
 use fisher_common::structs::HealthDetails;
 
-use scheduler::{Scheduler, SchedulerInput};
-#[cfg(test)] use scheduler::DebugDetails;
-use timer::Timer;
-use types::{Job, JobContext};
+use processor::scheduler::{Scheduler, SchedulerInput};
+#[cfg(test)] use processor::scheduler::DebugDetails;
+use processor::timer::Timer;
+use processor::types::{Job, JobContext};
 
 
 /// This struct allows you to spawn a new processor, stop it and get its

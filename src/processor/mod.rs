@@ -28,4 +28,4 @@ mod timer;
 mod types;
 #[cfg(test)] mod test_utils;
 
-pub use api::{Processor, ProcessorApi};
+pub use processor::api::{Processor, ProcessorApi};

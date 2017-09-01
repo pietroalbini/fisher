@@ -20,12 +20,12 @@ use std::sync::Arc;
 
 use fisher_common::prelude::*;
 use fisher_common::state::State;
-use fisher_processor::{Processor, ProcessorApi};
 
 use hooks::{HookNamesIter, Hooks, HooksBlueprint, Hook};
-use web::WebApp;
 use jobs::Context;
+use processor::{Processor, ProcessorApi};
 use utils;
+use web::WebApp;
 
 
 pub trait IntoHook {

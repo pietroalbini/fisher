@@ -30,9 +30,9 @@ extern crate libc;
 #[cfg(test)] extern crate hyper;
 
 extern crate fisher_common;
-extern crate fisher_processor;
 
 #[macro_use] mod utils;
+mod processor;
 mod providers;
 mod hooks;
 mod jobs;
