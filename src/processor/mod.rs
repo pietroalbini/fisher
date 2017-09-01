@@ -22,7 +22,6 @@ mod api;
 mod scheduled_job;
 mod scheduler;
 mod thread;
-mod timer;
 mod types;
 #[cfg(test)] mod test_utils;
 

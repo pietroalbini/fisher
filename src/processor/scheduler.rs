@@ -14,6 +14,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::time::Instant;
 use std::sync::{Arc, mpsc};
 
 use common::prelude::*;
@@ -103,6 +104,8 @@ pub struct Scheduler<S: ScriptsRepositoryTrait + 'static> {
 
     input_send: mpsc::Sender<SchedulerInput<S>>,
     input_recv: mpsc::Receiver<SchedulerInput<S>>,
+
+    last_cleanup: Instant,
 }
 
 impl<S: ScriptsRepositoryTrait> Scheduler<S> {
@@ -133,6 +136,8 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
 
             input_send: input_send,
             input_recv: input_recv,
+
+            last_cleanup: Instant::now(),
         }
     }
 
@@ -148,6 +153,14 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
         let mut serial = Serial::zero();
         let mut to_schedule = Vec::new();
         while let Ok(input) = self.input_recv.recv() {
+            // Check if the periodic cleanup should be done now
+            if self.last_cleanup.elapsed().as_secs() > 30 {
+                self.cleanup_threads();
+                self.cleanup_hooks();
+
+                self.last_cleanup = Instant::now();
+            }
+
             match input {
 
                 SchedulerInput::Job(job, priority) => {

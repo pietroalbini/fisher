@@ -21,7 +21,6 @@ use common::structs::HealthDetails;
 
 use processor::scheduler::{Scheduler, SchedulerInput};
 #[cfg(test)] use processor::scheduler::DebugDetails;
-use processor::timer::Timer;
 use processor::types::{Job, JobContext};
 
 
@@ -31,7 +30,6 @@ use processor::types::{Job, JobContext};
 #[derive(Debug)]
 pub struct Processor<S: ScriptsRepositoryTrait + 'static> {
     input: mpsc::Sender<SchedulerInput<S>>,
-    timer: Timer,
     wait: mpsc::Receiver<()>,
 }
 
@@ -57,26 +55,14 @@ impl<S: ScriptsRepositoryTrait> Processor<S> {
             wait_send.send(()).unwrap();
         });
 
-        let processor = Processor {
+        Ok(Processor {
             input: input_recv.recv()?,
-            timer: Timer::new(),
             wait: wait_recv,
-        };
-
-        // Set up the cleanup timer
-        let api = processor.api();
-        processor.timer.add_task(30, move || {
-            let _ = api.cleanup();
-        })?;
-
-        Ok(processor)
+        })
     }
 
     /// Stop this processor, and return only when the processor is stopped.
     pub fn stop(self) -> Result<()> {
-        // Stop the timer
-        self.timer.stop()?;
-
         // Ask the processor to stop
         self.input.send(SchedulerInput::StopSignal)?;
         self.wait.recv()?;
