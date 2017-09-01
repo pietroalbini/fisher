@@ -16,7 +16,7 @@
 use serde_json;
 
 use providers::prelude::*;
-use fisher_common::prelude::*;
+use common::prelude::*;
 
 
 lazy_static! {

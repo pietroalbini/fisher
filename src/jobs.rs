@@ -24,8 +24,8 @@ use std::io::Write;
 use std::sync::Arc;
 use std::net::IpAddr;
 
-use fisher_common::prelude::*;
-use fisher_common::state::UniqueId;
+use common::prelude::*;
+use common::state::UniqueId;
 
 use hooks::Hook;
 use utils;
@@ -253,7 +253,7 @@ mod tests {
     use std::env;
     use std::collections::HashMap;
 
-    use fisher_common::prelude::*;
+use common::prelude::*;
 
     use utils::testing::*;
     use utils;

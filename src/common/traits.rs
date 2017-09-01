@@ -19,8 +19,8 @@ use std::hash::Hash;
 use std::sync::Arc;
 use std::fmt::Debug;
 
-use prelude::*;
-use structs::HealthDetails;
+use super::prelude::*;
+use super::structs::HealthDetails;
 
 
 /// This trait represents a script that can be run by Fisher.

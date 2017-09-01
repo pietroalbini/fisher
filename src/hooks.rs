@@ -23,8 +23,8 @@ use std::sync::{Arc, RwLock};
 use regex::Regex;
 use serde_json;
 
-use fisher_common::prelude::*;
-use fisher_common::state::{State, IdKind, UniqueId};
+use common::prelude::*;
+use common::state::{State, IdKind, UniqueId};
 
 use providers::{Provider, StatusEvent, StatusEventKind};
 use requests::{Request, RequestType};
@@ -559,11 +559,11 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
-    use fisher_common::state::State;
+use common::state::State;
 
     use utils::testing::*;
     use utils;
-    use fisher_common::prelude::*;
+use common::prelude::*;
     use providers::StatusEventKind;
     use requests::{Request, RequestType};
 

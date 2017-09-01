@@ -18,8 +18,8 @@ use std::thread;
 use std::fmt;
 use std::ops::Deref;
 
-use fisher_common::prelude::*;
-use fisher_common::state::{State, IdKind, UniqueId};
+use common::prelude::*;
+use common::state::{State, IdKind, UniqueId};
 
 use super::scheduled_job::ScheduledJob;
 use super::scheduler::SchedulerInternalApi;

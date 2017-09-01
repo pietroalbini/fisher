@@ -18,7 +18,7 @@ use ring;
 
 use providers::prelude::*;
 use utils;
-use fisher_common::prelude::*;
+use common::prelude::*;
 
 
 lazy_static! {

@@ -18,8 +18,8 @@ use std::path::Path;
 use std::net;
 use std::sync::Arc;
 
-use fisher_common::prelude::*;
-use fisher_common::state::State;
+use common::prelude::*;
+use common::state::State;
 
 use hooks::{HookNamesIter, Hooks, HooksBlueprint, Hook};
 use jobs::Context;

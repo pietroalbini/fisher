@@ -18,8 +18,6 @@
 
 #![warn(missing_docs)]
 
-extern crate fisher_common;
-
 mod api;
 mod scheduled_job;
 mod scheduler;

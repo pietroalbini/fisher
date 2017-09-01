@@ -18,7 +18,7 @@ use std::fmt::{self, Debug};
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use fisher_common::prelude::*;
+use common::prelude::*;
 
 
 pub struct Script<I: Send + Sync + Debug + Clone> {

@@ -225,7 +225,7 @@ impl Error {
     /// ## Example
     ///
     /// ```rust
-    /// # use fisher_common::errors::{Result, Error, ErrorKind};
+    /// # use fisher::common::errors::{Result, Error, ErrorKind};
     /// fn my_function() -> Result<()> {
     ///     let error = Error::new(ErrorKind::Dummy);
     ///     Err(error)
@@ -262,7 +262,7 @@ impl Error {
     /// it to the user. The function uses ANSI formatting codes.
     ///
     /// ```rust
-    /// # use fisher_common::errors::{Result, Error, ErrorKind};
+    /// # use fisher::common::errors::{Result, Error, ErrorKind};
     /// # fn do_work() -> Result<()> {
     /// #   Err(Error::new(ErrorKind::Dummy))
     /// # }

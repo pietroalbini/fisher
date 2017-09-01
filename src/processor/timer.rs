@@ -18,7 +18,7 @@ use std::time::Duration;
 use std::sync::mpsc;
 use std::fmt;
 
-use fisher_common::prelude::*;
+use common::prelude::*;
 
 
 struct Task {

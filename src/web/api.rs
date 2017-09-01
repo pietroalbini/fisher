@@ -16,7 +16,7 @@
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use fisher_common::prelude::*;
+use common::prelude::*;
 
 use requests::{Request, RequestType};
 use hooks::Hooks;

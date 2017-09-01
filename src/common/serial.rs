@@ -51,7 +51,7 @@ impl Serial {
     /// current object in place.
     ///
     /// ```
-    /// # use fisher_common::serial::Serial;
+    /// # use fisher::common::serial::Serial;
     /// let serial = Serial::zero();
     /// assert!(serial.next() > serial);
     /// ```
@@ -72,7 +72,7 @@ impl Serial {
     /// incremented value.
     ///
     /// ```
-    /// # use fisher_common::serial::Serial;
+    /// # use fisher::common::serial::Serial;
     /// let mut serial = Serial::zero();
     /// let old = serial.clone();
     /// assert!(serial.incr() > old);

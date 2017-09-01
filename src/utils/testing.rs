@@ -22,9 +22,9 @@ use std::fs;
 use hyper::client as hyper;
 use hyper::method::Method;
 
-use fisher_common::prelude::*;
-use fisher_common::state::State;
-use fisher_common::structs::HealthDetails;
+use common::prelude::*;
+use common::state::State;
+use common::structs::HealthDetails;
 
 use hooks::{Hooks, HooksBlueprint};
 use jobs::{Job, JobOutput};

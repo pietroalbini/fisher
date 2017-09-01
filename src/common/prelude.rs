@@ -13,20 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#![warn(missing_docs)]
+//! Prelude for Fisher.
+//!
+//! This module re-exports useful things used by all the Fisher code, to be
+//! easily included.
 
-//! This crate contains all the common code used by the Fisher application.
-//! All the other sub-crates then depends on this crate to get access to
-//! the features.
-
-#[macro_use] extern crate serde_derive;
-extern crate ansi_term;
-extern crate serde;
-extern crate serde_json;
-
-pub mod errors;
-pub mod prelude;
-pub mod serial;
-pub mod state;
-pub mod structs;
-pub mod traits;
+pub use super::errors::{Result, Error, ErrorKind, ErrorLocation};
+pub use super::traits::*;

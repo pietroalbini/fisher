@@ -15,9 +15,9 @@
 
 use std::sync::{Arc, mpsc};
 
-use fisher_common::prelude::*;
-use fisher_common::state::State;
-use fisher_common::structs::HealthDetails;
+use common::prelude::*;
+use common::state::State;
+use common::structs::HealthDetails;
 
 use processor::scheduler::{Scheduler, SchedulerInput};
 #[cfg(test)] use processor::scheduler::DebugDetails;

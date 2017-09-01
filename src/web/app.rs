@@ -19,7 +19,7 @@ use std::net::SocketAddr;
 
 use tiny_http::Method;
 
-use fisher_common::prelude::*;
+use common::prelude::*;
 
 use hooks::Hooks;
 use web::http::HttpServer;
@@ -93,7 +93,7 @@ mod tests {
     use hyper::method::Method;
     use hyper::header::Headers;
 
-    use fisher_common::prelude::*;
+use common::prelude::*;
 
     use utils::testing::*;
 

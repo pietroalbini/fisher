@@ -16,10 +16,10 @@
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, mpsc};
 
-use fisher_common::prelude::*;
-use fisher_common::state::{State, UniqueId};
-use fisher_common::serial::Serial;
-use fisher_common::structs::HealthDetails;
+use common::prelude::*;
+use common::state::{State, UniqueId};
+use common::serial::Serial;
+use common::structs::HealthDetails;
 
 use super::thread::Thread;
 use super::scheduled_job::ScheduledJob;
@@ -410,8 +410,8 @@ mod tests {
     use std::collections::VecDeque;
     use std::sync::{Arc, Mutex, mpsc};
 
-    use fisher_common::prelude::*;
-    use fisher_common::state::State;
+use common::prelude::*;
+use common::state::State;
 
     use super::super::test_utils::*;
     use super::super::Processor;
