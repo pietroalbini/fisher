@@ -13,10 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::fmt;
-use std::ops::Deref;
 
 use common::prelude::*;
 use common::state::{State, IdKind, UniqueId};
@@ -26,90 +26,131 @@ use super::scheduler::SchedulerInternalApi;
 use super::types::{ScriptId, JobContext};
 
 
-#[derive(Debug)]
-enum ThreadInput<S: ScriptsRepositoryTrait> {
-    Process(ScheduledJob<S>),
-    StopSignal,
+pub enum ProcessResult<S: ScriptsRepositoryTrait + 'static> {
+    Rejected(ScheduledJob<S>),
+    Executing,
 }
 
 
 pub struct Thread<S: ScriptsRepositoryTrait + 'static> {
     id: UniqueId,
+    handle: thread::JoinHandle<()>,
+
     currently_running: Option<ScriptId<S>>,
 
-    should_stop: bool,
-
-    handle: thread::JoinHandle<()>,
-    input: mpsc::Sender<ThreadInput<S>>,
+    should_stop: Arc<AtomicBool>,
+    communication: Arc<Mutex<Option<ScheduledJob<S>>>>,
 }
 
 impl<S: ScriptsRepositoryTrait> Thread<S> {
 
-    pub fn new(processor: SchedulerInternalApi<S>, ctx: Arc<JobContext<S>>,
-               state: &Arc<State>) -> Self {
-        let (input_send, input_recv) = mpsc::channel();
-        let id = state.next_id(IdKind::ThreadId);
+    pub fn new(
+        processor: SchedulerInternalApi<S>,
+        ctx: Arc<JobContext<S>>,
+        state: &Arc<State>,
+    ) -> Self {
+        let thread_id = state.next_id(IdKind::ThreadId);
+        let should_stop = Arc::new(AtomicBool::new(false));
+        let communication = Arc::new(Mutex::new(None));
+
+        let c_thread_id = thread_id.clone();
+        let c_should_stop = should_stop.clone();
+        let c_communication = communication.clone();
 
         let handle = thread::spawn(move || {
-            for input in input_recv.iter() {
-                match input {
-                    // A new job should be processed
-                    ThreadInput::Process(job) => {
-                        let result = job.execute(ctx.deref());
+            let result = Thread::inner_thread(
+                c_thread_id, c_should_stop, processor, c_communication, ctx,
+            );
 
-                        // Display the error if there is one
-                        match result {
-                            Ok(output) => {
-                                processor.record_output(output).unwrap();
-                            },
-                            Err(mut error) => {
-                                error.set_location(
-                                    ErrorLocation::HookProcessing(
-                                        job.hook_name().to_string()
-                                    )
-                                );
-                                error.pretty_print();
-                            }
-                        }
-
-                        processor.job_ended(id, &job).unwrap();
-                    },
-
-                    // Please stop, thanks!
-                    ThreadInput::StopSignal => break,
-                }
+            if let Err(error) = result {
+                error.pretty_print();
             }
         });
 
         Thread {
-            id: id,
+            id: thread_id,
+            handle,
+
             currently_running: None,
 
-            should_stop: false,
-
-            handle: handle,
-            input: input_send,
+            should_stop,
+            communication,
         }
     }
 
-    // Here, None equals to success, and Some(job) equals to failure
-    pub fn process(&mut self, job: ScheduledJob<S>) -> Option<ScheduledJob<S>> {
-        // Do some consistency checks
-        if self.should_stop || self.busy() {
-            return Some(job);
+    fn inner_thread(
+        thread_id: UniqueId,
+        should_stop: Arc<AtomicBool>,
+        api: SchedulerInternalApi<S>,
+        comm: Arc<Mutex<Option<ScheduledJob<S>>>>,
+        ctx: Arc<JobContext<S>>,
+    ) -> Result<()>{
+
+        loop {
+            // Ensure the thread is stopped
+            if should_stop.load(Ordering::SeqCst) {
+                break;
+            }
+
+            if let Some(job) = comm.lock()?.take() {
+                let result = job.execute(&ctx);
+
+                match result {
+                    Ok(output) => {
+                        api.record_output(output)?;
+                    },
+                    Err(error) => {
+                        error.pretty_print();
+                    }
+                }
+
+                api.job_ended(thread_id, &job)?;
+
+                // Don't park the thread, look for another job right away
+                continue;
+            }
+
+            // Block the thread until a new job is available
+            // This avoids wasting unnecessary resources
+            thread::park();
         }
 
-        self.currently_running = Some(job.hook_id());
-        self.input.send(ThreadInput::Process(job)).unwrap();
-
-        None
+        Ok(())
     }
 
-    pub fn stop(mut self) {
-        self.should_stop = true;
-        self.input.send(ThreadInput::StopSignal).unwrap();
+    pub fn process(&mut self, job: ScheduledJob<S>) -> ProcessResult<S> {
+        // Reject the job if the thread is going to be stopped
+        if self.should_stop.load(Ordering::SeqCst) {
+            return ProcessResult::Rejected(job);
+        }
 
-        self.handle.join().unwrap();
+        if self.busy() {
+            return ProcessResult::Rejected(job);
+        }
+
+        if let Ok(mut mutex) = self.communication.lock() {
+            // Update the currently running ID
+            self.currently_running = Some(job.hook_id());
+
+            // Tell the thread what job it should process
+            *mutex = Some(job);
+
+            // Wake the thread up
+            self.handle.thread().unpark();
+
+            return ProcessResult::Executing;
+        }
+
+        return ProcessResult::Rejected(job);
+    }
+
+    pub fn stop(self) {
+        // Tell the thread to stop and wake it up
+        self.should_stop.store(true, Ordering::SeqCst);
+        self.handle.thread().unpark();
+
+        // Wait for the thread to quit
+        let _ = self.handle.join();
     }
 
     pub fn id(&self) -> UniqueId {
@@ -133,7 +174,8 @@ impl<S: ScriptsRepositoryTrait> fmt::Debug for Thread<S> {
 
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Thread {{ busy: {}, should_stop: {} }}",
-            self.busy(), self.should_stop,
+            self.busy(),
+            self.should_stop.load(Ordering::SeqCst),
         )
     }
 }

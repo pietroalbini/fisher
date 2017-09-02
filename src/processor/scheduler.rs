@@ -22,7 +22,7 @@ use common::state::{State, UniqueId};
 use common::serial::Serial;
 use common::structs::HealthDetails;
 
-use super::thread::Thread;
+use super::thread::{Thread, ProcessResult};
 use super::scheduled_job::ScheduledJob;
 use super::types::{ScriptId, Job, JobOutput, JobContext};
 
@@ -356,12 +356,9 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
             if let Some(mut job) = self.get_job() {
                 // Try to run the job in a thread
                 for thread in self.threads.values_mut() {
-                    // The process() method returns Some(ScheduledJob) if
-                    // *IT'S BUSY* working on another job
-                    if let Some(j) = thread.process(job) {
-                        job = j;
-                    } else {
-                        continue 'main;
+                    match thread.process(job) {
+                        ProcessResult::Rejected(j) => job = j,
+                        ProcessResult::Executing => continue 'main,
                     }
                 }
                 self.queue_job(job);
