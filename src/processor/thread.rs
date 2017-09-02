@@ -22,13 +22,23 @@ use common::prelude::*;
 use common::state::{State, IdKind, UniqueId};
 
 use super::scheduled_job::ScheduledJob;
-use super::scheduler::SchedulerInternalApi;
-use super::types::{ScriptId, JobContext};
+use super::types::ScriptId;
 
 
 pub enum ProcessResult<S: ScriptsRepositoryTrait + 'static> {
     Rejected(ScheduledJob<S>),
     Executing,
+}
+
+impl<S: ScriptsRepositoryTrait + 'static> ProcessResult<S> {
+
+    #[cfg(test)]
+    pub fn executed(&self) -> bool {
+        match *self {
+            ProcessResult::Executing => true,
+            ProcessResult::Rejected(..) => false,
+        }
+    }
 }
 
 
@@ -44,11 +54,9 @@ pub struct Thread<S: ScriptsRepositoryTrait + 'static> {
 
 impl<S: ScriptsRepositoryTrait> Thread<S> {
 
-    pub fn new(
-        processor: SchedulerInternalApi<S>,
-        ctx: Arc<JobContext<S>>,
-        state: &Arc<State>,
-    ) -> Self {
+    pub fn new<
+        E: Fn(ScheduledJob<S>, UniqueId) -> Result<()> + Send + 'static,
+    >(executor: E, state: &Arc<State>) -> Self {
         let thread_id = state.next_id(IdKind::ThreadId);
         let should_stop = Arc::new(AtomicBool::new(false));
         let communication = Arc::new(Mutex::new(None));
@@ -59,7 +67,7 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
 
         let handle = thread::spawn(move || {
             let result = Thread::inner_thread(
-                c_thread_id, c_should_stop, processor, c_communication, ctx,
+                c_thread_id, c_should_stop, c_communication, executor,
             );
 
             if let Err(error) = result {
@@ -78,12 +86,13 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
         }
     }
 
-    fn inner_thread(
+    fn inner_thread<
+        E: Fn(ScheduledJob<S>, UniqueId) -> Result<()> + Send + 'static,
+    >(
         thread_id: UniqueId,
         should_stop: Arc<AtomicBool>,
-        api: SchedulerInternalApi<S>,
         comm: Arc<Mutex<Option<ScheduledJob<S>>>>,
-        ctx: Arc<JobContext<S>>,
+        executor: E,
     ) -> Result<()>{
 
         loop {
@@ -93,18 +102,7 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
             }
 
             if let Some(job) = comm.lock()?.take() {
-                let result = job.execute(&ctx);
-
-                match result {
-                    Ok(output) => {
-                        api.record_output(output)?;
-                    },
-                    Err(error) => {
-                        error.pretty_print();
-                    }
-                }
-
-                api.job_ended(thread_id, &job)?;
+                executor(job, thread_id)?;
 
                 // Don't park the thread, look for another job right away
                 continue;
@@ -177,5 +175,75 @@ impl<S: ScriptsRepositoryTrait> fmt::Debug for Thread<S> {
             self.busy(),
             self.should_stop.load(Ordering::SeqCst),
         )
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Instant;
+
+    use common::state::State;
+    use common::serial::Serial;
+    use processor::scheduled_job::ScheduledJob;
+    use processor::test_utils::*;
+
+    use super::Thread;
+
+
+    fn job(repo: &Repository<()>, name: &str) -> ScheduledJob<Repository<()>> {
+        let job = repo.job(name, ()).expect("job does not exist");
+        ScheduledJob::new(job, 0, Serial::zero())
+    }
+
+
+    fn timeout_until_true<F: Fn() -> bool>(func: F, error: &'static str) {
+        let start = Instant::now();
+        loop {
+            if start.elapsed().as_secs() > 10 {
+                panic!(error);
+            }
+
+            if func() {
+                return;
+            }
+        }
+    }
+
+
+    #[test]
+    fn test_thread_executes_a_job() {
+        test_wrapper(|| {
+            let executed = Arc::new(AtomicBool::new(false));
+            let repo = Repository::new();
+            let state = Arc::new(State::new());
+
+            // Create a job that changes the "executed" bit
+            let job_executed = executed.clone();
+            repo.add_script("job", true, move |_| {
+                job_executed.store(true, Ordering::SeqCst);
+                Ok(())
+            });
+
+            // Start a new thread able to execute jobs
+            let mut thread = Thread::new(|job, _| {
+                job.execute(&())?;
+                Ok(())
+            }, &state);
+
+            // Tell the thread to process that job
+            assert!(thread.process(job(&repo, "job")).executed());
+
+            // Wait until the thread processes the job
+            timeout_until_true(|| {
+                executed.load(Ordering::SeqCst)
+            }, "The thread didn't process the job");
+
+            thread.stop();
+
+            Ok(())
+        });
     }
 }

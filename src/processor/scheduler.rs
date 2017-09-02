@@ -69,26 +69,6 @@ pub enum SchedulerInput<S: ScriptsRepositoryTrait> {
 }
 
 
-#[derive(Debug, Clone)]
-pub struct SchedulerInternalApi<S: ScriptsRepositoryTrait> {
-    input: mpsc::Sender<SchedulerInput<S>>,
-}
-
-impl<S: ScriptsRepositoryTrait> SchedulerInternalApi<S> {
-
-    pub fn record_output(&self, output: JobOutput<S>) -> Result<()> {
-        self.input.send(SchedulerInput::ProcessOutput(output))?;
-        Ok(())
-    }
-
-    pub fn job_ended(&self, thread: UniqueId, job: &ScheduledJob<S>)
-                     -> Result<()> {
-        self.input.send(SchedulerInput::JobEnded(thread, job.hook_id()))?;
-        Ok(())
-    }
-}
-
-
 #[derive(Debug)]
 pub struct Scheduler<S: ScriptsRepositoryTrait + 'static> {
     max_threads: u16,
@@ -268,11 +248,25 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
 
     #[inline]
     fn spawn_thread(&mut self) {
-        let api = SchedulerInternalApi {
-            input: self.input_send.clone(),
-        };
+        let ctx = self.jobs_context.clone();
+        let input = self.input_send.clone();
 
-        let thread = Thread::new(api, self.jobs_context.clone(), &self.state);
+        let thread = Thread::new(move |job: ScheduledJob<S>, thread_id| {
+            let result = job.execute(&ctx);
+
+            match result {
+                Ok(output) => {
+                    input.send(SchedulerInput::ProcessOutput(output))?;
+                },
+                Err(error) => {
+                    error.pretty_print();
+                }
+            }
+
+            input.send(SchedulerInput::JobEnded(thread_id, job.hook_id()))?;
+
+            Ok(())
+        }, &self.state);
         self.threads.insert(thread.id(), thread);
     }
 
