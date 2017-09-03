@@ -234,7 +234,7 @@ impl<S: ScriptsRepositoryTrait> fmt::Debug for Thread<S> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::mpsc;
     use std::time::Instant;
@@ -445,6 +445,54 @@ mod tests {
 
             // Check if all the jobs were executed
             assert_eq!(counter.load(Ordering::SeqCst), 5);
+
+            thread.stop();
+            Ok(())
+        });
+    }
+
+
+    #[test]
+    fn test_thread_manual_completion() {
+        test_wrapper(|| {
+            let (completion_send, completion_recv) = mpsc::channel();
+            let finished = Arc::new(AtomicBool::new(false));
+            let repo = Repository::new();
+
+            // Create a new job that reports when it's finished
+            let finished_clone = finished.clone();
+            repo.add_script("report", false, move |_| {
+                finished_clone.store(true, Ordering::SeqCst);
+                Ok(())
+            });
+
+            // Start a new thread that also enters manual completion mode
+            let completion_send = Arc::new(Mutex::new(completion_send));
+            let mut thread = Thread::new(move |job, mut completion| {
+                completion.manual_mode();
+                completion_send.lock()?.send(completion)?;
+
+                job.execute(&())?;
+                Ok(())
+            }, &Arc::new(State::new()));
+
+            // Tell the processor to execute the job
+            assert!(thread.process(job(&repo, "report")).executing());
+
+            // Wait until the job finishes
+            timeout_until_true(|| {
+                finished.load(Ordering::SeqCst)
+            }, "The thread didn't process the job");
+
+            // Check that the thread is still marked as busy
+            assert!(thread.busy());
+
+            // Manually mark the thread as completed
+            let completion = completion_recv.recv()?;
+            completion.manual_complete();
+
+            // Check that the thread is not busy
+            assert!(! thread.busy());
 
             thread.stop();
             Ok(())
