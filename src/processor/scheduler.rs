@@ -211,7 +211,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                     // Put the highest-priority waiting job for this hook
                     // back in the queue
                     let mut push_back = None;
-                    if let Some(mut waiting) = self.waiting.get_mut(&hook_id) {
+                    if let Some(waiting) = self.waiting.get_mut(&hook_id) {
                         push_back = waiting.pop();
                     }
                     if let Some(job) = push_back {
@@ -366,7 +366,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
         // Put the job in waiting if it can't be parallel and
         // it's already running
         if self.is_running(hook_id) {
-            if let Some(mut waiting) = self.waiting.get_mut(&hook_id) {
+            if let Some(waiting) = self.waiting.get_mut(&hook_id) {
                 waiting.push(job);
                 return;
             }
@@ -383,7 +383,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                 // Put the job in waiting if it can't be parallel and
                 // it's already running
                 if self.is_running(hook_id) {
-                    if let Some(mut waiting) = self.waiting.get_mut(&hook_id) {
+                    if let Some(waiting) = self.waiting.get_mut(&hook_id) {
                         waiting.push(job);
                         continue;
                     }
