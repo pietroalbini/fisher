@@ -107,7 +107,7 @@ impl<I: Send + Sync + Debug + Clone> Repository<I> {
                     .map(|script| Job { script, args })
     }
 
-    pub fn hook_id_of(&self, name: &str) -> Option<usize> {
+    pub fn script_id_of(&self, name: &str) -> Option<usize> {
         self.scripts.read().unwrap().get(name).map(|script| script.id())
     }
 

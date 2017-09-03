@@ -674,7 +674,7 @@ use common::state::State;
                 waitings.push_back(unlock_send);
             }
 
-            let old_hook_id = repo.hook_id_of("wait").unwrap();
+            let old_hook_id = repo.script_id_of("wait").unwrap();
 
             let debug = api.debug_details()?;
             assert_eq!(debug.waiting.get(&old_hook_id), Some(&9));
@@ -693,7 +693,7 @@ use common::state::State;
             // Reload the scripts
             repo.recreate_scripts();
 
-            let new_hook_id = repo.hook_id_of("wait").unwrap();
+            let new_hook_id = repo.script_id_of("wait").unwrap();
             assert!(new_hook_id != old_hook_id);
 
             // The new hook id shouldn't be present yet

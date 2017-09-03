@@ -33,11 +33,16 @@ pub enum ProcessResult<S: ScriptsRepositoryTrait + 'static> {
 impl<S: ScriptsRepositoryTrait + 'static> ProcessResult<S> {
 
     #[cfg(test)]
-    pub fn executed(&self) -> bool {
+    pub fn executing(&self) -> bool {
         match *self {
             ProcessResult::Executing => true,
             ProcessResult::Rejected(..) => false,
         }
+    }
+
+    #[cfg(test)]
+    pub fn rejected(&self) -> bool {
+        ! self.executing()
     }
 }
 
@@ -230,7 +235,8 @@ impl<S: ScriptsRepositoryTrait> fmt::Debug for Thread<S> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::mpsc;
     use std::time::Instant;
 
     use common::state::State;
@@ -244,6 +250,16 @@ mod tests {
     fn job(repo: &Repository<()>, name: &str) -> ScheduledJob<Repository<()>> {
         let job = repo.job(name, ()).expect("job does not exist");
         ScheduledJob::new(job, 0, Serial::zero())
+    }
+
+
+    fn create_thread() -> Thread<Repository<()>> {
+        let state = Arc::new(State::new());
+
+        Thread::new(|job, _| {
+            job.execute(&())?;
+            Ok(())
+        }, &state)
     }
 
 
@@ -266,7 +282,6 @@ mod tests {
         test_wrapper(|| {
             let executed = Arc::new(AtomicBool::new(false));
             let repo = Repository::new();
-            let state = Arc::new(State::new());
 
             // Create a job that changes the "executed" bit
             let job_executed = executed.clone();
@@ -276,24 +291,162 @@ mod tests {
             });
 
             // Start a new thread able to execute jobs
-            let mut thread = Thread::new(|job, _| {
-                job.execute(&())?;
-                Ok(())
-            }, &state);
+            let mut thread = create_thread();
 
             // Tell the thread to process that job
-            assert!(thread.process(job(&repo, "job")).executed());
+            assert!(thread.process(job(&repo, "job")).executing());
 
             // Wait until the thread processes the job
             timeout_until_true(|| {
                 ! thread.busy()
             }, "The thread didn't process the job");
 
-            // Ensure the thread is not busy
+            // Ensure the job was executed
             assert!(executed.load(Ordering::SeqCst));
 
             thread.stop();
+            Ok(())
+        });
+    }
 
+
+    #[test]
+    fn test_thread_correctly_marked_as_busy() {
+        test_wrapper(|| {
+            let (block_send, block_recv) = mpsc::channel();
+            let repo = Repository::new();
+
+            // Create a new job that can be blocked until instructed
+            repo.add_script("job", true, move |_| {
+                block_recv.recv()?;
+                Ok(())
+            });
+
+            // Start a new thread to execute jobs
+            let mut thread = create_thread();
+
+            // Tell the processor to process that job
+            assert!(thread.process(job(&repo, "job")).executing());
+
+            // Check if the thread is busy
+            assert!(thread.busy());
+
+            // Tell the job to complete
+            block_send.send(())?;
+
+            // Wait until the thread is not busy anymore
+            timeout_until_true(|| {
+                ! thread.busy()
+            }, "The thread didn't process the job");
+
+            thread.stop();
+            Ok(())
+        });
+    }
+
+
+    #[test]
+    fn test_thread_reports_correct_running_script_id() {
+        test_wrapper(|| {
+            let (block_send, block_recv) = mpsc::channel();
+            let repo = Repository::new();
+
+            // Create a new job that can be blocked until instructed
+            repo.add_script("job", true, move |_| {
+                block_recv.recv()?;
+                Ok(())
+            });
+            let script_id = repo.script_id_of("job")
+                .expect("Job should exist");
+
+            // Start a new thread to execute jobs
+            let mut thread = create_thread();
+
+            // Tell the processor to process that job
+            assert!(thread.process(job(&repo, "job")).executing());
+
+            // Check if the correct script ID is reported
+            assert_eq!(thread.currently_running(), Some(script_id));
+
+            // Tell the job to complete
+            block_send.send(())?;
+
+            // Wait until the thread is not busy anymore
+            timeout_until_true(|| {
+                ! thread.busy()
+            }, "The thread didn't process the job");
+
+            // Check no script is reported running
+            assert_eq!(thread.currently_running(), None);
+
+            thread.stop();
+            Ok(())
+        });
+    }
+
+
+    #[test]
+    fn test_thread_rejects_new_jobs_when_busy() {
+        test_wrapper(|| {
+            let (block_send, block_recv) = mpsc::channel();
+            let repo = Repository::new();
+
+            // Create a new job that can be blocked until instructed
+            repo.add_script("wait", true, move |_| {
+                block_recv.recv()?;
+                Ok(())
+            });
+
+            // Create a new empty job
+            repo.add_script("dummy", true, move |_| Ok(()));
+
+            // Start a new thread to execute jobs
+            let mut thread = create_thread();
+
+            // Tell the processor to process the first job
+            assert!(thread.process(job(&repo, "wait")).executing());
+
+            // Check if the thread accepts new jobs
+            assert!(thread.process(job(&repo, "dummy")).rejected());
+
+            // Tell the job to complete
+            block_send.send(())?;
+
+            thread.stop();
+            Ok(())
+        });
+    }
+
+
+    #[test]
+    fn test_thread_allows_multiple_jobs_to_be_executed() {
+        test_wrapper(|| {
+            let counter = Arc::new(AtomicUsize::new(0));
+            let repo = Repository::new();
+
+            // Create a new job that increments the counter
+            let counter_inner = counter.clone();
+            repo.add_script("incr", true, move |_| {
+                counter_inner.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
+
+            // Start a new thread to execute jobs
+            let mut thread = create_thread();
+
+            // Tell the processor to process the job 5 times
+            for _ in 0..5 {
+                assert!(thread.process(job(&repo, "incr")).executing());
+
+                timeout_until_true(|| {
+                    ! thread.busy()
+                }, "The thread didn't process the job");
+            }
+
+            // Check if all the jobs were executed
+            assert_eq!(counter.load(Ordering::SeqCst), 5);
+
+            thread.stop();
             Ok(())
         });
     }
