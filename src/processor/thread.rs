@@ -42,12 +42,50 @@ impl<S: ScriptsRepositoryTrait + 'static> ProcessResult<S> {
 }
 
 
+#[derive(Clone)]
+pub struct ThreadCompleter {
+    thread: thread::Thread,
+    busy: Arc<AtomicBool>,
+    manual: bool,
+}
+
+impl ThreadCompleter {
+
+    pub fn new(busy: Arc<AtomicBool>) -> Self {
+        ThreadCompleter {
+            thread: thread::current(),
+            busy,
+            manual: false,
+        }
+    }
+
+    pub fn manual_mode(&mut self) {
+        self.manual = true;
+    }
+
+    pub fn manual_complete(&self) {
+        self.busy.store(false, Ordering::SeqCst);
+        self.thread.unpark();
+    }
+}
+
+impl Drop for ThreadCompleter {
+
+    fn drop(&mut self) {
+        if ! self.manual {
+            self.manual_complete();
+        }
+    }
+}
+
+
 pub struct Thread<S: ScriptsRepositoryTrait + 'static> {
     id: UniqueId,
     handle: thread::JoinHandle<()>,
 
-    currently_running: Option<ScriptId<S>>,
+    last_running_id: Option<ScriptId<S>>,
 
+    busy: Arc<AtomicBool>,
     should_stop: Arc<AtomicBool>,
     communication: Arc<Mutex<Option<ScheduledJob<S>>>>,
 }
@@ -55,19 +93,21 @@ pub struct Thread<S: ScriptsRepositoryTrait + 'static> {
 impl<S: ScriptsRepositoryTrait> Thread<S> {
 
     pub fn new<
-        E: Fn(ScheduledJob<S>, UniqueId) -> Result<()> + Send + 'static,
+        E: Fn(ScheduledJob<S>, ThreadCompleter) -> Result<()> + Send + 'static,
     >(executor: E, state: &Arc<State>) -> Self {
         let thread_id = state.next_id(IdKind::ThreadId);
+        let busy = Arc::new(AtomicBool::new(false));
         let should_stop = Arc::new(AtomicBool::new(false));
         let communication = Arc::new(Mutex::new(None));
 
-        let c_thread_id = thread_id.clone();
+        let c_busy = busy.clone();
         let c_should_stop = should_stop.clone();
         let c_communication = communication.clone();
 
         let handle = thread::spawn(move || {
+            let completer = ThreadCompleter::new(c_busy.clone());
             let result = Thread::inner_thread(
-                c_thread_id, c_should_stop, c_communication, executor,
+                c_busy, c_should_stop, c_communication, executor, completer,
             );
 
             if let Err(error) = result {
@@ -79,20 +119,22 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
             id: thread_id,
             handle,
 
-            currently_running: None,
+            last_running_id: None,
 
+            busy,
             should_stop,
             communication,
         }
     }
 
     fn inner_thread<
-        E: Fn(ScheduledJob<S>, UniqueId) -> Result<()> + Send + 'static,
+        E: Fn(ScheduledJob<S>, ThreadCompleter) -> Result<()> + Send + 'static,
     >(
-        thread_id: UniqueId,
+        busy: Arc<AtomicBool>,
         should_stop: Arc<AtomicBool>,
         comm: Arc<Mutex<Option<ScheduledJob<S>>>>,
         executor: E,
+        completer: ThreadCompleter,
     ) -> Result<()>{
 
         loop {
@@ -102,7 +144,12 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
             }
 
             if let Some(job) = comm.lock()?.take() {
-                executor(job, thread_id)?;
+                executor(job, completer.clone())?;
+
+                // Wait for the job to be marked completed
+                if busy.load(Ordering::SeqCst) {
+                    thread::park();
+                }
 
                 // Don't park the thread, look for another job right away
                 continue;
@@ -127,8 +174,9 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
         }
 
         if let Ok(mut mutex) = self.communication.lock() {
-            // Update the currently running ID
-            self.currently_running = Some(job.hook_id());
+            // Update the current state
+            self.busy.store(true, Ordering::SeqCst);
+            self.last_running_id = Some(job.hook_id());
 
             // Tell the thread what job it should process
             *mutex = Some(job);
@@ -156,15 +204,15 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
     }
 
     pub fn currently_running(&self) -> Option<ScriptId<S>> {
-        self.currently_running
+        if self.busy.load(Ordering::SeqCst) {
+            self.last_running_id
+        } else {
+            None
+        }
     }
 
     pub fn busy(&self) -> bool {
-        self.currently_running.is_some()
-    }
-
-    pub fn mark_idle(&mut self) {
-        self.currently_running = None;
+        self.busy.load(Ordering::SeqCst)
     }
 }
 
@@ -238,8 +286,11 @@ mod tests {
 
             // Wait until the thread processes the job
             timeout_until_true(|| {
-                executed.load(Ordering::SeqCst)
+                ! thread.busy()
             }, "The thread didn't process the job");
+
+            // Ensure the thread is not busy
+            assert!(executed.load(Ordering::SeqCst));
 
             thread.stop();
 

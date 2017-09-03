@@ -22,7 +22,7 @@ use common::state::{State, UniqueId};
 use common::serial::Serial;
 use common::structs::HealthDetails;
 
-use super::thread::{Thread, ProcessResult};
+use super::thread::{Thread, ThreadCompleter, ProcessResult};
 use super::scheduled_job::ScheduledJob;
 use super::types::{ScriptId, Job, JobOutput, JobContext};
 
@@ -65,7 +65,7 @@ pub enum SchedulerInput<S: ScriptsRepositoryTrait> {
     Unlock,
 
     StopSignal,
-    JobEnded(UniqueId, ScriptId<S>),
+    JobEnded(ScriptId<S>, ThreadCompleter),
 }
 
 
@@ -205,11 +205,8 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                     self.run_jobs();
                 },
 
-                SchedulerInput::JobEnded(thread_id, hook_id) => {
-                    // Mark the thread as idle
-                    if let Some(mut thread) = self.threads.get_mut(&thread_id) {
-                        thread.mark_idle();
-                    }
+                SchedulerInput::JobEnded(hook_id, completer) => {
+                    completer.manual_complete();
 
                     // Put the highest-priority waiting job for this hook
                     // back in the queue
@@ -251,7 +248,9 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
         let ctx = self.jobs_context.clone();
         let input = self.input_send.clone();
 
-        let thread = Thread::new(move |job: ScheduledJob<S>, thread_id| {
+        let thread = Thread::new(move |job: ScheduledJob<S>, mut completer| {
+            completer.manual_mode();
+
             let result = job.execute(&ctx);
 
             match result {
@@ -263,7 +262,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                 }
             }
 
-            input.send(SchedulerInput::JobEnded(thread_id, job.hook_id()))?;
+            input.send(SchedulerInput::JobEnded(job.hook_id(), completer))?;
 
             Ok(())
         }, &self.state);
