@@ -37,6 +37,7 @@ mod native;
 mod processor;
 mod providers;
 mod requests;
+mod scripts;
 mod web;
 pub mod common;
 

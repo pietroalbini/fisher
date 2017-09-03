@@ -31,7 +31,7 @@ pub mod prelude {
 }
 
 
-pub use self::status::{StatusEvent, StatusEventKind};
+pub use self::status::{StatusProvider, StatusEvent, StatusEventKind};
 
 
 use std::collections::HashMap;

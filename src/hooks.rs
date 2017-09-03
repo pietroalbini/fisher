@@ -13,184 +13,21 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::fs::{read_dir, canonicalize, ReadDir, File};
+use std::fs::{read_dir, canonicalize, ReadDir};
 use std::path::{Path, PathBuf};
 use std::collections::{HashMap, VecDeque};
 use std::os::unix::fs::PermissionsExt;
-use std::io::{BufReader, BufRead};
 use std::sync::{Arc, RwLock};
 
-use regex::Regex;
-use serde_json;
-
 use common::prelude::*;
-use common::state::{State, IdKind, UniqueId};
+use common::state::{State, UniqueId};
 
 use providers::{Provider, StatusEvent, StatusEventKind};
-use requests::{Request, RequestType};
+use requests::Request;
 use jobs::{Job, JobOutput};
 
-
-lazy_static! {
-    static ref PREFERENCES_HEADER_RE: Regex = Regex::new(
-        r"## Fisher: (.*)"
-    ).unwrap();
-    static ref PROVIDER_HEADER_RE: Regex = Regex::new(
-        r"## Fisher-([a-zA-Z]+): (.*)"
-    ).unwrap();
-}
-
-
-#[derive(Debug, Deserialize)]
-struct Preferences {
-    priority: Option<isize>,
-    parallel: Option<bool>,
-}
-
-impl Preferences {
-
-    fn empty() -> Self {
-        Preferences {
-            priority: None,
-            parallel: None,
-        }
-    }
-
-    #[inline]
-    fn priority(&self) -> isize {
-        self.priority.unwrap_or(0)
-    }
-
-    #[inline]
-    fn parallel(&self) -> bool {
-        self.parallel.unwrap_or(true)
-    }
-}
-
-
-struct LoadHeadersOutput {
-    preferences: Preferences,
-    providers: Vec<Arc<Provider>>,
-}
-
-
-#[derive(Debug)]
-pub struct Hook {
-    id: UniqueId,
-    name: String,
-    exec: String,
-    priority: isize,
-    parallel: bool,
-    providers: Vec<Arc<Provider>>,
-}
-
-impl Hook {
-
-    fn load(name: String, exec: String, state: &Arc<State>)
-            -> Result<Hook> {
-        let headers = Hook::load_headers(&exec)?;
-
-        Ok(Hook {
-            id: state.next_id(IdKind::HookId),
-            name: name,
-            exec: exec,
-            priority: headers.preferences.priority(),
-            parallel: headers.preferences.parallel(),
-            providers: headers.providers,
-        })
-    }
-
-    fn load_headers(file: &str) -> Result<LoadHeadersOutput> {
-        let f = File::open(file).unwrap();
-        let reader = BufReader::new(f);
-
-        let mut content;
-        let mut line_number: u32 = 0;
-        let mut providers = vec![];
-        let mut preferences = None;
-        for line in reader.lines() {
-            line_number += 1;
-            content = line.unwrap();
-
-            // Just ignore everything after an empty line
-            if content == "" {
-                break;
-            }
-
-            if preferences.is_none() {
-                if let Some(cap) = PREFERENCES_HEADER_RE.captures(&content) {
-                    preferences = Some(serde_json::from_str(&cap[1])?);
-                    continue;  // Don't capture anything else for this line
-                }
-            }
-
-            if let Some(cap) = PROVIDER_HEADER_RE.captures(&content) {
-                let name = &cap[1];
-                let data = &cap[2];
-
-                match Provider::new(name, data) {
-                    Ok(provider) => {
-                        providers.push(Arc::new(provider));
-                    },
-                    Err(mut error) => {
-                        error.set_location(
-                            ErrorLocation::File(file.into(), Some(line_number))
-                        );
-                        return Err(error);
-                    }
-                }
-            }
-        }
-
-        Ok(LoadHeadersOutput {
-            preferences: if let Some(pref) = preferences { pref } else {
-                Preferences::empty()
-            },
-            providers: providers,
-        })
-    }
-
-    pub fn validate(&self, req: &Request)
-                   -> (RequestType, Option<Arc<Provider>>) {
-        if ! self.providers.is_empty() {
-            // Check every provider if they're present
-            for provider in &self.providers {
-                let result = provider.validate(req);
-
-                if result != RequestType::Invalid {
-                    return (result, Some(provider.clone()))
-                }
-            }
-            (RequestType::Invalid, None)
-        } else {
-            (RequestType::ExecuteHook, None)
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn exec(&self) -> &str {
-        &self.exec
-    }
-
-    pub fn priority(&self) -> isize {
-        self.priority
-    }
-}
-
-impl ScriptTrait for Hook {
-    type Id = UniqueId;
-
-    fn id(&self) -> UniqueId {
-        self.id
-    }
-
-    fn can_be_parallel(&self) -> bool {
-        self.parallel
-    }
-}
+// Temporary migration
+pub use scripts::Script as Hook;
 
 
 pub struct HooksIter {
@@ -559,11 +396,11 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
-use common::state::State;
+    use common::state::State;
 
     use utils::testing::*;
     use utils;
-use common::prelude::*;
+    use common::prelude::*;
     use providers::StatusEventKind;
     use requests::{Request, RequestType};
 
@@ -581,8 +418,8 @@ use common::prelude::*;
                 $name.to_string(), path_str.clone(), $state,
             ).unwrap();
 
-            assert_eq!(hook.name, $name.to_string());
-            assert_eq!(hook.exec, path_str.clone());
+            assert_eq!(hook.name(), $name.to_string());
+            assert_eq!(hook.exec(), path_str.clone());
 
             Arc::new(hook)
         }};
@@ -591,156 +428,6 @@ use common::prelude::*;
         }};
     }
 
-
-    #[test]
-    fn test_hook_loading() {
-        let base = sample_hooks();
-
-        // Try to load a naked hook
-        create_hook!(base, "naked.sh",
-            r#"#!/bin/bash"#,
-            r#"echo "Hello world"#
-        );
-        let hook = assert_hook!(base, "naked.sh");
-        assert_eq!(hook.priority, 0);
-        assert!(hook.providers.is_empty());
-
-        // Try to load an hook with some preferences
-        create_hook!(base, "preferences.sh",
-            r#"#!/bin/bash"#,
-            r#"## Fisher: {"priority": 5}"#,
-            r#"echo "Hello world"#
-        );
-        let hook = assert_hook!(base, "preferences.sh");
-        assert_eq!(hook.priority, 5);
-        assert!(hook.providers.is_empty());
-
-        // Try to load an hook with a provider
-        create_hook!(base, "one-provider.sh",
-            r#"#!/bin/bash"#,
-            r#"## Fisher-Testing: {}"#,
-            r#"echo "Hello world"#
-        );
-        let hook = assert_hook!(base, "one-provider.sh");
-        assert_eq!(hook.priority, 0);
-        assert_eq!(hook.providers.len(), 1);
-        assert_eq!(
-            hook.providers.get(0).unwrap().name(), "Testing".to_string()
-        );
-
-        // Try to load an hook with a provider and some preferences
-        create_hook!(base, "preferences-provider.sh",
-            r#"#!/bin/bash"#,
-            r#"## Fisher: {"priority": 5}"#,
-            r#"## Fisher-Testing: {}"#,
-            r#"echo "Hello world"#
-        );
-        let hook = assert_hook!(base, "preferences-provider.sh");
-        assert_eq!(hook.priority, 5);
-        assert_eq!(hook.providers.len(), 1);
-        assert_eq!(
-            hook.providers.get(0).unwrap().name(), "Testing".to_string()
-        );
-
-        // Try to load an hook with two providers
-        create_hook!(base, "two-providers.sh",
-            r#"#!/bin/bash"#,
-            r#"## Fisher-Standalone: {"secret": "abcde"}"#,
-            r#"## Fisher-Testing: {}"#,
-            r#"echo "Hello world"#
-        );
-        let hook = assert_hook!(base, "two-providers.sh");
-        assert_eq!(hook.priority, 0);
-        assert_eq!(hook.providers.len(), 2);
-        assert_eq!(
-            hook.providers.get(0).unwrap().name(), "Standalone".to_string()
-        );
-        assert_eq!(
-            hook.providers.get(1).unwrap().name(), "Testing".to_string()
-        );
-
-        fs::remove_dir_all(base).unwrap();
-    }
-
-    #[test]
-    fn test_loading_providers() {
-        macro_rules! load_providers {
-            ($base:expr, $file:expr) => {{
-                let mut path = $base.clone();
-                path.push($file);
-
-                Hook::load_headers(
-                    &path.to_str().unwrap().to_string()
-                ).map(|res| res.providers)
-            }};
-        };
-
-        macro_rules! assert_provider {
-            ($providers:expr, $index:expr, $name:expr) => {{
-                let provider = $providers.get($index).unwrap();
-                assert_eq!(provider.name(), $name);
-            }};
-        };
-
-        let base = sample_hooks();
-
-        // This hook is empty, it shouldn't return things
-        create_hook!(base, "empty.sh", "");
-        let providers = load_providers!(base, "empty.sh").unwrap();
-        assert!(providers.is_empty());
-
-        // This hook is not empty, but it doesn't contain any comment
-        create_hook!(base, "no-comments.sh",
-            r#"echo "hi";"#,
-            r#"sleep 1;"#
-        );
-        let providers = load_providers!(base, "no-comments.sh").unwrap();
-        assert!(providers.is_empty());
-
-        // This hook contains only a shebang and some comments
-        create_hook!(base, "comments.sh",
-            r#"#!/bin/bash"#,
-            r#"# Hey, that's a comment!"#,
-            r#"echo "hi";"#
-        );
-        let providers = load_providers!(base, "comments.sh").unwrap();
-        assert!(providers.is_empty());
-
-        // This hook contains multiple simil-providers, but not a real one
-        create_hook!(base, "simil.sh",
-            r#"#!/bin/bash"#,
-            r#"## Something-Testing: fisher"#,
-            r#"## Fisher-Testing something"#,
-            r#"echo "hi";"#
-        );
-        let providers = load_providers!(base, "simil.sh").unwrap();
-        assert!(providers.is_empty());
-
-        // This hook contains a single valid provider
-        create_hook!(base, "single-provider.sh",
-            r#"#!/bin/bash"#,
-            r#"## Fisher-Testing: something"#,
-            r#"## Something-Testing: fisher"#,
-            r#"# hey!"#,
-            r#"echo "hi";"#
-        );
-        let providers = load_providers!(base, "single-provider.sh").unwrap();
-        assert_provider!(providers, 0, "Testing");
-
-        // This hook contains multiple valid providers
-        create_hook!(base, "two-providers.sh",
-            r#"#!/bin/bash"#,
-            r#"## Fisher-Testing: something"#,
-            r#"## Fisher-Standalone: {"secret": "12345"}"#,
-            r#"# hey!"#,
-            r#"echo "hi";"#
-        );
-        let providers = load_providers!(base, "two-providers.sh").unwrap();
-        assert_provider!(providers, 0, "Testing");
-        assert_provider!(providers, 1, "Standalone");
-
-        fs::remove_dir_all(base).unwrap();
-    }
 
     #[test]
     fn test_hooks_status_hooks_collection() {
@@ -957,32 +644,6 @@ use common::prelude::*;
         } else {
             panic!("Wrong error kind: {:?}", error.kind());
         }
-
-        fs::remove_dir_all(&base).unwrap();
-    }
-
-
-    #[test]
-    fn test_hook_ids() {
-        let state = Arc::new(State::new());
-        let base = utils::create_temp_dir().unwrap();
-
-        create_hook!(base, "hook1.sh",
-            r#"#!/bin/bash"#,
-            r#"echo "Hello world 1"#
-        );
-        create_hook!(base, "hook2.sh",
-            r#"#!/bin/bash"#,
-            r#"echo "Hello world 2"#
-        );
-
-        let id1 = assert_hook!(&state, base, "hook1.sh").id();
-        let id2 = assert_hook!(&state, base, "hook1.sh").id();
-        let id3 = assert_hook!(&state, base, "hook1.sh").id();
-
-        assert!(id1 < id2);
-        assert!(id2 < id3);
-        assert!(id1 < id3);
 
         fs::remove_dir_all(&base).unwrap();
     }
