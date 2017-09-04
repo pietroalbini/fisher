@@ -21,20 +21,20 @@ use tiny_http::Method;
 
 use common::prelude::*;
 
-use hooks::Hooks;
+use scripts::Repository;
 use web::http::HttpServer;
 use web::api::WebApi;
 
 
-pub struct WebApp<A: ProcessorApiTrait<Hooks> + 'static> {
+pub struct WebApp<A: ProcessorApiTrait<Repository> + 'static> {
     server: HttpServer<WebApi<A>>,
     addr: SocketAddr,
     locked: Arc<AtomicBool>,
 }
 
-impl<A: ProcessorApiTrait<Hooks>> WebApp<A> {
+impl<A: ProcessorApiTrait<Repository>> WebApp<A> {
 
-    pub fn new(hooks: Arc<Hooks>, enable_health: bool, behind_proxies: u8,
+    pub fn new(hooks: Arc<Repository>, enable_health: bool, behind_proxies: u8,
                bind: &str, processor: A)
                -> Result<Self> {
         let locked = Arc::new(AtomicBool::new(false));

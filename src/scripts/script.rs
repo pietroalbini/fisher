@@ -27,6 +27,13 @@ use providers::Provider;
 use requests::{Request, RequestType};
 
 
+#[derive(Debug, Clone)]
+pub struct ScriptProvider {
+    pub script: Arc<Script>,
+    pub provider: Arc<Provider>,
+}
+
+
 lazy_static! {
     static ref PREFERENCES_HEADER_RE: Regex = Regex::new(
         r"## Fisher: (.*)"
@@ -198,14 +205,6 @@ mod tests {
     use requests::{Request, RequestType};
     use scripts::test_utils::*;
 
-    use super::Script;
-
-
-    fn load_script(env: &TestEnv, name: &str) -> Result<Script> {
-        let path = env.scripts_dir().join(name).to_str().unwrap().to_string();
-        Ok(Script::load(name.into(), path, &env.state())?)
-    }
-
 
     #[test]
     fn test_scripts_are_loaded_properly() {
@@ -216,7 +215,7 @@ mod tests {
         ) -> Result<()> {
             // Create and load the script
             env.create_script(name, content)?;
-            let script = load_script(env, name)?;
+            let script = env.load_script(name)?;
 
             // Check if the basic attributes are loaded properly
             assert_eq!(script.name(), name);
@@ -307,10 +306,10 @@ mod tests {
             ])?;
 
             // Load all the needed scripts
-            let single = load_script(&env, "single.sh")?;
-            let failing = load_script(&env, "failing.sh")?;
-            let multiple1 = load_script(&env, "multiple1.sh")?;
-            let multiple2 = load_script(&env, "multiple2.sh")?;
+            let single = env.load_script("single.sh")?;
+            let failing = env.load_script("failing.sh")?;
+            let multiple1 = env.load_script("multiple1.sh")?;
+            let multiple2 = env.load_script("multiple2.sh")?;
 
             // Create a dummy web request
             let req = Request::Web(dummy_web_request());
@@ -340,9 +339,9 @@ mod tests {
             ])?;
 
             // Load the scripts three time
-            let id1 = load_script(&env, "script1.sh")?.id();
-            let id2 = load_script(&env, "script1.sh")?.id();
-            let id3 = load_script(&env, "script2.sh")?.id();
+            let id1 = env.load_script("script1.sh")?.id();
+            let id2 = env.load_script("script1.sh")?.id();
+            let id3 = env.load_script("script2.sh")?.id();
 
             // Check all the IDs are different
             assert_ne!(id1, id2); assert_ne!(id1, id3);

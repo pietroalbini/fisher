@@ -26,7 +26,7 @@ use common::prelude::*;
 use common::state::State;
 use common::structs::HealthDetails;
 
-use hooks::{Hooks, HooksBlueprint};
+use scripts::{Repository as Hooks, Blueprint as HooksBlueprint};
 use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
@@ -306,7 +306,7 @@ impl TestingEnv {
         hooks_blueprint.collect_path(&hooks_dir, true).unwrap();
 
         TestingEnv {
-            hooks: Arc::new(hooks_blueprint.hooks()),
+            hooks: Arc::new(hooks_blueprint.repository()),
             remove_dirs: vec![hooks_dir],
         }
     }

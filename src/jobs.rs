@@ -27,7 +27,7 @@ use std::net::IpAddr;
 use common::prelude::*;
 use common::state::UniqueId;
 
-use hooks::Hook;
+use scripts::Script;
 use utils;
 use requests::Request;
 use providers::Provider;
@@ -64,19 +64,22 @@ impl Default for Context {
 
 #[derive(Debug, Clone)]
 pub struct Job {
-    hook: Arc<Hook>,
+    script: Arc<Script>,
     provider: Option<Arc<Provider>>,
     request: Request,
 }
 
 impl Job {
 
-    pub fn new(hook: Arc<Hook>, provider: Option<Arc<Provider>>,
-               request: Request) -> Job {
+    pub fn new(
+        script: Arc<Script>,
+        provider: Option<Arc<Provider>>,
+        request: Request,
+    ) -> Job {
         Job {
-            hook: hook,
-            provider: provider,
-            request: request,
+            script,
+            provider,
+            request,
         }
     }
 
@@ -96,7 +99,7 @@ impl Job {
     }
 
     fn process(&self, ctx: &Context) -> Result<JobOutput> {
-        let mut command = process::Command::new(&self.hook.exec());
+        let mut command = process::Command::new(&self.script.exec());
 
         // Prepare the command's environment variables
         self.prepare_env(&mut command);
@@ -195,7 +198,7 @@ impl Job {
     }
 }
 
-impl JobTrait<Hook> for Job {
+impl JobTrait<Script> for Job {
     type Context = Context;
     type Output = JobOutput;
 
@@ -204,11 +207,11 @@ impl JobTrait<Hook> for Job {
     }
 
     fn script_id(&self) -> UniqueId {
-        self.hook.id()
+        self.script.id()
     }
 
     fn script_name(&self) -> &str {
-        self.hook.name()
+        self.script.name()
     }
 }
 

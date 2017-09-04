@@ -15,5 +15,8 @@
 
 #[cfg(test)] mod test_utils;
 mod script;
+mod repository;
 
-pub use self::script::Script;
+pub use self::repository::{Repository, Blueprint};
+pub use self::repository::{ScriptNamesIter, ScriptsIter, StatusJobsIter};
+pub use self::script::{Script, ScriptProvider};

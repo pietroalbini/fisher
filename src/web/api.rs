@@ -19,23 +19,23 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use common::prelude::*;
 
 use requests::{Request, RequestType};
-use hooks::Hooks;
+use scripts::Repository;
 use jobs::Job;
 use web::responses::Response;
 
 
 #[derive(Clone)]
-pub struct WebApi<A: ProcessorApiTrait<Hooks>> {
+pub struct WebApi<A: ProcessorApiTrait<Repository>> {
     processor: Arc<Mutex<A>>,
-    hooks: Arc<Hooks>,
+    hooks: Arc<Repository>,
     locked: Arc<AtomicBool>,
 
     health_enabled: bool,
 }
 
-impl<A: ProcessorApiTrait<Hooks>> WebApi<A> {
+impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
 
-    pub fn new(processor: A, hooks: Arc<Hooks>, locked: Arc<AtomicBool>,
+    pub fn new(processor: A, hooks: Arc<Repository>, locked: Arc<AtomicBool>,
                health_enabled: bool) -> Self {
         WebApi {
             processor: Arc::new(Mutex::new(processor)),

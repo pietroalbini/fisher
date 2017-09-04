@@ -23,8 +23,9 @@ use std::sync::Arc;
 
 use common::prelude::*;
 use common::state::State;
-use web::WebRequest;
+use scripts::Script;
 use utils::create_temp_dir;
+use web::WebRequest;
 
 
 pub struct TestEnv {
@@ -49,12 +50,24 @@ impl TestEnv {
         self.state.clone()
     }
 
+    pub fn tempdir(&mut self) -> Result<PathBuf> {
+        let dir = create_temp_dir()?;
+        self.to_cleanup.push(dir.clone());
+        Ok(dir)
+    }
+
     pub fn scripts_dir(&self) -> PathBuf {
         self.scripts_dir.clone()
     }
 
     pub fn create_script(&self, name: &str, content: &[&str]) -> Result<()> {
-        let path = self.scripts_dir.join(name);
+        self.create_script_into(&self.scripts_dir, name, content)
+    }
+
+    pub fn create_script_into(
+        &self, path: &PathBuf, name: &str, content: &[&str],
+    ) -> Result<()> {
+        let path = path.join(name);
 
         let mut to_write = String::new();
         for line in content {
@@ -70,6 +83,12 @@ impl TestEnv {
             .write(to_write.as_bytes())?;
 
         Ok(())
+    }
+
+
+    pub fn load_script(&self, name: &str) -> Result<Script> {
+        let path = self.scripts_dir().join(name).to_str().unwrap().to_string();
+        Ok(Script::load(name.into(), path, &self.state)?)
     }
 
     pub fn cleanup(&self) {

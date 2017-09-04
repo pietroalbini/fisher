@@ -21,25 +21,25 @@ use std::sync::Arc;
 use common::prelude::*;
 use common::state::State;
 
-use hooks::{HookNamesIter, Hooks, HooksBlueprint, Hook};
+use scripts::{Repository, Blueprint, Script, ScriptNamesIter};
 use jobs::Context;
 use processor::{Processor, ProcessorApi};
 use utils;
 use web::WebApp;
 
 
-pub trait IntoHook {
-    fn into_hook(self) -> Arc<Hook>;
+pub trait IntoScript {
+    fn into_script(self) -> Arc<Script>;
 }
 
-impl IntoHook for Hook {
-    fn into_hook(self) -> Arc<Hook> {
+impl IntoScript for Script {
+    fn into_script(self) -> Arc<Script> {
         Arc::new(self)
     }
 }
 
-impl IntoHook for Arc<Hook> {
-    fn into_hook(self) -> Arc<Hook> {
+impl IntoScript for Arc<Script> {
+    fn into_script(self) -> Arc<Script> {
         self
     }
 }
@@ -53,8 +53,8 @@ pub struct Fisher<'a> {
     pub enable_health: bool,
 
     state: Arc<State>,
-    hooks: Hooks,
-    hooks_blueprint: HooksBlueprint,
+    scripts_repository: Repository,
+    scripts_blueprint: Blueprint,
     environment: HashMap<String, String>,
 }
 
@@ -62,8 +62,8 @@ impl<'a> Fisher<'a> {
 
     pub fn new() -> Self {
         let state = Arc::new(State::new());
-        let hooks_blueprint = HooksBlueprint::new(state.clone());
-        let hooks = hooks_blueprint.hooks();
+        let scripts_blueprint = Blueprint::new(state.clone());
+        let scripts_repository = scripts_blueprint.repository();
 
         Fisher {
             max_threads: 1,
@@ -72,8 +72,8 @@ impl<'a> Fisher<'a> {
             enable_health: true,
 
             state: Arc::new(State::new()),
-            hooks: hooks,
-            hooks_blueprint: hooks_blueprint,
+            scripts_blueprint,
+            scripts_repository,
             environment: HashMap::new(),
         }
     }
@@ -88,24 +88,25 @@ impl<'a> Fisher<'a> {
         Ok(())
     }
 
-    pub fn add_hook<H: IntoHook>(&mut self, hook: H) -> Result<()> {
-        self.hooks_blueprint.insert(hook.into_hook())?;
+    pub fn add_script<S: IntoScript>(&mut self, script: S) -> Result<()> {
+        self.scripts_blueprint.insert(script.into_script())?;
         Ok(())
     }
 
-    pub fn collect_hooks<P: AsRef<Path>>(&mut self, path: P, recursive: bool)
-                                         -> Result<()> {
-        self.hooks_blueprint.collect_path(path, recursive)?;
+    pub fn collect_scripts<P: AsRef<Path>>(
+        &mut self, path: P, recursive: bool
+    ) -> Result<()> {
+        self.scripts_blueprint.collect_path(path, recursive)?;
         Ok(())
     }
 
-    pub fn hook_names(&self) -> HookNamesIter {
-        self.hooks.names()
+    pub fn script_names(&self) -> ScriptNamesIter {
+        self.scripts_repository.names()
     }
 
     pub fn start(self) -> Result<RunningFisher> {
         // Finalize the hooks
-        let hooks = Arc::new(self.hooks);
+        let repository = Arc::new(self.scripts_repository);
 
         let context = Arc::new(Context {
             environment: self.environment,
@@ -113,15 +114,15 @@ impl<'a> Fisher<'a> {
 
         // Start the processor
         let processor = Processor::new(
-            self.max_threads, hooks.clone(), context,
+            self.max_threads, repository.clone(), context,
             self.state.clone(),
         )?;
         let processor_api = processor.api();
 
         // Start the Web API
         let web_api = match WebApp::new(
-            hooks.clone(), self.enable_health, self.behind_proxies, self.bind,
-            processor_api,
+            repository.clone(), self.enable_health, self.behind_proxies,
+            self.bind, processor_api,
         ) {
             Ok(socket) => socket,
             Err(error) => {
@@ -135,26 +136,29 @@ impl<'a> Fisher<'a> {
         Ok(RunningFisher::new(
             processor,
             web_api,
-            self.hooks_blueprint,
+            self.scripts_blueprint,
         ))
     }
 }
 
 
 pub struct RunningFisher {
-    processor: Processor<Hooks>,
-    web_api: WebApp<ProcessorApi<Hooks>>,
-    hooks_blueprint: HooksBlueprint,
+    processor: Processor<Repository>,
+    web_api: WebApp<ProcessorApi<Repository>>,
+    scripts_blueprint: Blueprint,
 }
 
 impl RunningFisher {
 
-    fn new(processor: Processor<Hooks>, web_api: WebApp<ProcessorApi<Hooks>>,
-           hooks_blueprint: HooksBlueprint) -> Self {
+    fn new(
+        processor: Processor<Repository>,
+        web_api: WebApp<ProcessorApi<Repository>>,
+        scripts_blueprint: Blueprint
+    ) -> Self {
         RunningFisher {
-            processor: processor,
-            web_api: web_api,
-            hooks_blueprint: hooks_blueprint,
+            processor,
+            web_api,
+            scripts_blueprint,
         }
     }
 
@@ -168,7 +172,7 @@ impl RunningFisher {
         self.web_api.lock();
         processor.lock()?;
 
-        let result = self.hooks_blueprint.reload();
+        let result = self.scripts_blueprint.reload();
         if result.is_ok() {
             processor.cleanup()?;
         }

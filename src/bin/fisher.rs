@@ -145,9 +145,9 @@ fn app() -> fisher::Result<()> {
     factory.bind = &args.bind;
     factory.enable_health = args.enable_health;
 
-    factory.collect_hooks(args.hooks_dir, args.recursive)?;
+    factory.collect_scripts(args.hooks_dir, args.recursive)?;
     {
-        let mut hook_names = factory.hook_names().collect::<Vec<String>>();
+        let mut hook_names = factory.script_names().collect::<Vec<String>>();
         hook_names.sort();
 
         println!("{} ({} total)",
