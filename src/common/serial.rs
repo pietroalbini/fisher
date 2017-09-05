@@ -38,7 +38,6 @@ pub struct Serial {
 }
 
 impl Serial {
-
     /// Create a new Serial object, starting from zero.
     pub fn zero() -> Self {
         Serial {
@@ -62,7 +61,7 @@ impl Serial {
 
         serial.increment = new;
         if overflowed {
-            serial.alternate = ! serial.alternate;
+            serial.alternate = !serial.alternate;
         }
 
         serial
@@ -85,25 +84,24 @@ impl Serial {
 }
 
 impl fmt::Debug for Serial {
-
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Serial")
     }
 }
 
 impl Ord for Serial {
-
     fn cmp(&self, other: &Serial) -> Ordering {
         let cmp = self.increment.cmp(&other.increment);
 
         if self.alternate != other.alternate {
             cmp.reverse()
-        } else { cmp }
+        } else {
+            cmp
+        }
     }
 }
 
 impl PartialOrd for Serial {
-
     fn partial_cmp(&self, other: &Serial) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -147,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_incr() {
-        let mut  serial = Serial::zero();
+        let mut serial = Serial::zero();
 
         let original = serial.clone();
         serial.incr();
@@ -155,4 +153,3 @@ mod tests {
         assert!(serial > original);
     }
 }
-

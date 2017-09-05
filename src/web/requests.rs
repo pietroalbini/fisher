@@ -30,7 +30,6 @@ pub struct WebRequest {
 
 
 impl<'a> From<&'a mut tiny_http::Request> for WebRequest {
-
     fn from(origin: &'a mut tiny_http::Request) -> WebRequest {
         // Get the source IP
         let source = origin.remote_addr().ip();

@@ -33,7 +33,6 @@ pub enum Request {
 }
 
 impl Request {
-
     pub fn web(&self) -> Result<&WebRequest> {
         if let Request::Web(ref req) = *self {
             Ok(req)
@@ -53,7 +52,6 @@ impl Request {
 
 
 impl From<WebRequest> for Request {
-
     fn from(from: WebRequest) -> Request {
         Request::Web(from)
     }
@@ -61,7 +59,6 @@ impl From<WebRequest> for Request {
 
 
 impl From<StatusEvent> for Request {
-
     fn from(from: StatusEvent) -> Request {
         Request::Status(from)
     }

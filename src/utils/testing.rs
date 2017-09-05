@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 use std::fs;
 
 use hyper::client as hyper;
@@ -26,7 +26,7 @@ use common::prelude::*;
 use common::state::State;
 use common::structs::HealthDetails;
 
-use scripts::{Repository as Hooks, Blueprint as HooksBlueprint};
+use scripts::{Blueprint as HooksBlueprint, Repository as Hooks};
 use jobs::{Job, JobOutput};
 use web::{WebApp, WebRequest};
 use requests::Request;
@@ -116,19 +116,25 @@ pub fn sample_hooks() -> PathBuf {
     // Create a sample directory with some hooks
     let tempdir = utils::create_temp_dir().unwrap();
 
-    create_hook!(tempdir, "example.sh",
+    create_hook!(
+        tempdir,
+        "example.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
         r#"echo "Hello world""#
     );
 
-    create_hook!(tempdir, "failing.sh",
+    create_hook!(
+        tempdir,
+        "failing.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
         r#"exit 1"#
     );
 
-    create_hook!(tempdir, "jobs-details.sh",
+    create_hook!(
+        tempdir,
+        "jobs-details.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
         r#"b="${FISHER_TESTING_ENV}""#,
@@ -139,27 +145,35 @@ pub fn sample_hooks() -> PathBuf {
         r#"cat "prepared" > "${b}/prepared""#
     );
 
-    create_hook!(tempdir, "long.sh",
+    create_hook!(
+        tempdir,
+        "long.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
         r#"sleep 0.5"#,
         r#"echo "ok" > ${FISHER_TESTING_ENV}"#
     );
 
-    create_hook!(tempdir, "append-val.sh",
+    create_hook!(
+        tempdir,
+        "append-val.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
         r#"data=(${FISHER_TESTING_ENV//>/ })"#,
         r#"echo "${data[1]}" >> "${data[0]}""#
     );
 
-    create_hook!(tempdir, "trigger-status.sh",
+    create_hook!(
+        tempdir,
+        "trigger-status.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
         r#"echo "triggering...";"#
     );
 
-    create_hook!(tempdir, "status-example.sh",
+    create_hook!(
+        tempdir,
+        "status-example.sh",
         r#"#!/bin/bash"#,
         concat!(
             r#"## Fisher-Status: {"events": ["job_completed", "job_failed"], "#,
@@ -169,7 +183,9 @@ pub fn sample_hooks() -> PathBuf {
     );
 
     fs::create_dir(&tempdir.join("sub")).unwrap();
-    create_hook!(tempdir.join("sub"), "hook.sh",
+    create_hook!(
+        tempdir.join("sub"),
+        "hook.sh",
         r#"#!/bin/bash"#,
         r#"## Fisher-Testing: {}"#,
         r#"echo "Hello world""#
@@ -193,7 +209,6 @@ pub struct FakeProcessorApi {
 }
 
 impl ProcessorApiTrait<Hooks> for FakeProcessorApi {
-
     fn queue(&self, job: Job, priority: isize) -> Result<()> {
         self.sender.send(ProcessorApiCall::Queue(job, priority))?;
         Ok(())
@@ -235,18 +250,18 @@ pub struct WebAppInstance {
 }
 
 impl WebAppInstance {
-
-    pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: u8)
-               -> Self {
+    pub fn new(hooks: Arc<Hooks>, health: bool, behind_proxies: u8) -> Self {
         let (chan_send, chan_recv) = mpsc::channel();
-        let fake_processor = FakeProcessorApi {
-            sender: chan_send,
-        };
+        let fake_processor = FakeProcessorApi { sender: chan_send };
 
         // Start the web server
         // Create a new instance of WebApp
         let inst = WebApp::new(
-            hooks, health, behind_proxies, "127.0.0.1:0", fake_processor,
+            hooks,
+            health,
+            behind_proxies,
+            "127.0.0.1:0",
+            fake_processor,
         ).unwrap();
 
         // Create the HTTP client
@@ -262,8 +277,11 @@ impl WebAppInstance {
         }
     }
 
-    pub fn request(&mut self, method: Method, url: &str)
-                   -> hyper::RequestBuilder {
+    pub fn request(
+        &mut self,
+        method: Method,
+        url: &str,
+    ) -> hyper::RequestBuilder {
         // Create the HTTP request
         self.client.request(method, &format!("{}{}", self.url, url))
     }
@@ -296,7 +314,6 @@ pub struct TestingEnv {
 }
 
 impl TestingEnv {
-
     pub fn new() -> Self {
         let state = Arc::new(State::new());
 
@@ -335,8 +352,11 @@ impl TestingEnv {
 
     // WEB TESTING
 
-    pub fn start_web(&self, health: bool, behind_proxies: u8)
-                     -> WebAppInstance {
+    pub fn start_web(
+        &self,
+        health: bool,
+        behind_proxies: u8,
+    ) -> WebAppInstance {
         WebAppInstance::new(self.hooks.clone(), health, behind_proxies)
     }
 }

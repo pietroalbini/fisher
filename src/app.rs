@@ -21,7 +21,7 @@ use std::sync::Arc;
 use common::prelude::*;
 use common::state::State;
 
-use scripts::{Repository, Blueprint, Script, ScriptNamesIter};
+use scripts::{Blueprint, Repository, Script, ScriptNamesIter};
 use jobs::Context;
 use processor::{Processor, ProcessorApi};
 use utils;
@@ -59,7 +59,6 @@ pub struct Fisher<'a> {
 }
 
 impl<'a> Fisher<'a> {
-
     pub fn new() -> Self {
         let state = Arc::new(State::new());
         let scripts_blueprint = Blueprint::new(state.clone());
@@ -94,7 +93,9 @@ impl<'a> Fisher<'a> {
     }
 
     pub fn collect_scripts<P: AsRef<Path>>(
-        &mut self, path: P, recursive: bool
+        &mut self,
+        path: P,
+        recursive: bool,
     ) -> Result<()> {
         self.scripts_blueprint.collect_path(path, recursive)?;
         Ok(())
@@ -114,15 +115,20 @@ impl<'a> Fisher<'a> {
 
         // Start the processor
         let processor = Processor::new(
-            self.max_threads, repository.clone(), context,
+            self.max_threads,
+            repository.clone(),
+            context,
             self.state.clone(),
         )?;
         let processor_api = processor.api();
 
         // Start the Web API
         let web_api = match WebApp::new(
-            repository.clone(), self.enable_health, self.behind_proxies,
-            self.bind, processor_api,
+            repository.clone(),
+            self.enable_health,
+            self.behind_proxies,
+            self.bind,
+            processor_api,
         ) {
             Ok(socket) => socket,
             Err(error) => {
@@ -130,7 +136,7 @@ impl<'a> Fisher<'a> {
                 processor.stop()?;
 
                 return Err(error);
-            },
+            }
         };
 
         Ok(RunningFisher::new(
@@ -149,11 +155,10 @@ pub struct RunningFisher {
 }
 
 impl RunningFisher {
-
     fn new(
         processor: Processor<Repository>,
         web_api: WebApp<ProcessorApi<Repository>>,
-        scripts_blueprint: Blueprint
+        scripts_blueprint: Blueprint,
     ) -> Self {
         RunningFisher {
             processor,

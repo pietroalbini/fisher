@@ -48,10 +48,10 @@ pub trait ScriptsRepositoryTrait: Send + Sync {
     type Job: JobTrait<Self::Script> + Debug + Send + Sync + Clone;
 
     /// The iterator returned by the `iter` method.
-    type ScriptsIter: Iterator<Item=Arc<Self::Script>>;
+    type ScriptsIter: Iterator<Item = Arc<Self::Script>>;
 
     /// The iterator returned by the `jobs_after_output` method
-    type JobsIter: Iterator<Item=Self::Job>;
+    type JobsIter: Iterator<Item = Self::Job>;
 
     /// Get a script by its ID.
     fn id_exists(&self, id: &<Self::Script as ScriptTrait>::Id) -> bool;
@@ -65,7 +65,8 @@ pub trait ScriptsRepositoryTrait: Send + Sync {
     /// In Fisher, this is used to spawn status hooks when another job
     /// completes, but it can also return nothing.
     fn jobs_after_output(
-        &self, output: <Self::Job as JobTrait<Self::Script>>::Output
+        &self,
+        output: <Self::Job as JobTrait<Self::Script>>::Output,
     ) -> Option<Self::JobsIter>;
 }
 
@@ -91,7 +92,6 @@ pub trait JobTrait<S: ScriptTrait> {
 
 /// This trait represents the API of the processor
 pub trait ProcessorApiTrait<S: ScriptsRepositoryTrait>: Send {
-
     /// Queue a new job into the processor.
     fn queue(&self, job: S::Job, priority: isize) -> Result<()>;
 

@@ -31,7 +31,6 @@ pub enum StatusEvent {
 }
 
 impl StatusEvent {
-
     #[inline]
     pub fn kind(&self) -> StatusEventKind {
         match *self {
@@ -60,14 +59,11 @@ impl StatusEvent {
 
 #[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, Deserialize)]
 pub enum StatusEventKind {
-    #[serde(rename = "job_completed")]
-    JobCompleted,
-    #[serde(rename = "job_failed")]
-    JobFailed,
+    #[serde(rename = "job_completed")] JobCompleted,
+    #[serde(rename = "job_failed")] JobFailed,
 }
 
 impl StatusEventKind {
-
     fn name(&self) -> &str {
         match *self {
             StatusEventKind::JobCompleted => "job_completed",
@@ -84,12 +80,11 @@ pub struct StatusProvider {
 }
 
 impl StatusProvider {
-
     #[inline]
     pub fn hook_allowed(&self, name: &str) -> bool {
         // Check if it's allowed only if a whitelist was provided
         if let Some(ref hooks) = self.hooks {
-            if ! hooks.contains(&name.into()) {
+            if !hooks.contains(&name.into()) {
                 return false;
             }
         }
@@ -104,7 +99,6 @@ impl StatusProvider {
 }
 
 impl ProviderTrait for StatusProvider {
-
     fn new(config: &str) -> Result<Self> {
         Ok(serde_json::from_str(config)?)
     }
@@ -118,12 +112,12 @@ impl ProviderTrait for StatusProvider {
         }
 
         // The hook name must be allowed
-        if ! self.hook_allowed(req.hook_name()) {
+        if !self.hook_allowed(req.hook_name()) {
             return RequestType::Invalid;
         }
 
         // The event must be allowed
-        if ! self.events.contains(&req.kind()) {
+        if !self.events.contains(&req.kind()) {
             return RequestType::Invalid;
         }
 
@@ -149,29 +143,32 @@ impl ProviderTrait for StatusProvider {
                 env.insert("SUCCESS".into(), "1".into());
                 env.insert("EXIT_CODE".into(), "0".into());
                 env.insert("SIGNAL".into(), String::new());
-            },
+            }
             StatusEvent::JobFailed(ref output) => {
                 env.insert("SUCCESS".into(), "0".into());
                 env.insert(
                     "EXIT_CODE".into(),
                     if let Some(code) = output.exit_code {
                         format!("{}", code)
-                    } else { String::new() }
+                    } else {
+                        String::new()
+                    },
                 );
                 env.insert(
                     "SIGNAL".into(),
                     if let Some(signal) = output.signal {
                         format!("{}", signal)
-                    } else { String::new() }
+                    } else {
+                        String::new()
+                    },
                 );
-            },
+            }
         }
 
         env
     }
 
-    fn prepare_directory(&self, req: &Request, path: &PathBuf)
-                         -> Result<()> {
+    fn prepare_directory(&self, req: &Request, path: &PathBuf) -> Result<()> {
         let req = req.status()?;
 
         macro_rules! new_file {
@@ -188,11 +185,11 @@ impl ProviderTrait for StatusProvider {
             StatusEvent::JobCompleted(ref output) => {
                 new_file!(path, "stdout", output.stdout);
                 new_file!(path, "stderr", output.stderr);
-            },
+            }
             StatusEvent::JobFailed(ref output) => {
                 new_file!(path, "stdout", output.stdout);
                 new_file!(path, "stderr", output.stderr);
-            },
+            }
         }
 
         Ok(())
@@ -282,25 +279,29 @@ mod tests {
         }
 
         // Test with a wrong allowed event
-        assert_validate!(&StatusEvent::JobCompleted(dummy_job_output()).into(),
+        assert_validate!(
+            &StatusEvent::JobCompleted(dummy_job_output()).into(),
             r#"{"events": ["job_failed"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed event
-        assert_validate!(&StatusEvent::JobCompleted(dummy_job_output()).into(),
+        assert_validate!(
+            &StatusEvent::JobCompleted(dummy_job_output()).into(),
             r#"{"events": ["job_completed"]}"#,
             RequestType::ExecuteHook
         );
 
         // Test with a wrong allowed hook
-        assert_validate!(&StatusEvent::JobCompleted(dummy_job_output()).into(),
+        assert_validate!(
+            &StatusEvent::JobCompleted(dummy_job_output()).into(),
             r#"{"events": ["job_completed"], "hooks": ["invalid"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed hook
-        assert_validate!(&StatusEvent::JobCompleted(dummy_job_output()).into(),
+        assert_validate!(
+            &StatusEvent::JobCompleted(dummy_job_output()).into(),
             r#"{"events": ["job_completed"], "hooks": ["test"]}"#,
             RequestType::ExecuteHook
         );
@@ -310,7 +311,7 @@ mod tests {
     #[test]
     fn test_env() {
         let provider = StatusProvider::new(
-            r#"{"events": ["job_completed", "job_failed"]}"#
+            r#"{"events": ["job_completed", "job_failed"]}"#,
         ).unwrap();
 
         // Try with a job_completed event
@@ -356,9 +357,8 @@ mod tests {
             }};
         }
 
-        let provider = StatusProvider::new(
-            r#"{"events": ["job_completed"]}"#,
-        ).unwrap();
+        let provider =
+            StatusProvider::new(r#"{"events": ["job_completed"]}"#).unwrap();
 
         let event = StatusEvent::JobCompleted(dummy_job_output());
         let tempdir = utils::create_temp_dir().unwrap();

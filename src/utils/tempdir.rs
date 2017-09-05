@@ -21,7 +21,8 @@ use std::path;
 use std::sync::Mutex;
 
 use rand::{self, Rng};
-#[cfg(test)] use rand::{SeedableRng};
+#[cfg(test)]
+use rand::SeedableRng;
 
 use common::prelude::*;
 
@@ -45,7 +46,6 @@ struct TempDirCreator {
 }
 
 impl TempDirCreator {
-
     fn new(prefix: &str) -> Result<Self> {
         // This might fail because it's not able to seed
         let rng = rand::StdRng::new()?;
@@ -84,10 +84,10 @@ impl TempDirCreator {
             }
 
             return Ok(path);
-        };
+        }
     }
 
-    #[cfg(test)]  // This is used only during tests
+    #[cfg(test)] // This is used only during tests
     fn seed(&mut self, seed: &[usize]) {
         self.rng.reseed(seed);
     }

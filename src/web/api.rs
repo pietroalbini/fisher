@@ -34,9 +34,12 @@ pub struct WebApi<A: ProcessorApiTrait<Repository>> {
 }
 
 impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
-
-    pub fn new(processor: A, hooks: Arc<Repository>, locked: Arc<AtomicBool>,
-               health_enabled: bool) -> Self {
+    pub fn new(
+        processor: A,
+        hooks: Arc<Repository>,
+        locked: Arc<AtomicBool>,
+        health_enabled: bool,
+    ) -> Self {
         WebApi {
             processor: Arc::new(Mutex::new(processor)),
             hooks: hooks,
@@ -72,11 +75,14 @@ impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
             // Queue a job if the hook should be executed
             RequestType::ExecuteHook => {
                 let job = Job::new(hook.clone(), provider, req.clone());
-                self.processor.lock().unwrap()
-                              .queue(job, hook.priority()).unwrap();
+                self.processor
+                    .lock()
+                    .unwrap()
+                    .queue(job, hook.priority())
+                    .unwrap();
 
                 Response::Ok
-            },
+            }
 
             RequestType::Invalid => Response::Forbidden,
         }
@@ -85,7 +91,7 @@ impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
     pub fn get_health(&self, _req: &Request, _args: Vec<String>) -> Response {
         if self.health_enabled {
             Response::HealthStatus(
-                self.processor.lock().unwrap().health_details().unwrap()
+                self.processor.lock().unwrap().health_details().unwrap(),
             )
         } else {
             Response::Forbidden

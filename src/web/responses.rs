@@ -30,7 +30,6 @@ pub enum Response {
 }
 
 impl Response {
-
     pub fn status(&self) -> u16 {
         match *self {
             Response::NotFound => 404,
@@ -43,29 +42,23 @@ impl Response {
 
     pub fn json(&self) -> String {
         serde_json::to_string(&match *self {
-            Response::HealthStatus(ref details) => {
-                json!({
-                    "status": "ok",
-                    "result": details,
-                })
-            },
-            Response::BadRequest(ref error) => {
-                json!({
-                    "status": "bad_request",
-                    "error_msg": format!("{}", error),
-                })
-            },
-            _ => {
-                json!({
-                    "status": match *self {
-                        Response::NotFound => "not_found",
-                        Response::Forbidden => "forbidden",
-                        Response::BadRequest(..) => "bad_request",
-                        Response::Unavailable => "unavailable",
-                        Response::Ok | Response::HealthStatus(..) => "ok",
-                    },
-                })
-            }
+            Response::HealthStatus(ref details) => json!({
+                "status": "ok",
+                "result": details,
+            }),
+            Response::BadRequest(ref error) => json!({
+                "status": "bad_request",
+                "error_msg": format!("{}", error),
+            }),
+            _ => json!({
+                "status": match *self {
+                    Response::NotFound => "not_found",
+                    Response::Forbidden => "forbidden",
+                    Response::BadRequest(..) => "bad_request",
+                    Response::Unavailable => "unavailable",
+                    Response::Ok | Response::HealthStatus(..) => "ok",
+                },
+            }),
         }).unwrap()
     }
 }
@@ -75,8 +68,8 @@ impl Response {
 mod tests {
     use serde_json;
 
-use common::prelude::*;
-use common::structs::HealthDetails;
+    use common::prelude::*;
+    use common::structs::HealthDetails;
 
     use super::Response;
 

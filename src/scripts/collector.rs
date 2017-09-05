@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::fs::{read_dir, canonicalize, ReadDir};
+use std::fs::{canonicalize, read_dir, ReadDir};
 use std::path::{Path, PathBuf};
 use std::collections::VecDeque;
 use std::os::unix::fs::PermissionsExt;
@@ -22,7 +22,7 @@ use std::sync::Arc;
 use common::prelude::*;
 use common::state::State;
 
-use scripts::Script as Script;
+use scripts::Script;
 
 
 pub(in scripts) struct Collector {
@@ -33,9 +33,10 @@ pub(in scripts) struct Collector {
 }
 
 impl Collector {
-
     pub(in scripts) fn new<P: AsRef<Path>>(
-        base: P, state: Arc<State>, recursive: bool,
+        base: P,
+        state: Arc<State>,
+        recursive: bool,
     ) -> Result<Self> {
         let mut dirs = VecDeque::new();
         dirs.push_front(read_dir(&base)?);
@@ -58,7 +59,7 @@ impl Collector {
 
         // Check if the file is executable and readable
         let mode = e.metadata()?.permissions().mode();
-        if ! ((mode & 0o111) != 0 && (mode & 0o444) != 0) {
+        if !((mode & 0o111) != 0 && (mode & 0o444) != 0) {
             // Skip files with wrong permissions
             return Ok(None);
         }
@@ -67,7 +68,9 @@ impl Collector {
         let name = match e.strip_prefix(&self.base) {
             Ok(stripped) => stripped,
             Err(_) => &e,
-        }.to_str().unwrap().to_string();
+        }.to_str()
+            .unwrap()
+            .to_string();
 
         let exec = canonicalize(&e)?.to_str().unwrap().into();
 
@@ -96,21 +99,21 @@ impl Iterator for Collector {
                                 return Some(Ok(script));
                             }
                             // If None is returned get another one
-                        },
+                        }
                         Err(err) => {
                             return Some(Err(err));
-                        },
+                        }
                     }
-                },
+                }
                 // I/O error while getting the next entry
                 Some(Err(err)) => {
                     return Some(Err(err.into()));
-                },
+                }
                 // No more entries in the directory
                 None => {
                     // Don't search in this directory anymore
                     let _ = self.dirs.pop_front();
-                },
+                }
             }
         }
     }
@@ -129,7 +132,9 @@ mod tests {
 
 
     fn assert_collected(
-        env: &TestEnv, recurse: bool, expected: &[&str]
+        env: &TestEnv,
+        recurse: bool,
+        expected: &[&str],
     ) -> Result<()> {
         let mut found = 0;
 
@@ -138,7 +143,7 @@ mod tests {
             found += 1;
 
             let script = script?;
-            if ! expected.contains(&script.name()) {
+            if !expected.contains(&script.name()) {
                 panic!("Unexpected script collected: {}", script.name());
             }
         }
@@ -169,9 +174,11 @@ mod tests {
 
             // Ensure the collected scripts are the right ones
             assert_collected(&env, false, &["first.sh", "second.sh"])?;
-            assert_collected(&env, true, &[
-                "first.sh", "second.sh", "subdir/fourth.sh",
-            ])?;
+            assert_collected(
+                &env,
+                true,
+                &["first.sh", "second.sh", "subdir/fourth.sh"],
+            )?;
 
             Ok(())
         });
@@ -182,26 +189,33 @@ mod tests {
     fn test_scripts_collection_with_invalid_scripts_fails() {
         test_wrapper(|env| {
             // Create a valid script
-            env.create_script("valid.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher-Testing: {}"#,
-                r#"echo "I'm valid!""#,
-            ])?;
+            env.create_script(
+                "valid.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher-Testing: {}"#,
+                    r#"echo "I'm valid!""#,
+                ],
+            )?;
 
             // Ensure the scripts collection succedes
             assert_collected(&env, false, &["valid.sh"])?;
 
             // Create an additional invalid script
-            env.create_script("invalid.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher-InvalidProviderDoNotReallyCreateThis: {}"#,
-                r#"echo "I'm not valid :(""#,
-            ])?;
+            env.create_script(
+                "invalid.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher-InvalidProviderDoNotReallyCreateThis: {}"#,
+                    r#"echo "I'm not valid :(""#,
+                ],
+            )?;
 
             // Ensure the scripts collection fails
-            let err = assert_collected(&env, false, &[
-                "valid.sh", "invalid.sh",
-            ]).err().expect("The collection should return an error");
+            let err =
+                assert_collected(&env, false, &["valid.sh", "invalid.sh"])
+                    .err()
+                    .expect("The collection should return an error");
 
             // Ensure the returned error is correct
             if let ErrorKind::ProviderNotFound(ref name) = *err.kind() {

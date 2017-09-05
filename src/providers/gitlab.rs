@@ -38,7 +38,6 @@ pub struct GitLabProvider {
 }
 
 impl ProviderTrait for GitLabProvider {
-
     fn new(config: &str) -> Result<Self> {
         let inst: GitLabProvider = serde_json::from_str(config)?;
 
@@ -46,11 +45,13 @@ impl ProviderTrait for GitLabProvider {
         if let Some(ref events) = inst.events {
             // Check if the events exists
             for event in events {
-                if ! GITLAB_EVENTS.contains(&event.as_ref()) {
+                if !GITLAB_EVENTS.contains(&event.as_ref()) {
                     // Return an error if the event doesn't exist
-                    return Err(ErrorKind::InvalidInput(format!(
-                        r#""{}" is not a GitLab event"#, event
-                    )).into());
+                    return Err(
+                        ErrorKind::InvalidInput(
+                            format!(r#""{}" is not a GitLab event"#, event),
+                        ).into(),
+                    );
                 }
             }
         }
@@ -68,7 +69,7 @@ impl ProviderTrait for GitLabProvider {
 
         // Check if the correct headers are provided
         for header in GITLAB_HEADERS.iter() {
-            if ! req.headers.contains_key(*header) {
+            if !req.headers.contains_key(*header) {
                 return RequestType::Invalid;
             }
         }
@@ -86,20 +87,18 @@ impl ProviderTrait for GitLabProvider {
             }
         }
 
-        let event = normalize_event_name(
-            &*req.headers["X-Gitlab-Event"]
-        );
+        let event = normalize_event_name(&*req.headers["X-Gitlab-Event"]);
 
         // Check if the event should be accepted
         if let Some(ref events) = self.events {
             // The event is whitelisted
-            if ! events.contains(&event.to_string()) {
+            if !events.contains(&event.to_string()) {
                 return RequestType::Invalid;
             }
         }
 
         // Check if the JSON body is valid
-        if ! serde_json::from_str::<serde_json::Value>(&req.body).is_ok() {
+        if !serde_json::from_str::<serde_json::Value>(&req.body).is_ok() {
             return RequestType::Invalid;
         }
 
@@ -115,9 +114,8 @@ impl ProviderTrait for GitLabProvider {
         }
 
         // Get the current event name
-        let event_header = normalize_event_name(
-            &*req.headers["X-Gitlab-Event"]
-        );
+        let event_header =
+            normalize_event_name(&*req.headers["X-Gitlab-Event"]);
 
         let mut res = HashMap::new();
         res.insert("EVENT".to_string(), event_header.to_string());
@@ -148,15 +146,14 @@ mod tests {
     use web::WebRequest;
     use providers::ProviderTrait;
 
-    use super::{GITLAB_EVENTS, GitLabProvider, normalize_event_name};
+    use super::{normalize_event_name, GitLabProvider, GITLAB_EVENTS};
 
 
     fn base_request() -> WebRequest {
         let mut base = dummy_web_request();
 
-        base.headers.insert(
-            "X-Gitlab-Event".to_string(), "Push Hook".to_string()
-        );
+        base.headers
+            .insert("X-Gitlab-Event".to_string(), "Push Hook".to_string());
         base.body = r#"{"a": "b"}"#.to_string();
 
         base
@@ -197,10 +194,9 @@ mod tests {
 
         for event in GITLAB_EVENTS.iter() {
             let mut request = base_request();
-            request.headers.insert(
-                "X-Gitlab-Event".to_string(),
-                format!("{} Hook", event),
-            );
+            request
+                .headers
+                .insert("X-Gitlab-Event".to_string(), format!("{} Hook", event));
 
             assert_eq!(
                 provider.validate(&request.into()),
@@ -222,32 +218,21 @@ mod tests {
 
         // Check with a request with the headers and no JSON body
         let mut req = dummy_web_request();
-        req.headers.insert(
-            "X-Gitlab-Event".to_string(), "Push Hook".to_string()
-        );
-        assert_eq!(
-            provider.validate(&req.into()),
-            RequestType::Invalid
-        );
+        req.headers
+            .insert("X-Gitlab-Event".to_string(), "Push Hook".to_string());
+        assert_eq!(provider.validate(&req.into()), RequestType::Invalid);
 
         // Check with a request with missing headers and a JSON body
         let mut req = dummy_web_request();
         req.body = r#"{"a": "b"}"#.to_string();
-        assert_eq!(
-            provider.validate(&req.into()),
-            RequestType::Invalid
-        );
+        assert_eq!(provider.validate(&req.into()), RequestType::Invalid);
 
         // Check with a request with the headers and a JSON body
         let mut req = dummy_web_request();
-        req.headers.insert(
-            "X-Gitlab-Event".to_string(), "Push Hook".to_string()
-        );
+        req.headers
+            .insert("X-Gitlab-Event".to_string(), "Push Hook".to_string());
         req.body = r#"{"a": "b"}"#.to_string();
-        assert_eq!(
-            provider.validate(&req.into()),
-            RequestType::ExecuteHook
-        );
+        assert_eq!(provider.validate(&req.into()), RequestType::ExecuteHook);
     }
 
 
@@ -270,19 +255,15 @@ mod tests {
 
         // Check a request with the header but a wrong token
         let mut req = base_request();
-        req.headers.insert("X-Gitlab-Token".to_string(), "12345".to_string());
-        assert_eq!(
-            provider.validate(&req.into()),
-            RequestType::Invalid
-        );
+        req.headers
+            .insert("X-Gitlab-Token".to_string(), "12345".to_string());
+        assert_eq!(provider.validate(&req.into()), RequestType::Invalid);
 
         // Check a request with the header
         let mut req = base_request();
-        req.headers.insert("X-Gitlab-Token".to_string(), "abcde".to_string());
-        assert_eq!(
-            provider.validate(&req.into()),
-            RequestType::ExecuteHook
-        );
+        req.headers
+            .insert("X-Gitlab-Token".to_string(), "abcde".to_string());
+        assert_eq!(provider.validate(&req.into()), RequestType::ExecuteHook);
     }
 
 
@@ -294,9 +275,8 @@ mod tests {
         fn with_event(name: &str) -> Request {
             let mut base = base_request();
             base.body = "{}".to_string();
-            base.headers.insert(
-                "X-Gitlab-Event".to_string(), name.to_string()
-            );
+            base.headers
+                .insert("X-Gitlab-Event".to_string(), name.to_string());
 
             Request::Web(base)
         }
@@ -334,9 +314,8 @@ mod tests {
         expected.insert("EVENT".to_string(), "Push".to_string());
 
         let mut req = base_request();
-        req.headers.insert(
-            "X-Gitlab-Event".to_string(), "Push Hook".to_string()
-        );
+        req.headers
+            .insert("X-Gitlab-Event".to_string(), "Push Hook".to_string());
 
         let provider = GitLabProvider::new("{}").unwrap();
         assert_eq!(provider.env(&req.into()), expected);

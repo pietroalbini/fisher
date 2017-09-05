@@ -29,7 +29,6 @@ pub struct ScheduledJob<S: ScriptsRepositoryTrait> {
 }
 
 impl<S: ScriptsRepositoryTrait> ScheduledJob<S> {
-
     pub fn new(job: Job<S>, priority: isize, serial: Serial) -> Self {
         ScheduledJob {
             job: job,
@@ -43,9 +42,9 @@ impl<S: ScriptsRepositoryTrait> ScheduledJob<S> {
 
         // Ensure the right error location is set
         if let &mut Err(ref mut error) = &mut result {
-            error.set_location(ErrorLocation::HookProcessing(
-                self.hook_name().into()
-            ));
+            error.set_location(
+                ErrorLocation::HookProcessing(self.hook_name().into()),
+            );
         }
 
         result
@@ -61,7 +60,6 @@ impl<S: ScriptsRepositoryTrait> ScheduledJob<S> {
 }
 
 impl<S: ScriptsRepositoryTrait> Ord for ScheduledJob<S> {
-
     fn cmp(&self, other: &ScheduledJob<S>) -> Ordering {
         let priority_ord = self.priority.cmp(&other.priority);
 
@@ -74,14 +72,12 @@ impl<S: ScriptsRepositoryTrait> Ord for ScheduledJob<S> {
 }
 
 impl<S: ScriptsRepositoryTrait> PartialOrd for ScheduledJob<S> {
-
     fn partial_cmp(&self, other: &ScheduledJob<S>) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl<S: ScriptsRepositoryTrait> PartialEq for ScheduledJob<S> {
-
     fn eq(&self, other: &ScheduledJob<S>) -> bool {
         self.priority == other.priority
     }

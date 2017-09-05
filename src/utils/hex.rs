@@ -30,9 +30,11 @@ pub fn from_hex(input: &str) -> Result<Vec<u8>> {
             b'a'...b'f' => byte - b'a' + 10,
             b'A'...b'F' => byte - b'A' + 10,
             _ => {
-                return Err(ErrorKind::InvalidHexChar(
-                    input[i..].chars().next().unwrap()
-                ).into());
+                return Err(
+                    ErrorKind::InvalidHexChar(
+                        input[i..].chars().next().unwrap(),
+                    ).into(),
+                );
             }
         };
 
@@ -54,7 +56,7 @@ pub fn from_hex(input: &str) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-use common::prelude::*;
+    use common::prelude::*;
 
     use super::from_hex;
 

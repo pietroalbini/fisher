@@ -14,14 +14,14 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::fs::File;
-use std::io::{BufReader, BufRead};
+use std::io::{BufRead, BufReader};
 use std::sync::Arc;
 
 use regex::Regex;
 use serde_json;
 
 use common::prelude::*;
-use common::state::{State, IdKind, UniqueId};
+use common::state::{IdKind, State, UniqueId};
 
 use providers::Provider;
 use requests::{Request, RequestType};
@@ -51,7 +51,6 @@ struct Preferences {
 }
 
 impl Preferences {
-
     fn empty() -> Self {
         Preferences {
             priority: None,
@@ -97,7 +96,7 @@ fn load_headers(file: &str) -> Result<LoadHeadersOutput> {
         if preferences.is_none() {
             if let Some(cap) = PREFERENCES_HEADER_RE.captures(&content) {
                 preferences = Some(serde_json::from_str(&cap[1])?);
-                continue;  // Don't capture anything else for this line
+                continue; // Don't capture anything else for this line
             }
         }
 
@@ -108,19 +107,21 @@ fn load_headers(file: &str) -> Result<LoadHeadersOutput> {
             match Provider::new(name, data) {
                 Ok(provider) => {
                     providers.push(Arc::new(provider));
-                },
+                }
                 Err(mut error) => {
                     error.set_location(
-                        ErrorLocation::File(file.into(), Some(line_number))
+                        ErrorLocation::File(file.into(), Some(line_number)),
                     );
                     return Err(error);
-                },
+                }
             }
         }
     }
 
     Ok(LoadHeadersOutput {
-        preferences: if let Some(pref) = preferences { pref } else {
+        preferences: if let Some(pref) = preferences {
+            pref
+        } else {
             Preferences::empty()
         },
         providers: providers,
@@ -139,9 +140,10 @@ pub struct Script {
 }
 
 impl Script {
-
     pub fn load(
-        name: String, exec: String, state: &Arc<State>,
+        name: String,
+        exec: String,
+        state: &Arc<State>,
     ) -> Result<Self> {
         let headers = load_headers(&exec)?;
 
@@ -156,15 +158,16 @@ impl Script {
     }
 
     pub fn validate(
-        &self, req: &Request
+        &self,
+        req: &Request,
     ) -> (RequestType, Option<Arc<Provider>>) {
-        if ! self.providers.is_empty() {
+        if !self.providers.is_empty() {
             // Check every provider if they're present
             for provider in &self.providers {
                 let result = provider.validate(req);
 
                 if result != RequestType::Invalid {
-                    return (result, Some(provider.clone()))
+                    return (result, Some(provider.clone()));
                 }
             }
             (RequestType::Invalid, None)
@@ -210,8 +213,12 @@ mod tests {
     fn test_scripts_are_loaded_properly() {
         // This little helper avoids repeating code all the time
         fn create_and_assert(
-            env: &TestEnv, name: &str, content: &[&str], priority: isize,
-            parallel: bool, providers: &[&str],
+            env: &TestEnv,
+            name: &str,
+            content: &[&str],
+            priority: isize,
+            parallel: bool,
+            providers: &[&str],
         ) -> Result<()> {
             // Create and load the script
             env.create_script(name, content)?;
@@ -238,40 +245,72 @@ mod tests {
 
         test_wrapper(|env| {
             // Check if naked scripts are loaded properly
-            create_and_assert(&env, "naked.sh", &[
-                r#"#!/bin/bash"#,
-                r#"echo "This is a naked script""#,
-            ], 0, true, &[])?;
+            create_and_assert(
+                &env,
+                "naked.sh",
+                &[r#"#!/bin/bash"#, r#"echo "This is a naked script""#],
+                0,
+                true,
+                &[],
+            )?;
 
             // Check if scripts with preferences are loaded properly
-            create_and_assert(&env, "prefs.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher: {"parallel": false, "priority": 5}"#,
-                r#"echo "This script has preferences""#,
-            ], 5, false, &[])?;
+            create_and_assert(
+                &env,
+                "prefs.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher: {"parallel": false, "priority": 5}"#,
+                    r#"echo "This script has preferences""#,
+                ],
+                5,
+                false,
+                &[],
+            )?;
 
             // Check if scripts with one provider are loaded properly
-            create_and_assert(&env, "one-provider.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher-Testing: {}"#,
-                r#"echo "This script has one provider""#,
-            ], 0, true, &["Testing"])?;
+            create_and_assert(
+                &env,
+                "one-provider.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher-Testing: {}"#,
+                    r#"echo "This script has one provider""#,
+                ],
+                0,
+                true,
+                &["Testing"],
+            )?;
 
             // Check if scripts with preferences and providers are loaded properly
-            create_and_assert(&env, "provider-prefs.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher: {"parallel": false, "priority": 5}"#,
-                r#"## Fisher-Testing: {}"#,
-                r#"echo "This script has one provider and some preferences""#,
-            ], 5, false, &["Testing"])?;
+            create_and_assert(
+                &env,
+                "provider-prefs.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher: {"parallel": false, "priority": 5}"#,
+                    r#"## Fisher-Testing: {}"#,
+                    r#"echo "This script has one provider and some preferences""#,
+                ],
+                5,
+                false,
+                &["Testing"],
+            )?;
 
             // Check if scripts with two providers are loaded properly
-            create_and_assert(&env, "two-providers.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher-Testing: {}"#,
-                r#"## Fisher-Standalone: {"secret": "abcde"}"#,
-                r#"echo "This script has one provider""#,
-            ], 0, true, &["Testing", "Standalone"])?;
+            create_and_assert(
+                &env,
+                "two-providers.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher-Testing: {}"#,
+                    r#"## Fisher-Standalone: {"secret": "abcde"}"#,
+                    r#"echo "This script has one provider""#,
+                ],
+                0,
+                true,
+                &["Testing", "Standalone"],
+            )?;
 
             Ok(())
         });
@@ -282,28 +321,36 @@ mod tests {
     fn test_requests_can_be_validated_against_scripts() {
         test_wrapper(|env| {
             // Create all the needed scripts
-            env.create_script("single.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher-Testing: {}"#,
-                r#"echo "ok""#,
-            ])?;
-            env.create_script("failing.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher-Standalone: {"secret": "abcde"}"#,
-                r#"echo "ok""#,
-            ])?;
-            env.create_script("multiple1.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher-Testing: {}"#,
-                r#"## Fisher-Standalone: {"secret": "abcde"}"#,
-                r#"echo "ok""#,
-            ])?;
-            env.create_script("multiple2.sh", &[
-                r#"#!/bin/bash"#,
-                r#"## Fisher-Standalone: {"secret": "abcde"}"#,
-                r#"## Fisher-Testing: {}"#,
-                r#"echo "ok""#,
-            ])?;
+            env.create_script(
+                "single.sh",
+                &[r#"#!/bin/bash"#, r#"## Fisher-Testing: {}"#, r#"echo "ok""#],
+            )?;
+            env.create_script(
+                "failing.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher-Standalone: {"secret": "abcde"}"#,
+                    r#"echo "ok""#,
+                ],
+            )?;
+            env.create_script(
+                "multiple1.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher-Testing: {}"#,
+                    r#"## Fisher-Standalone: {"secret": "abcde"}"#,
+                    r#"echo "ok""#,
+                ],
+            )?;
+            env.create_script(
+                "multiple2.sh",
+                &[
+                    r#"#!/bin/bash"#,
+                    r#"## Fisher-Standalone: {"secret": "abcde"}"#,
+                    r#"## Fisher-Testing: {}"#,
+                    r#"echo "ok""#,
+                ],
+            )?;
 
             // Load all the needed scripts
             let single = env.load_script("single.sh")?;
@@ -329,14 +376,14 @@ mod tests {
     fn test_script_ids_are_unique() {
         test_wrapper(|env| {
             // Create two different scripts
-            env.create_script("script1.sh", &[
-                r#"#!/bin/bash"#,
-                r#"echo "Script 1""#,
-            ])?;
-            env.create_script("script2.sh", &[
-                r#"#!/bin/bash"#,
-                r#"echo "Script 2""#,
-            ])?;
+            env.create_script(
+                "script1.sh",
+                &[r#"#!/bin/bash"#, r#"echo "Script 1""#],
+            )?;
+            env.create_script(
+                "script2.sh",
+                &[r#"#!/bin/bash"#, r#"echo "Script 2""#],
+            )?;
 
             // Load the scripts three time
             let id1 = env.load_script("script1.sh")?.id();
@@ -344,9 +391,12 @@ mod tests {
             let id3 = env.load_script("script2.sh")?.id();
 
             // Check all the IDs are different
-            assert_ne!(id1, id2); assert_ne!(id1, id3);
-            assert_ne!(id2, id1); assert_ne!(id2, id3);
-            assert_ne!(id3, id1); assert_ne!(id3, id2);
+            assert_ne!(id1, id2);
+            assert_ne!(id1, id3);
+            assert_ne!(id2, id1);
+            assert_ne!(id2, id3);
+            assert_ne!(id3, id1);
+            assert_ne!(id3, id2);
 
             Ok(())
         });

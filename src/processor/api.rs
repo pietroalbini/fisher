@@ -13,14 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 
 use common::prelude::*;
 use common::state::State;
 use common::structs::HealthDetails;
 
 use processor::scheduler::{Scheduler, SchedulerInput};
-#[cfg(test)] use processor::scheduler::DebugDetails;
+#[cfg(test)]
+use processor::scheduler::DebugDetails;
 use processor::types::{Job, JobContext};
 
 
@@ -34,19 +35,20 @@ pub struct Processor<S: ScriptsRepositoryTrait + 'static> {
 }
 
 impl<S: ScriptsRepositoryTrait> Processor<S> {
-
     /// Create a new processor with the provided configuration. The returned
     /// struct allows you to control it.
-    pub fn new(max_threads: u16, hooks: Arc<S>, ctx: Arc<JobContext<S>>,
-               state: Arc<State>) -> Result<Self> {
+    pub fn new(
+        max_threads: u16,
+        hooks: Arc<S>,
+        ctx: Arc<JobContext<S>>,
+        state: Arc<State>,
+    ) -> Result<Self> {
         // Retrieve wanted information from the spawned thread
         let (input_send, input_recv) = mpsc::sync_channel(0);
         let (wait_send, wait_recv) = mpsc::channel();
 
         ::std::thread::spawn(move || {
-            let inner = Scheduler::new(
-                max_threads, hooks, ctx, state,
-            );
+            let inner = Scheduler::new(max_threads, hooks, ctx, state);
             input_send.send(inner.input()).unwrap();
 
             inner.run().unwrap();
@@ -87,7 +89,6 @@ pub struct ProcessorApi<S: ScriptsRepositoryTrait> {
 }
 
 impl<S: ScriptsRepositoryTrait> ProcessorApi<S> {
-
     #[cfg(test)]
     pub fn debug_details(&self) -> Result<DebugDetails<S>> {
         let (res_send, res_recv) = mpsc::channel();
@@ -97,7 +98,6 @@ impl<S: ScriptsRepositoryTrait> ProcessorApi<S> {
 }
 
 impl<S: ScriptsRepositoryTrait> ProcessorApiTrait<S> for ProcessorApi<S> {
-
     fn queue(&self, job: Job<S>, priority: isize) -> Result<()> {
         self.input.send(SchedulerInput::Job(job, priority))?;
         Ok(())

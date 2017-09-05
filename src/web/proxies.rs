@@ -26,11 +26,8 @@ pub struct ProxySupport {
 }
 
 impl ProxySupport {
-
     pub fn new(behind: u8) -> Self {
-        ProxySupport {
-            behind: behind,
-        }
+        ProxySupport { behind: behind }
     }
 
     pub fn source_ip(&self, req: &Request) -> Result<IpAddr> {
@@ -82,7 +79,7 @@ mod tests {
     use std::str::FromStr;
 
     use utils::testing::*;
-use common::prelude::*;
+    use common::prelude::*;
     use requests::Request;
 
     use super::ProxySupport;
@@ -152,10 +149,7 @@ use common::prelude::*;
         // Test with an enabled proxy support with two proxies
         let p = ProxySupport::new(2);
         assert_err!(p.source_ip(&req!()), ErrorKind::NotBehindProxy);
-        assert_err!(
-            p.source_ip(&req!("127.2.2.2")),
-            ErrorKind::NotBehindProxy
-        );
+        assert_err!(p.source_ip(&req!("127.2.2.2")), ErrorKind::NotBehindProxy);
         assert_ip!(p, req!("127.3.3.3, 127.2.2.2"), "127.3.3.3");
         assert_err!(
             p.source_ip(&req!("invalid")),

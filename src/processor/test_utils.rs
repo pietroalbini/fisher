@@ -41,10 +41,13 @@ impl<I: Send + Sync + Debug + Clone> ScriptTrait for Script<I> {
 }
 
 impl<I: Send + Sync + Debug + Clone> Debug for Script<I> {
-
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Script {{ id: {}, name: {}, can_be_parallel: {} }}",
-            self.id, self.name, self.can_be_parallel,
+        write!(
+            f,
+            "Script {{ id: {}, name: {}, can_be_parallel: {} }}",
+            self.id,
+            self.name,
+            self.can_be_parallel,
         )
     }
 }
@@ -81,7 +84,6 @@ pub struct Repository<I: Send + Sync + Debug + Clone> {
 }
 
 impl<I: Send + Sync + Debug + Clone> Repository<I> {
-
     pub fn new() -> Self {
         Repository {
             last_id: AtomicUsize::new(0),
@@ -91,39 +93,52 @@ impl<I: Send + Sync + Debug + Clone> Repository<I> {
     }
 
     pub fn add_script<F: Fn(I) -> Result<()> + 'static + Send>(
-        &self, name: &str, parallel: bool, func: F
+        &self,
+        name: &str,
+        parallel: bool,
+        func: F,
     ) {
-        self.ids.write().unwrap().push(self.last_id.load(Ordering::SeqCst));
-        self.scripts.write().unwrap().insert(name.to_string(), Arc::new(Script {
-            id: self.last_id.fetch_add(1, Ordering::SeqCst),
-            name: name.to_string(),
-            can_be_parallel: parallel,
-            func: Arc::new(Mutex::new(Box::new(func))),
-        }));
+        self.ids
+            .write()
+            .unwrap()
+            .push(self.last_id.load(Ordering::SeqCst));
+        self.scripts.write().unwrap().insert(
+            name.to_string(),
+            Arc::new(Script {
+                id: self.last_id.fetch_add(1, Ordering::SeqCst),
+                name: name.to_string(),
+                can_be_parallel: parallel,
+                func: Arc::new(Mutex::new(Box::new(func))),
+            }),
+        );
     }
 
     pub fn job(&self, name: &str, args: I) -> Option<Job<I>> {
-        self.scripts.read().unwrap().get(name).cloned()
-                    .map(|script| Job { script, args })
+        self.scripts
+            .read()
+            .unwrap()
+            .get(name)
+            .cloned()
+            .map(|script| Job { script, args })
     }
 
     pub fn script_id_of(&self, name: &str) -> Option<usize> {
-        self.scripts.read().unwrap().get(name).map(|script| script.id())
+        self.scripts
+            .read()
+            .unwrap()
+            .get(name)
+            .map(|script| script.id())
     }
 
     pub fn recreate_scripts(&self) {
-        let mut scripts: Vec<_> = self.scripts.read().unwrap()
-                                              .values().cloned().collect();
+        let mut scripts: Vec<_> =
+            self.scripts.read().unwrap().values().cloned().collect();
 
         self.ids.write().unwrap().clear();
         self.scripts.write().unwrap().clear();
 
         for script in scripts.drain(..) {
-            self.add_script(
-                &script.name,
-                script.can_be_parallel,
-                |_| { Ok(()) },
-            );
+            self.add_script(&script.name, script.can_be_parallel, |_| Ok(()));
         }
     }
 }
@@ -140,7 +155,7 @@ impl<I: Send + Sync + Debug + Clone> ScriptsRepositoryTrait for Repository<I> {
 
     fn iter(&self) -> Self::ScriptsIter {
         SimpleIter::new(
-            self.scripts.read().unwrap().values().cloned().collect()
+            self.scripts.read().unwrap().values().cloned().collect(),
         )
     }
 
@@ -155,7 +170,6 @@ pub struct SimpleIter<T> {
 }
 
 impl<T> SimpleIter<T> {
-
     fn new(values: VecDeque<T>) -> Self {
         SimpleIter { values }
     }

@@ -37,8 +37,7 @@ pub enum IdKind {
     /// This kind should be used to identify threads.
     ThreadId,
 
-    #[doc(hidden)]
-    __NonExaustiveMatch,
+    #[doc(hidden)] __NonExaustiveMatch,
 }
 
 
@@ -56,7 +55,6 @@ pub struct UniqueId {
 }
 
 impl PartialOrd for UniqueId {
-
     fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
         if self.kind == other.kind {
             self.id.partial_cmp(&other.id)
@@ -75,7 +73,6 @@ pub struct State {
 }
 
 impl State {
-
     /// Create a new instance of the struct.
     pub fn new() -> Self {
         State {
@@ -96,7 +93,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use super::{State, IdKind};
+    use super::{IdKind, State};
 
 
     #[test]
@@ -113,4 +110,3 @@ mod tests {
         assert!(id1 != id3);
     }
 }
-

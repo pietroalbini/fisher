@@ -15,16 +15,16 @@
 
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::time::Instant;
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 
 use common::prelude::*;
 use common::state::{State, UniqueId};
 use common::serial::Serial;
 use common::structs::HealthDetails;
 
-use super::thread::{Thread, ThreadCompleter, ProcessResult};
+use super::thread::{ProcessResult, Thread, ThreadCompleter};
 use super::scheduled_job::ScheduledJob;
-use super::types::{ScriptId, Job, JobOutput, JobContext};
+use super::types::{Job, JobContext, JobOutput, ScriptId};
 
 
 const STATUS_EVENTS_PRIORITY: isize = 1000;
@@ -38,15 +38,14 @@ pub struct DebugDetails<S: ScriptsRepositoryTrait> {
 
 #[cfg(test)]
 impl<S: ScriptsRepositoryTrait> DebugDetails<S> {
-
     fn from_scheduler(scheduler: &Scheduler<S>) -> Self {
-        let waiting = scheduler.waiting.iter()
+        let waiting = scheduler
+            .waiting
+            .iter()
             .map(|(key, value)| (*key, value.len()))
             .collect();
 
-        DebugDetails {
-            waiting: waiting,
-        }
+        DebugDetails { waiting: waiting }
     }
 }
 
@@ -89,15 +88,18 @@ pub struct Scheduler<S: ScriptsRepositoryTrait + 'static> {
 }
 
 impl<S: ScriptsRepositoryTrait> Scheduler<S> {
-
-    pub fn new(max_threads: u16, hooks: Arc<S>, ctx: Arc<JobContext<S>>,
-               state: Arc<State>) -> Self {
+    pub fn new(
+        max_threads: u16,
+        hooks: Arc<S>,
+        ctx: Arc<JobContext<S>>,
+        state: Arc<State>,
+    ) -> Self {
         let (input_send, input_recv) = mpsc::channel();
 
         // Populate the waiting HashMap with non-parallel hooks
         let mut waiting = HashMap::new();
         for hook in hooks.iter() {
-            if ! hook.can_be_parallel() {
+            if !hook.can_be_parallel() {
                 waiting.insert(hook.id(), BinaryHeap::new());
             }
         }
@@ -142,17 +144,17 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
             }
 
             match input {
-
                 SchedulerInput::Job(job, priority) => {
-                    self.queue_job(ScheduledJob::new(
-                        job, priority, serial.incr(),
-                    ));
+                    self.queue_job(
+                        ScheduledJob::new(job, priority, serial.incr()),
+                    );
                     self.run_jobs();
-                },
+                }
 
                 SchedulerInput::HealthStatus(return_to) => {
                     // Count the busy threads
-                    let busy_threads = self.threads.values()
+                    let busy_threads = self.threads
+                        .values()
                         .filter(|thread| thread.busy())
                         .count();
 
@@ -166,13 +168,15 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                         busy_threads: busy_threads as u16,
                         max_threads: self.max_threads,
                     })?;
-                },
+                }
 
                 SchedulerInput::ProcessOutput(output) => {
                     if let Some(jobs) = self.hooks.jobs_after_output(output) {
                         for job in jobs {
                             to_schedule.push(ScheduledJob::new(
-                                job, STATUS_EVENTS_PRIORITY, serial.incr(),
+                                job,
+                                STATUS_EVENTS_PRIORITY,
+                                serial.incr(),
                             ));
                         }
                     }
@@ -183,27 +187,27 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                     }
 
                     self.run_jobs();
-                },
+                }
 
                 SchedulerInput::Cleanup => {
                     self.cleanup_threads();
                     self.cleanup_hooks();
-                },
+                }
 
                 #[cfg(test)]
                 SchedulerInput::DebugDetails(return_to) => {
                     let details = DebugDetails::from_scheduler(&self);
                     let _ = return_to.send(details);
-                },
+                }
 
                 SchedulerInput::Lock => {
                     self.locked = true;
-                },
+                }
 
                 SchedulerInput::Unlock => {
                     self.locked = false;
                     self.run_jobs();
-                },
+                }
 
                 SchedulerInput::JobEnded(hook_id, completer) => {
                     completer.manual_complete();
@@ -227,7 +231,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                             break;
                         }
                     }
-                },
+                }
 
                 SchedulerInput::StopSignal => {
                     self.should_stop = true;
@@ -236,7 +240,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                     if self.threads.is_empty() {
                         break;
                     }
-                },
+                }
             }
         }
 
@@ -248,24 +252,27 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
         let ctx = self.jobs_context.clone();
         let input = self.input_send.clone();
 
-        let thread = Thread::new(move |job: ScheduledJob<S>, mut completer| {
-            completer.manual_mode();
+        let thread = Thread::new(
+            move |job: ScheduledJob<S>, mut completer| {
+                completer.manual_mode();
 
-            let result = job.execute(&ctx);
+                let result = job.execute(&ctx);
 
-            match result {
-                Ok(output) => {
-                    input.send(SchedulerInput::ProcessOutput(output))?;
-                },
-                Err(error) => {
-                    error.pretty_print();
+                match result {
+                    Ok(output) => {
+                        input.send(SchedulerInput::ProcessOutput(output))?;
+                    }
+                    Err(error) => {
+                        error.pretty_print();
+                    }
                 }
-            }
 
-            input.send(SchedulerInput::JobEnded(job.hook_id(), completer))?;
+                input.send(SchedulerInput::JobEnded(job.hook_id(), completer))?;
 
-            Ok(())
-        }, &self.state);
+                Ok(())
+            },
+            &self.state,
+        );
         self.threads.insert(thread.id(), thread);
     }
 
@@ -295,7 +302,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
 
     fn cleanup_hooks(&mut self) {
         // Get a set of all the queued hooks
-        let mut queued = HashSet::with_capacity(self.queue.len());;
+        let mut queued = HashSet::with_capacity(self.queue.len());
         for job in self.queue.iter() {
             queued.insert(job.hook_id());
         }
@@ -309,7 +316,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
             }
 
             // There are jobs waiting
-            if ! waiting.is_empty() {
+            if !waiting.is_empty() {
                 continue;
             }
 
@@ -411,10 +418,10 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
-    use std::sync::{Arc, Mutex, mpsc};
+    use std::sync::{mpsc, Arc, Mutex};
 
-use common::prelude::*;
-use common::state::State;
+    use common::prelude::*;
+    use common::state::State;
 
     use super::super::test_utils::*;
     use super::super::Processor;
@@ -423,12 +430,11 @@ use common::state::State;
     #[test]
     fn test_processor_starting() {
         test_wrapper(|| {
-
             let repo = Arc::new(Repository::<()>::new());
 
-            let processor = Processor::new(
-                1, repo, Arc::new(()), Arc::new(State::new()),
-            ).unwrap();
+            let processor =
+                Processor::new(1, repo, Arc::new(()), Arc::new(State::new()))
+                    .unwrap();
             processor.stop()?;
 
             Ok(())
@@ -439,7 +445,6 @@ use common::state::State;
     #[test]
     fn test_processor_clean_stop() {
         test_wrapper(|| {
-
             let repo = Repository::<()>::new();
 
             let (long_send, long_recv) = mpsc::channel();
@@ -450,12 +455,13 @@ use common::state::State;
 
             let repo = Arc::new(repo);
             let processor = Processor::new(
-                1, repo.clone(), Arc::new(()), Arc::new(State::new()),
+                1,
+                repo.clone(),
+                Arc::new(()),
+                Arc::new(State::new()),
             )?;
 
-            processor.api().queue(
-                repo.job("long", ()).unwrap(), 0
-            )?;
+            processor.api().queue(repo.job("long", ()).unwrap(), 0)?;
 
             // Exit immediately -- this forces the processor to wait since the
             // job sleeps for half a second
@@ -483,7 +489,10 @@ use common::state::State;
 
         let repo = Arc::new(repo);
         let processor = Processor::new(
-            threads, repo.clone(), Arc::new(()), Arc::new(State::new()),
+            threads,
+            repo.clone(),
+            Arc::new(()),
+            Arc::new(State::new()),
         )?;
 
         let api = processor.api();
@@ -541,7 +550,6 @@ use common::state::State;
     #[test]
     fn test_non_parallel_processing() {
         test_wrapper(|| {
-
             let repo = Repository::<Arc<Mutex<mpsc::Receiver<()>>>>::new();
 
             repo.add_script("wait", false, |recv| {
@@ -551,7 +559,10 @@ use common::state::State;
 
             let repo = Arc::new(repo);
             let processor = Processor::new(
-                2, repo.clone(), Arc::new(()), Arc::new(State::new()),
+                2,
+                repo.clone(),
+                Arc::new(()),
+                Arc::new(State::new()),
             )?;
             let api = processor.api();
 
@@ -561,9 +572,9 @@ use common::state::State;
                 let (unlock_send, unlock_recv) = mpsc::channel();
 
                 api.queue(
-                    repo.job("wait",
-                        Arc::new(Mutex::new(unlock_recv))
-                    ).unwrap(), 0
+                    repo.job("wait", Arc::new(Mutex::new(unlock_recv)))
+                        .unwrap(),
+                    0,
                 )?;
                 waiters.push_back(unlock_send);
             }
@@ -600,11 +611,10 @@ use common::state::State;
     #[test]
     fn test_health_details() {
         test_wrapper(|| {
-            let repo = Repository::<
-                Option<Arc<Mutex<mpsc::Receiver<()>>>>
-            >::new();
+            let repo =
+                Repository::<Option<Arc<Mutex<mpsc::Receiver<()>>>>>::new();
 
-            repo.add_script("noop", true, |_| { Ok(()) });
+            repo.add_script("noop", true, |_| Ok(()));
             repo.add_script("wait", true, |recv| {
                 let recv = recv.unwrap();
                 recv.lock()?.recv()?;
@@ -613,15 +623,20 @@ use common::state::State;
 
             let repo = Arc::new(repo);
             let processor = Processor::new(
-                1, repo.clone(), Arc::new(()), Arc::new(State::new()),
+                1,
+                repo.clone(),
+                Arc::new(()),
+                Arc::new(State::new()),
             )?;
             let api = processor.api();
 
             // Queue a wait job
             let (waiting_send, waiting_recv) = mpsc::channel();
-            api.queue(repo.job("wait", Some(
-                Arc::new(Mutex::new(waiting_recv))
-            )).unwrap(), 0)?;
+            api.queue(
+                repo.job("wait", Some(Arc::new(Mutex::new(waiting_recv))))
+                    .unwrap(),
+                0,
+            )?;
 
             // Queue ten extra jobs
             for _ in 0..10 {
@@ -658,7 +673,10 @@ use common::state::State;
 
             let repo = Arc::new(repo);
             let processor = Processor::new(
-                1, repo.clone(), Arc::new(()), Arc::new(State::new()),
+                1,
+                repo.clone(),
+                Arc::new(()),
+                Arc::new(State::new()),
             )?;
             let api = processor.api();
 
@@ -667,9 +685,9 @@ use common::state::State;
                 let (unlock_send, unlock_recv) = mpsc::channel();
 
                 api.queue(
-                    repo.job("wait",
-                        Arc::new(Mutex::new(unlock_recv))
-                    ).unwrap(), 0
+                    repo.job("wait", Arc::new(Mutex::new(unlock_recv)))
+                        .unwrap(),
+                    0,
                 )?;
                 waitings.push_back(unlock_send);
             }
@@ -685,7 +703,7 @@ use common::state::State;
             }
 
             // Wait until the previous operation ended
-            while api.health_details()?.queued_jobs != 4 { }
+            while api.health_details()?.queued_jobs != 4 {}
 
             let debug = api.debug_details()?;
             assert_eq!(debug.waiting.get(&old_hook_id), Some(&4));
@@ -714,7 +732,7 @@ use common::state::State;
             }
 
             // Wait until the previous operation ended
-            while api.health_details()?.busy_threads != 0 { }
+            while api.health_details()?.busy_threads != 0 {}
 
             // Execute a second cleanup
             api.cleanup()?;

@@ -95,60 +95,60 @@ pub enum ErrorKind {
     /// A generic error, without a defined type
     GenericError(Box<StdError + Send + Sync>),
 
-    #[doc(hidden)]
-    Dummy,
+    #[doc(hidden)] Dummy,
 }
 
 impl fmt::Display for ErrorKind {
-
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match *self {
+        write!(
+            f,
+            "{}",
+            match *self {
+                ErrorKind::ProviderNotFound(ref provider) => {
+                    format!("Provider {} not found", provider)
+                }
 
-            ErrorKind::ProviderNotFound(ref provider) =>
-                format!("Provider {} not found", provider),
+                ErrorKind::InvalidInput(ref error) => {
+                    format!("invalid input: {}", error)
+                }
 
-            ErrorKind::InvalidInput(ref error) =>
-                format!("invalid input: {}", error),
+                ErrorKind::NotBehindProxy => "not behind the proxies".into(),
 
-            ErrorKind::NotBehindProxy =>
-                "not behind the proxies".into(),
+                ErrorKind::WrongRequestKind => "wrong request kind".into(),
 
-            ErrorKind::WrongRequestKind =>
-                "wrong request kind".into(),
+                ErrorKind::InvalidHexChar(chr) => {
+                    format!("{} is not valid hex", chr)
+                }
 
-            ErrorKind::InvalidHexChar(chr) =>
-                format!("{} is not valid hex", chr),
+                ErrorKind::InvalidHexLength => {
+                    "invalid length of the hex".into()
+                }
 
-            ErrorKind::InvalidHexLength =>
-                "invalid length of the hex".into(),
+                ErrorKind::BrokenChannel => {
+                    "an internal communication channel crashed".into()
+                }
 
-            ErrorKind::BrokenChannel =>
-                "an internal communication channel crashed".into(),
+                ErrorKind::PoisonedLock => {
+                    "an internal lock was poisoned".into()
+                }
 
-            ErrorKind::PoisonedLock =>
-                "an internal lock was poisoned".into(),
+                ErrorKind::ThreadCrashed => "an internal thread crashed".into(),
 
-            ErrorKind::ThreadCrashed =>
-                "an internal thread crashed".into(),
+                ErrorKind::IoError(ref error) => format!("{}", error),
 
-            ErrorKind::IoError(ref error) =>
-                format!("{}", error),
+                ErrorKind::JsonError(ref error) => format!("{}", error),
 
-            ErrorKind::JsonError(ref error) =>
-                format!("{}", error),
+                ErrorKind::AddrParseError(ref error) => format!("{}", error),
 
-            ErrorKind::AddrParseError(ref error) =>
-                format!("{}", error),
+                ErrorKind::ParseIntError(..) => {
+                    "you didn't provide a valid number".into()
+                }
 
-            ErrorKind::ParseIntError(..) =>
-                "you didn't provide a valid number".into(),
+                ErrorKind::GenericError(ref error) => format!("{}", error),
 
-            ErrorKind::GenericError(ref error) =>
-                format!("{}", error),
-
-            ErrorKind::Dummy =>
-                "dummy_error".into(),
-        })
+                ErrorKind::Dummy => "dummy_error".into(),
+            }
+        )
     }
 }
 
@@ -171,15 +171,12 @@ pub enum ErrorLocation {
     /// There is no information about where the error occured.
     Unknown,
 
-    #[doc(hidden)]
-    __NonExaustiveMatch,
+    #[doc(hidden)] __NonExaustiveMatch,
 }
 
 impl fmt::Display for ErrorLocation {
-
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-
             ErrorLocation::File(ref path, line) => {
                 write!(f, "file {}", path)?;
                 if let Some(num) = line {
@@ -187,19 +184,17 @@ impl fmt::Display for ErrorLocation {
                 }
 
                 Ok(())
-            },
+            }
 
             ErrorLocation::HookProcessing(ref name) => {
                 write!(f, "while processing {}", name)
-            },
+            }
 
-            ErrorLocation::Unknown => {
-                write!(f, "")
-            },
+            ErrorLocation::Unknown => write!(f, ""),
 
             ErrorLocation::__NonExaustiveMatch => {
                 panic!("You shouldn't use this.");
-            },
+            }
         }
     }
 }
@@ -219,7 +214,6 @@ pub struct Error {
 }
 
 impl Error {
-
     /// Create a new error. You need to provide the kind of error that occured.
     ///
     /// ## Example
@@ -271,12 +265,10 @@ impl Error {
     /// }
     /// ```
     pub fn pretty_print(&self) {
-        println!("{} {}",
-            Colour::Red.bold().paint("Error:"),
-            self
-        );
+        println!("{} {}", Colour::Red.bold().paint("Error:"), self);
         if self.location != ErrorLocation::Unknown {
-            println!("{} {}",
+            println!(
+                "{} {}",
                 Colour::Yellow.bold().paint("Location:"),
                 self.location
             );
@@ -285,46 +277,31 @@ impl Error {
 }
 
 impl fmt::Display for Error {
-
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.kind)
     }
 }
 
 impl StdError for Error {
-
     fn description(&self) -> &str {
         match self.kind {
-            ErrorKind::ProviderNotFound(..) =>
-                "provider not found",
-            ErrorKind::InvalidInput(..) =>
-                "invalid input",
-            ErrorKind::NotBehindProxy =>
-                "not behind the proxies",
-            ErrorKind::WrongRequestKind =>
-                "wrong request kind",
-            ErrorKind::InvalidHexChar(..) =>
-                "invalid character in hex",
-            ErrorKind::InvalidHexLength =>
-                "invalid length of the hex",
-            ErrorKind::BrokenChannel =>
-                "internal communication channel crashed",
-            ErrorKind::PoisonedLock =>
-                "poisoned lock",
-            ErrorKind::ThreadCrashed =>
-                "thread crashed",
-            ErrorKind::IoError(ref error) =>
-                error.description(),
-            ErrorKind::JsonError(ref error) =>
-                error.description(),
-            ErrorKind::AddrParseError(ref error) =>
-                error.description(),
-            ErrorKind::ParseIntError(..) =>
-                "invalid number",
-            ErrorKind::GenericError(ref error) =>
-                error.description(),
-            ErrorKind::Dummy =>
-                "dummy error",
+            ErrorKind::ProviderNotFound(..) => "provider not found",
+            ErrorKind::InvalidInput(..) => "invalid input",
+            ErrorKind::NotBehindProxy => "not behind the proxies",
+            ErrorKind::WrongRequestKind => "wrong request kind",
+            ErrorKind::InvalidHexChar(..) => "invalid character in hex",
+            ErrorKind::InvalidHexLength => "invalid length of the hex",
+            ErrorKind::BrokenChannel => {
+                "internal communication channel crashed"
+            }
+            ErrorKind::PoisonedLock => "poisoned lock",
+            ErrorKind::ThreadCrashed => "thread crashed",
+            ErrorKind::IoError(ref error) => error.description(),
+            ErrorKind::JsonError(ref error) => error.description(),
+            ErrorKind::AddrParseError(ref error) => error.description(),
+            ErrorKind::ParseIntError(..) => "invalid number",
+            ErrorKind::GenericError(ref error) => error.description(),
+            ErrorKind::Dummy => "dummy error",
         }
     }
 
@@ -351,28 +328,24 @@ macro_rules! derive_error {
 }
 
 impl From<ErrorKind> for Error {
-
     fn from(error: ErrorKind) -> Self {
         Error::new(error)
     }
 }
 
 impl From<mpsc::RecvError> for Error {
-
     fn from(_: mpsc::RecvError) -> Self {
         Error::new(ErrorKind::BrokenChannel)
     }
 }
 
 impl<T> From<mpsc::SendError<T>> for Error {
-
     fn from(_: mpsc::SendError<T>) -> Self {
         Error::new(ErrorKind::BrokenChannel)
     }
 }
 
 impl<T> From<sync::PoisonError<T>> for Error {
-
     fn from(_: sync::PoisonError<T>) -> Self {
         Error::new(ErrorKind::PoisonedLock)
     }

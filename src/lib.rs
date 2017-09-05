@@ -14,22 +14,28 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Optional support for compiling with clippy
-#![cfg_attr(feature="clippy", feature(plugin))]
-#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
-extern crate regex;
 extern crate ansi_term;
-extern crate url;
-extern crate rand;
-extern crate tiny_http;
+#[cfg(test)]
+extern crate hyper;
+#[macro_use]
+extern crate lazy_static;
 extern crate nix;
-#[macro_use] extern crate serde_json;
-#[macro_use] extern crate serde_derive;
-#[macro_use] extern crate lazy_static;
-#[cfg(feature = "provider-github")] extern crate ring;
-#[cfg(test)] extern crate hyper;
+extern crate rand;
+extern crate regex;
+#[cfg(feature = "provider-github")]
+extern crate ring;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
+extern crate tiny_http;
+extern crate url;
 
-#[macro_use] mod utils;
+#[macro_use]
+mod utils;
 mod app;
 mod jobs;
 mod native;

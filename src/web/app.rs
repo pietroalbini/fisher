@@ -33,10 +33,13 @@ pub struct WebApp<A: ProcessorApiTrait<Repository> + 'static> {
 }
 
 impl<A: ProcessorApiTrait<Repository>> WebApp<A> {
-
-    pub fn new(hooks: Arc<Repository>, enable_health: bool, behind_proxies: u8,
-               bind: &str, processor: A)
-               -> Result<Self> {
+    pub fn new(
+        hooks: Arc<Repository>,
+        enable_health: bool,
+        behind_proxies: u8,
+        bind: &str,
+        processor: A,
+    ) -> Result<Self> {
         let locked = Arc::new(AtomicBool::new(false));
 
         // Create the web api
@@ -44,17 +47,16 @@ impl<A: ProcessorApiTrait<Repository>> WebApp<A> {
 
         // Create the HTTP server
         let mut server = HttpServer::new(api, behind_proxies);
+        server.add_route(Method::Get, "/health", Box::new(WebApi::get_health));
         server.add_route(
-            Method::Get, "/health",
-            Box::new(WebApi::get_health)
+            Method::Get,
+            "/hook/?",
+            Box::new(WebApi::process_hook),
         );
         server.add_route(
-            Method::Get, "/hook/?",
-            Box::new(WebApi::process_hook)
-        );
-        server.add_route(
-            Method::Post, "/hook/?",
-            Box::new(WebApi::process_hook)
+            Method::Post,
+            "/hook/?",
+            Box::new(WebApi::process_hook),
         );
 
         let socket = server.listen(bind)?;
@@ -93,7 +95,7 @@ mod tests {
     use hyper::method::Method;
     use hyper::header::Headers;
 
-use common::prelude::*;
+    use common::prelude::*;
 
     use utils::testing::*;
 
@@ -118,19 +120,22 @@ use common::prelude::*;
 
         // It shouldn't be possible to call a non-existing hook
         let res = inst.request(Method::Get, "/hook/invalid.sh")
-                      .send().unwrap();
+            .send()
+            .unwrap();
         assert_eq!(res.status, StatusCode::NotFound);
         assert!(inst.processor_input().is_none());
 
         // Call the example hook without authorization
         let res = inst.request(Method::Get, "/hook/example.sh?secret=invalid")
-                      .send().unwrap();
+            .send()
+            .unwrap();
         assert_eq!(res.status, StatusCode::Forbidden);
         assert!(inst.processor_input().is_none());
 
         // Call the example hook with authorization
         let res = inst.request(Method::Get, "/hook/example.sh?secret=testing")
-                      .send().unwrap();
+            .send()
+            .unwrap();
         assert_eq!(res.status, StatusCode::Ok);
 
         // Assert a job is queued
@@ -144,21 +149,27 @@ use common::prelude::*;
         }
 
         // Call the example hook simulating a Ping
-        let res = inst.request(Method::Get, "/hook/example.sh?request_type=ping")
-                      .send().unwrap();
+        let res =
+            inst.request(Method::Get, "/hook/example.sh?request_type=ping")
+                .send()
+                .unwrap();
         assert_eq!(res.status, StatusCode::Ok);
 
         // Even if the last request succeded, there shouldn't be any job
         assert!(inst.processor_input().is_none());
 
         // Try to call an internal hook (in this case with the Status provider)
-        let res = inst.request(Method::Get, concat!(
-            "/hook/status-example.sh",
-            "?event=job_completed",
-            "&hook_name=trigger-status",
-            "&exit_code=0",
-            "&signal=0",
-        )).send().unwrap();
+        let res = inst.request(
+            Method::Get,
+            concat!(
+                "/hook/status-example.sh",
+                "?event=job_completed",
+                "&hook_name=trigger-status",
+                "&exit_code=0",
+                "&signal=0",
+            ),
+        ).send()
+            .unwrap();
         assert_eq!(res.status, StatusCode::Forbidden);
 
         // Even if the last request succeded, there shouldn't be any job
@@ -166,7 +177,8 @@ use common::prelude::*;
 
         // Try to call an hook in a sub directory
         let res = inst.request(Method::Get, "/hook/sub/hook.sh")
-                      .send().unwrap();
+            .send()
+            .unwrap();
         assert_eq!(res.status, StatusCode::Ok);
         assert!(inst.processor_input().is_some());
 
@@ -176,7 +188,8 @@ use common::prelude::*;
         // Even if this requets is valid, it should not be processed -- the
         // instance is locked
         let res = inst.request(Method::Get, "/hook/example.sh?secret=testing")
-                      .send().unwrap();
+            .send()
+            .unwrap();
         assert_eq!(res.status, StatusCode::ServiceUnavailable);
         assert!(inst.processor_input().is_none());
 
@@ -185,7 +198,8 @@ use common::prelude::*;
 
         // Call the example hook with authorization
         let res = inst.request(Method::Get, "/hook/example.sh?secret=testing")
-                      .send().unwrap();
+            .send()
+            .unwrap();
         assert_eq!(res.status, StatusCode::Ok);
 
         // Assert a job is queued
@@ -222,9 +236,7 @@ use common::prelude::*;
         // Decode the output
         let mut content = String::new();
         res.read_to_string(&mut content).unwrap();
-        let data = serde_json::from_str::<serde_json::Value>(
-            &content
-        ).unwrap();
+        let data = serde_json::from_str::<serde_json::Value>(&content).unwrap();
         let data_obj = data.as_object().unwrap();
 
         // Check the content of the returned JSON
@@ -254,7 +266,8 @@ use common::prelude::*;
 
         // Call the example hook without a proxy
         let res = inst.request(Method::Get, "/hook/example.sh?ip=127.1.1.1")
-                      .send().unwrap();
+            .send()
+            .unwrap();
         assert_eq!(res.status, StatusCode::BadRequest);
         assert!(inst.processor_input().is_none());
 
@@ -264,7 +277,9 @@ use common::prelude::*;
 
         // Make an example request
         let res = inst.request(Method::Get, "/hook/example.sh?ip=127.1.1.1")
-                      .headers(headers).send().unwrap();
+            .headers(headers)
+            .send()
+            .unwrap();
 
         // The hook should be queued
         assert_eq!(res.status, StatusCode::Ok);

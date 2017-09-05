@@ -18,17 +18,15 @@ use common::prelude::*;
 
 pub type Job<S> = <S as ScriptsRepositoryTrait>::Job;
 
-pub type JobContext<S> = <
-    <S as ScriptsRepositoryTrait>::Job as JobTrait<
-        <S as ScriptsRepositoryTrait>::Script
-    >
->::Context;
+pub type JobContext<S> =
+    <<S as ScriptsRepositoryTrait>::Job as JobTrait<
+        <S as ScriptsRepositoryTrait>::Script,
+    >>::Context;
 
-pub type JobOutput<S> = <
-    <S as ScriptsRepositoryTrait>::Job as JobTrait<
-        <S as ScriptsRepositoryTrait>::Script
-    >
->::Output;
+pub type JobOutput<S> =
+    <<S as ScriptsRepositoryTrait>::Job as JobTrait<
+        <S as ScriptsRepositoryTrait>::Script,
+    >>::Output;
 
 pub type ScriptId<S> = <
     <S as ScriptsRepositoryTrait>::Script as ScriptTrait

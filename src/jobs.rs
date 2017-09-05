@@ -53,7 +53,6 @@ pub struct Context {
 }
 
 impl Default for Context {
-
     fn default() -> Self {
         Context {
             environment: HashMap::new(),
@@ -70,7 +69,6 @@ pub struct Job {
 }
 
 impl Job {
-
     pub fn new(
         script: Arc<Script>,
         provider: Option<Arc<Provider>>,
@@ -112,7 +110,7 @@ impl Job {
         // Set the request IP
         command.env(
             "FISHER_REQUEST_IP".to_string(),
-            format!("{}", self.request_ip())
+            format!("{}", self.request_ip()),
         );
 
         // Save the request body
@@ -120,15 +118,13 @@ impl Job {
         if let Some(path) = request_body {
             command.env(
                 "FISHER_REQUEST_BODY".to_string(),
-                path.to_str().unwrap().to_string()
+                path.to_str().unwrap().to_string(),
             );
         }
 
         // Tell the provider to prepare the directory
         if let Some(ref provider) = self.provider {
-            provider.prepare_directory(
-                &self.request, &working_directory
-            )?;
+            provider.prepare_directory(&self.request, &working_directory)?;
         }
 
         // Apply the custom environment
@@ -161,7 +157,7 @@ impl Job {
         // which environment variables we want
         for (key, value) in env::vars() {
             // Set only whitelisted keys
-            if ! DEFAULT_ENV.contains(&key) {
+            if !DEFAULT_ENV.contains(&key) {
                 continue;
             }
 
@@ -172,15 +168,16 @@ impl Job {
         if let Some(ref provider) = self.provider {
             for (key, value) in provider.env(&self.request) {
                 let real_key = format!(
-                    "FISHER_{}_{}", provider.name().to_uppercase(), key
+                    "FISHER_{}_{}",
+                    provider.name().to_uppercase(),
+                    key
                 );
                 command.env(real_key, value);
             }
         }
     }
 
-    fn save_request_body(&self, base: &PathBuf)
-                        -> Result<Option<PathBuf>> {
+    fn save_request_body(&self, base: &PathBuf) -> Result<Option<PathBuf>> {
         // Get the request body, even if some request kinds don't have one
         let body = match self.request {
             Request::Web(ref req) => &req.body,
@@ -232,7 +229,6 @@ pub struct JobOutput {
 }
 
 impl<'a> From<(&'a Job, process::Output)> for JobOutput {
-
     fn from(data: (&'a Job, process::Output)) -> JobOutput {
         JobOutput {
             stdout: String::from_utf8_lossy(&data.1.stdout).into_owned(),
@@ -256,12 +252,12 @@ mod tests {
     use std::env;
     use std::collections::HashMap;
 
-use common::prelude::*;
+    use common::prelude::*;
 
     use utils::testing::*;
     use utils;
 
-    use super::{DEFAULT_ENV, Context};
+    use super::{Context, DEFAULT_ENV};
 
 
     macro_rules! read {
@@ -330,7 +326,7 @@ use common::prelude::*;
 
         let job = env.create_job("failing.sh", dummy_web_request().into());
         let result = job.process(&ctx).unwrap();
-        assert!(! result.success);
+        assert!(!result.success);
         assert_eq!(result.exit_code, Some(1));
 
         env.cleanup();
@@ -374,9 +370,8 @@ use common::prelude::*;
 
         // Get all the required environment variables
         let mut required_env = {
-            let mut res: Vec<&str> = DEFAULT_ENV.iter().map(|i| {
-                i.as_str()
-            }).collect();
+            let mut res: Vec<&str> =
+                DEFAULT_ENV.iter().map(|i| i.as_str()).collect();
 
             // Those are from the provider
             res.push("FISHER_TESTING_ENV");
@@ -412,17 +407,11 @@ use common::prelude::*;
         );
 
         // $HOME must be the current directory
-        assert_eq!(
-            *job_env.get("HOME").unwrap(),
-            working_directory
-        );
+        assert_eq!(*job_env.get("HOME").unwrap(), working_directory);
 
         // The IP address must be correct
         // dummy_web_request() sets it to 127.0.0.1
-        assert_eq!(
-            *&job_env.get("FISHER_REQUEST_IP").unwrap(),
-            &"127.0.0.1"
-        );
+        assert_eq!(*&job_env.get("FISHER_REQUEST_IP").unwrap(), &"127.0.0.1");
 
         // The value of the environment variables forwarded from the current
         // env must have the same content of the current env
@@ -434,8 +423,8 @@ use common::prelude::*;
                         content.as_str(),
                         *job_env.get(key.as_str()).unwrap()
                     );
-                },
-                Err(..) => {},
+                }
+                Err(..) => {}
             }
         }
 

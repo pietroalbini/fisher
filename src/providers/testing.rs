@@ -28,7 +28,6 @@ pub struct TestingProvider {
 }
 
 impl ProviderTrait for TestingProvider {
-
     fn new(config: &str) -> Result<Self> {
         // If the configuration is "yes", then it's correct
         if config != "FAIL" {
@@ -69,7 +68,7 @@ impl ProviderTrait for TestingProvider {
                 // "ping" will return RequestType::Ping
                 "ping" => {
                     return RequestType::Ping;
-                },
+                }
                 _ => {}
             }
         }
@@ -95,8 +94,7 @@ impl ProviderTrait for TestingProvider {
         res
     }
 
-    fn prepare_directory(&self, _req: &Request, path: &PathBuf)
-                         -> Result<()> {
+    fn prepare_directory(&self, _req: &Request, path: &PathBuf) -> Result<()> {
         // Create a test file
         let mut dest = path.clone();
         dest.push("prepared");
@@ -107,7 +105,7 @@ impl ProviderTrait for TestingProvider {
 
     fn trigger_status_hooks(&self, request: &Request) -> bool {
         if let &Request::Web(ref inner) = request {
-            ! inner.params.contains_key("ignore_status_hooks")
+            !inner.params.contains_key("ignore_status_hooks")
         } else {
             true
         }
@@ -141,16 +139,21 @@ mod tests {
         let p = TestingProvider::new("").unwrap();
 
         // Without any secret
-        assert_eq!(p.validate(&dummy_web_request().into()), RequestType::ExecuteHook);
+        assert_eq!(
+            p.validate(&dummy_web_request().into()),
+            RequestType::ExecuteHook
+        );
 
         // With the wrong secret
         let mut req = dummy_web_request();
-        req.params.insert("secret".to_string(), "wrong!!!".to_string());
+        req.params
+            .insert("secret".to_string(), "wrong!!!".to_string());
         assert_eq!(p.validate(&req.into()), RequestType::Invalid);
 
         // With the correct secret
         let mut req = dummy_web_request();
-        req.params.insert("secret".to_string(), "testing".to_string());
+        req.params
+            .insert("secret".to_string(), "testing".to_string());
         assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
 
         // With the wrong IP address
@@ -167,12 +170,14 @@ mod tests {
 
         // With the request_type param but with no meaningful value
         let mut req = dummy_web_request();
-        req.params.insert("request_type".to_string(), "something".to_string());
+        req.params
+            .insert("request_type".to_string(), "something".to_string());
         assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
 
         // With the request_type param and the "ping" value
         let mut req = dummy_web_request();
-        req.params.insert("request_type".to_string(), "ping".to_string());
+        req.params
+            .insert("request_type".to_string(), "ping".to_string());
         assert_eq!(p.validate(&req.into()), RequestType::Ping);
     }
 
@@ -201,8 +206,9 @@ mod tests {
         assert!(p.trigger_status_hooks(&dummy_web_request().into()));
 
         let mut req = dummy_web_request();
-        req.params.insert("ignore_status_hooks".into(), "yes".into());
+        req.params
+            .insert("ignore_status_hooks".into(), "yes".into());
 
-        assert!(! p.trigger_status_hooks(&req.into()));
+        assert!(!p.trigger_status_hooks(&req.into()));
     }
 }

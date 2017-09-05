@@ -19,7 +19,7 @@ use std::thread;
 use std::fmt;
 
 use common::prelude::*;
-use common::state::{State, IdKind, UniqueId};
+use common::state::{IdKind, State, UniqueId};
 
 use super::scheduled_job::ScheduledJob;
 use super::types::ScriptId;
@@ -31,7 +31,6 @@ pub enum ProcessResult<S: ScriptsRepositoryTrait + 'static> {
 }
 
 impl<S: ScriptsRepositoryTrait + 'static> ProcessResult<S> {
-
     #[cfg(test)]
     pub fn executing(&self) -> bool {
         match *self {
@@ -42,7 +41,7 @@ impl<S: ScriptsRepositoryTrait + 'static> ProcessResult<S> {
 
     #[cfg(test)]
     pub fn rejected(&self) -> bool {
-        ! self.executing()
+        !self.executing()
     }
 }
 
@@ -55,7 +54,6 @@ pub struct ThreadCompleter {
 }
 
 impl ThreadCompleter {
-
     pub fn new(busy: Arc<AtomicBool>) -> Self {
         ThreadCompleter {
             thread: thread::current(),
@@ -75,9 +73,8 @@ impl ThreadCompleter {
 }
 
 impl Drop for ThreadCompleter {
-
     fn drop(&mut self) {
-        if ! self.manual {
+        if !self.manual {
             self.manual_complete();
         }
     }
@@ -96,10 +93,12 @@ pub struct Thread<S: ScriptsRepositoryTrait + 'static> {
 }
 
 impl<S: ScriptsRepositoryTrait> Thread<S> {
-
     pub fn new<
         E: Fn(ScheduledJob<S>, ThreadCompleter) -> Result<()> + Send + 'static,
-    >(executor: E, state: &Arc<State>) -> Self {
+    >(
+        executor: E,
+        state: &Arc<State>,
+    ) -> Self {
         let thread_id = state.next_id(IdKind::ThreadId);
         let busy = Arc::new(AtomicBool::new(false));
         let should_stop = Arc::new(AtomicBool::new(false));
@@ -112,7 +111,11 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
         let handle = thread::spawn(move || {
             let completer = ThreadCompleter::new(c_busy.clone());
             let result = Thread::inner_thread(
-                c_busy, c_should_stop, c_communication, executor, completer,
+                c_busy,
+                c_should_stop,
+                c_communication,
+                executor,
+                completer,
             );
 
             if let Err(error) = result {
@@ -140,8 +143,7 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
         comm: Arc<Mutex<Option<ScheduledJob<S>>>>,
         executor: E,
         completer: ThreadCompleter,
-    ) -> Result<()>{
-
+    ) -> Result<()> {
         loop {
             // Ensure the thread is stopped
             if should_stop.load(Ordering::SeqCst) {
@@ -222,9 +224,10 @@ impl<S: ScriptsRepositoryTrait> Thread<S> {
 }
 
 impl<S: ScriptsRepositoryTrait> fmt::Debug for Thread<S> {
-
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Thread {{ busy: {}, should_stop: {} }}",
+        write!(
+            f,
+            "Thread {{ busy: {}, should_stop: {} }}",
             self.busy(),
             self.should_stop.load(Ordering::SeqCst),
         )
@@ -256,10 +259,13 @@ mod tests {
     fn create_thread() -> Thread<Repository<()>> {
         let state = Arc::new(State::new());
 
-        Thread::new(|job, _| {
-            job.execute(&())?;
-            Ok(())
-        }, &state)
+        Thread::new(
+            |job, _| {
+                job.execute(&())?;
+                Ok(())
+            },
+            &state,
+        )
     }
 
 
@@ -297,9 +303,10 @@ mod tests {
             assert!(thread.process(job(&repo, "job")).executing());
 
             // Wait until the thread processes the job
-            timeout_until_true(|| {
-                ! thread.busy()
-            }, "The thread didn't process the job");
+            timeout_until_true(
+                || !thread.busy(),
+                "The thread didn't process the job",
+            );
 
             // Ensure the job was executed
             assert!(executed.load(Ordering::SeqCst));
@@ -335,9 +342,10 @@ mod tests {
             block_send.send(())?;
 
             // Wait until the thread is not busy anymore
-            timeout_until_true(|| {
-                ! thread.busy()
-            }, "The thread didn't process the job");
+            timeout_until_true(
+                || !thread.busy(),
+                "The thread didn't process the job",
+            );
 
             thread.stop();
             Ok(())
@@ -356,8 +364,7 @@ mod tests {
                 block_recv.recv()?;
                 Ok(())
             });
-            let script_id = repo.script_id_of("job")
-                .expect("Job should exist");
+            let script_id = repo.script_id_of("job").expect("Job should exist");
 
             // Start a new thread to execute jobs
             let mut thread = create_thread();
@@ -372,9 +379,10 @@ mod tests {
             block_send.send(())?;
 
             // Wait until the thread is not busy anymore
-            timeout_until_true(|| {
-                ! thread.busy()
-            }, "The thread didn't process the job");
+            timeout_until_true(
+                || !thread.busy(),
+                "The thread didn't process the job",
+            );
 
             // Check no script is reported running
             assert_eq!(thread.currently_running(), None);
@@ -438,9 +446,10 @@ mod tests {
             for _ in 0..5 {
                 assert!(thread.process(job(&repo, "incr")).executing());
 
-                timeout_until_true(|| {
-                    ! thread.busy()
-                }, "The thread didn't process the job");
+                timeout_until_true(
+                    || !thread.busy(),
+                    "The thread didn't process the job",
+                );
             }
 
             // Check if all the jobs were executed
@@ -468,21 +477,25 @@ mod tests {
 
             // Start a new thread that also enters manual completion mode
             let completion_send = Arc::new(Mutex::new(completion_send));
-            let mut thread = Thread::new(move |job, mut completion| {
-                completion.manual_mode();
-                completion_send.lock()?.send(completion)?;
+            let mut thread = Thread::new(
+                move |job, mut completion| {
+                    completion.manual_mode();
+                    completion_send.lock()?.send(completion)?;
 
-                job.execute(&())?;
-                Ok(())
-            }, &Arc::new(State::new()));
+                    job.execute(&())?;
+                    Ok(())
+                },
+                &Arc::new(State::new()),
+            );
 
             // Tell the processor to execute the job
             assert!(thread.process(job(&repo, "report")).executing());
 
             // Wait until the job finishes
-            timeout_until_true(|| {
-                finished.load(Ordering::SeqCst)
-            }, "The thread didn't process the job");
+            timeout_until_true(
+                || finished.load(Ordering::SeqCst),
+                "The thread didn't process the job",
+            );
 
             // Check that the thread is still marked as busy
             assert!(thread.busy());
@@ -492,7 +505,7 @@ mod tests {
             completion.manual_complete();
 
             // Check that the thread is not busy
-            assert!(! thread.busy());
+            assert!(!thread.busy());
 
             thread.stop();
             Ok(())

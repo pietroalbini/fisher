@@ -21,9 +21,11 @@ pub fn parse_env(line: &str) -> Result<(&str, &str)> {
         let (key, value) = line.split_at(pos);
         Ok((key, &value[1..]))
     } else {
-        Err(ErrorKind::InvalidInput(
-            format!("Not a valid environment definition: {}", line)
-        ).into())
+        Err(
+            ErrorKind::InvalidInput(
+                format!("Not a valid environment definition: {}", line),
+            ).into(),
+        )
     }
 }
 

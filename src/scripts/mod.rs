@@ -13,11 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#[cfg(test)] mod test_utils;
+#[cfg(test)]
+mod test_utils;
 mod collector;
 mod repository;
 mod script;
 
-pub use self::repository::{Repository, Blueprint};
+pub use self::repository::{Blueprint, Repository};
 pub use self::repository::{ScriptNamesIter, ScriptsIter, StatusJobsIter};
 pub use self::script::{Script, ScriptProvider};

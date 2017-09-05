@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::net::{SocketAddr, TcpStream, Shutdown};
+use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc;
@@ -29,9 +29,7 @@ use web::responses::Response;
 use web::proxies::ProxySupport;
 
 
-pub type RequestHandler<App> = Box<
-    fn(&App, &Request, Vec<String>) -> Response
->;
+pub type RequestHandler<App> = Box<fn(&App, &Request, Vec<String>) -> Response>;
 
 
 struct Route {
@@ -40,7 +38,6 @@ struct Route {
 }
 
 impl Route {
-
     fn new(method: Method, url: &str) -> Self {
         let regex = Self::regex_from_url(url);
 
@@ -85,9 +82,9 @@ impl Route {
                     captures.iter().skip(1)
                             .filter_map(|x| x)  // Strip Option<T>, returning T
                             .map(|x| x.as_str().to_string())
-                            .collect()
+                            .collect(),
                 )
-            },
+            }
             None => None,
         }
     }
@@ -100,7 +97,6 @@ struct Handler<App: Send + Sync + 'static> {
 }
 
 impl<App: Send + Sync + 'static> Handler<App> {
-
     fn new(handler: RequestHandler<App>, route: Route) -> Self {
         Handler {
             handler: handler,
@@ -130,7 +126,6 @@ pub struct HttpServer<App: Send + Sync + 'static> {
 }
 
 impl<App: Send + Sync + 'static> HttpServer<App> {
-
     pub fn new(app: App, proxies_count: u8) -> Self {
         HttpServer {
             app: Arc::new(app),
@@ -144,12 +139,17 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
         }
     }
 
-    pub fn add_route(&mut self, method: Method, url: &str,
-                     handler: RequestHandler<App>) {
+    pub fn add_route(
+        &mut self,
+        method: Method,
+        url: &str,
+        handler: RequestHandler<App>,
+    ) {
         let route = Route::new(method, url);
-        self.handlers.try_lock().unwrap().push(
-            Handler::new(handler, route)
-        );
+        self.handlers
+            .try_lock()
+            .unwrap()
+            .push(Handler::new(handler, route));
     }
 
     pub fn listen(&mut self, bind: &str) -> Result<SocketAddr> {
@@ -183,9 +183,8 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
             );
             let content_type = header!("Content-Type: application/json");
 
-            let ignored_method = Method::NonStandard(
-                "X_FISHER_IGNORE_THIS".parse().unwrap()
-            );
+            let ignored_method =
+                Method::NonStandard("X_FISHER_IGNORE_THIS".parse().unwrap());
 
             for mut request in server.incoming_requests() {
                 // Don't accept any request anymore
@@ -218,9 +217,10 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
                     }
                 })();
 
-                let mut tiny_response = tiny_http::Response::from_data(
-                    response.json().into_bytes()
-                ).with_status_code(response.status());
+                let mut tiny_response =
+                    tiny_http::Response::from_data(
+                        response.json().into_bytes(),
+                    ).with_status_code(response.status());
 
                 tiny_response.add_header(server_header.clone());
                 tiny_response.add_header(content_type.clone());
@@ -242,14 +242,13 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
             // Send an HTTP request to force stopping the server
             match TcpStream::connect(self.listening_to.unwrap()) {
                 Ok(mut conn) => {
-                    (writeln!(conn,
-                        "X_FISHER_IGNORE_THIS / HTTP/1.0\r\n\r\n"
-                    )).unwrap();
+                    (writeln!(conn, "X_FISHER_IGNORE_THIS / HTTP/1.0\r\n\r\n"))
+                        .unwrap();
                     conn.shutdown(Shutdown::Both).unwrap();
-                },
+                }
                 Err(..) => {
                     return false;
-                },
+                }
             }
 
             if let Some(ref stop_wait) = self.stop_wait {
@@ -263,7 +262,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
             self.listening_to = None;
 
             true
-        } else{
+        } else {
             false
         }
     }
@@ -281,17 +280,20 @@ mod tests {
     use requests::Request;
     use web::responses::Response;
     use utils::testing::*;
-    use super::{Route, Handler, HttpServer};
+    use super::{Handler, HttpServer, Route};
 
 
     struct DummyData(Vec<String>);
 
-    fn dummy_handler_fn(data: &DummyData, _req: &Request, args: Vec<String>)
-                        -> Response {
+    fn dummy_handler_fn(
+        data: &DummyData,
+        _req: &Request,
+        args: Vec<String>,
+    ) -> Response {
         if data.0 == args {
-           Response::Ok
+            Response::Ok
         } else {
-           Response::Forbidden
+            Response::Forbidden
         }
     }
 
@@ -321,10 +323,7 @@ mod tests {
     fn test_route_matches() {
         // Test a request with no captures
         let basic = Route::new(Method::Get, "/url");
-        assert_eq!(
-            basic.matches(&Method::Get, "/url"),
-            Some(vec![])
-        );
+        assert_eq!(basic.matches(&Method::Get, "/url"), Some(vec![]));
         assert_eq!(
             basic.matches(&Method::Get, "/url?test"),
             Some(vec!["?test".into()])
@@ -360,10 +359,13 @@ mod tests {
             Some(vec!["test".into()])
         );
         assert_eq!(
-            handler.call(
-                &DummyData(vec!["test".into()]), &dummy_web_request().into(),
-                vec!["test".into()]
-            ).status(),
+            handler
+                .call(
+                    &DummyData(vec!["test".into()]),
+                    &dummy_web_request().into(),
+                    vec!["test".into()]
+                )
+                .status(),
             200
         );
     }
@@ -393,9 +395,9 @@ mod tests {
         client.set_write_timeout(Some(Duration::new(1, 0)));
 
         // Make a dummy request
-        let res = req!(
-            client, hyper::method::Method::Get, format!("{}/test", url)
-        ).unwrap();
+        let res =
+            req!(client, hyper::method::Method::Get, format!("{}/test", url))
+                .unwrap();
         assert_eq!(res.status, StatusCode::Ok);
 
         // Stop the server
@@ -403,7 +405,7 @@ mod tests {
 
         assert!(
             req!(client, hyper::method::Method::Get, format!("{}/test", url))
-            .is_err()
+                .is_err()
         );
     }
 }

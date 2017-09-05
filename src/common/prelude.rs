@@ -18,5 +18,5 @@
 //! This module re-exports useful things used by all the Fisher code, to be
 //! easily included.
 
-pub use super::errors::{Result, Error, ErrorKind, ErrorLocation};
+pub use super::errors::{Error, ErrorKind, ErrorLocation, Result};
 pub use super::traits::*;

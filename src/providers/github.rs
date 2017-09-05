@@ -46,18 +46,19 @@ pub struct GitHubProvider {
 }
 
 impl ProviderTrait for GitHubProvider {
-
     fn new(input: &str) -> Result<GitHubProvider> {
         let inst: GitHubProvider = serde_json::from_str(input)?;
 
         if let Some(ref events) = inst.events {
             // Check if the events exists
             for event in events {
-                if ! GITHUB_EVENTS.contains(&event.as_ref()) {
+                if !GITHUB_EVENTS.contains(&event.as_ref()) {
                     // Return an error if the event doesn't exist
-                    return Err(ErrorKind::InvalidInput(format!(
-                        r#""{}" is not a GitHub event"#, event
-                    )).into());
+                    return Err(
+                        ErrorKind::InvalidInput(
+                            format!(r#""{}" is not a GitHub event"#, event),
+                        ).into(),
+                    );
                 }
             }
         }
@@ -75,7 +76,7 @@ impl ProviderTrait for GitHubProvider {
 
         // Check if the correct headers are present
         for header in GITHUB_HEADERS.iter() {
-            if ! req.headers.contains_key(*header) {
+            if !req.headers.contains_key(*header) {
                 return RequestType::Invalid;
             }
         }
@@ -84,23 +85,20 @@ impl ProviderTrait for GitHubProvider {
         if let Some(ref secret) = self.secret {
             // Check if the signature is valid
             let signature = &req.headers["X-Hub-Signature"];
-            if ! verify_signature(secret, &req.body, signature) {
+            if !verify_signature(secret, &req.body, signature) {
                 return RequestType::Invalid;
             }
         }
 
         // Check if the event is valid
         let event = &req.headers["X-GitHub-Event"];
-        if !(
-            GITHUB_EVENTS.contains(&event.as_ref())
-            || *event == "ping"
-        ) {
+        if !(GITHUB_EVENTS.contains(&event.as_ref()) || *event == "ping") {
             return RequestType::Invalid;
         }
 
         // Check if the event should be accepted
         if let Some(ref events) = self.events {
-            if !( events.contains(event) || *event == "ping") {
+            if !(events.contains(event) || *event == "ping") {
                 return RequestType::Invalid;
             }
         }
@@ -129,14 +127,11 @@ impl ProviderTrait for GitHubProvider {
             return res;
         }
 
-        res.insert(
-            "EVENT".to_string(),
-            req.headers["X-GitHub-Event"].clone()
-        );
+        res.insert("EVENT".to_string(), req.headers["X-GitHub-Event"].clone());
 
         res.insert(
             "DELIVERY_ID".to_string(),
-            req.headers["X-GitHub-Delivery"].clone()
+            req.headers["X-GitHub-Delivery"].clone(),
         );
 
         res
@@ -146,15 +141,19 @@ impl ProviderTrait for GitHubProvider {
 
 fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
     // The signature must have a =
-    if ! raw_signature.contains('=') {
+    if !raw_signature.contains('=') {
         return false;
     }
 
     // Split the raw signature to get the algorithm and the signature
     let splitted: Vec<&str> = raw_signature.split('=').collect();
     let algorithm = &splitted[0];
-    let hex_signature = splitted.iter().skip(1).map(|i| *i)
-                                .collect::<Vec<&str>>().join("=");
+    let hex_signature = splitted
+        .iter()
+        .skip(1)
+        .map(|i| *i)
+        .collect::<Vec<&str>>()
+        .join("=");
 
     // Convert the signature from hex
     let signature = if let Ok(converted) = utils::from_hex(&hex_signature) {
@@ -170,7 +169,7 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
         _ => {
             // Unknown digest, return false
             return false;
-        },
+        }
     };
 
     // Verify the HMAC signature
@@ -185,7 +184,7 @@ mod tests {
     use requests::RequestType;
     use providers::ProviderTrait;
 
-    use super::{GITHUB_EVENTS, GitHubProvider, verify_signature};
+    use super::{verify_signature, GitHubProvider, GITHUB_EVENTS};
 
 
     #[test]
@@ -256,14 +255,12 @@ mod tests {
 
         // Create a dummy request
         let mut request = dummy_web_request();
-        request.headers.insert(
-            "X-GitHub-Event".to_string(),
-            "ping".to_string()
-        );
-        request.headers.insert(
-            "X-GitHub-Delivery".to_string(),
-            "12345".to_string()
-        );
+        request
+            .headers
+            .insert("X-GitHub-Event".to_string(), "ping".to_string());
+        request
+            .headers
+            .insert("X-GitHub-Delivery".to_string(), "12345".to_string());
 
         // Get the env
         let env = provider.env(&request.into());
@@ -278,22 +275,22 @@ mod tests {
     fn test_verify_signature() {
         // Check if the function allows invalid signatures
         for signature in &[
-            "invalid",  // No algorithm
-            "invalid=invalid",  // Invalid algorithm
-            "sha1=g",  // The signature is not hex
-
+            "invalid",         // No algorithm
+            "invalid=invalid", // Invalid algorithm
+            "sha1=g",          // The signature is not hex
             // Invalid signature (the first "e" should be "f")
             "sha1=e75efc0f29bf50c23f99b30b86f7c78fdaf5f11d",
         ] {
             assert!(
-                ! verify_signature("secret", "payload", signature),
+                !verify_signature("secret", "payload", signature),
                 signature.to_string()
             );
         }
 
         // This is known to be right
         assert!(verify_signature(
-            "secret", "payload",
+            "secret",
+            "payload",
             "sha1=f75efc0f29bf50c23f99b30b86f7c78fdaf5f11d"
         ));
     }

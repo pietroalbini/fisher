@@ -15,9 +15,12 @@
 
 mod status;
 mod standalone;
-#[cfg(feature = "provider-github")] mod github;
-#[cfg(feature = "provider-gitlab")] mod gitlab;
-#[cfg(test)] pub mod testing;
+#[cfg(feature = "provider-github")]
+mod github;
+#[cfg(feature = "provider-gitlab")]
+mod gitlab;
+#[cfg(test)]
+pub mod testing;
 
 
 pub mod prelude {
@@ -31,7 +34,7 @@ pub mod prelude {
 }
 
 
-pub use self::status::{StatusProvider, StatusEvent, StatusEventKind};
+pub use self::status::{StatusEvent, StatusEventKind, StatusProvider};
 
 
 use std::collections::HashMap;
@@ -44,10 +47,11 @@ use common::prelude::*;
 /// This trait should be implemented by every Fisher provider
 /// The objects implementing this trait must also implement Clone and Debug
 pub trait ProviderTrait: ::std::fmt::Debug {
-
     /// This method should create a new instance of the provider, from a
     /// given configuration string
-    fn new(&str) -> Result<Self> where Self: Sized;
+    fn new(&str) -> Result<Self>
+    where
+        Self: Sized;
 
     /// This method should validate an incoming request, returning its
     /// type if the request is valid
@@ -60,8 +64,7 @@ pub trait ProviderTrait: ::std::fmt::Debug {
     /// This method should prepare the directory in which the hook will be run.
     /// This means, if you want to add extra files in there you should use
     /// this. You're not required to implement this method
-    fn prepare_directory(&self, _req: &Request, _path: &PathBuf)
-                         -> Result<()> {
+    fn prepare_directory(&self, _req: &Request, _path: &PathBuf) -> Result<()> {
         Ok(())
     }
 

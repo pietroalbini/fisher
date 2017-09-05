@@ -35,7 +35,6 @@ pub struct TestEnv {
 }
 
 impl TestEnv {
-
     fn new() -> Result<Self> {
         let scripts_dir = create_temp_dir()?;
 
@@ -65,7 +64,10 @@ impl TestEnv {
     }
 
     pub fn create_script_into(
-        &self, path: &PathBuf, name: &str, content: &[&str],
+        &self,
+        path: &PathBuf,
+        name: &str,
+        content: &[&str],
     ) -> Result<()> {
         let path = path.join(name);
 
