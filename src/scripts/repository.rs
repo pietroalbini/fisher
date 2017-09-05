@@ -19,10 +19,10 @@ use std::sync::{Arc, RwLock};
 
 use common::prelude::*;
 use common::state::{State, UniqueId};
-use hooks::HooksCollector;
 use jobs::{Job, JobOutput};
 use providers::{Provider, StatusEvent, StatusEventKind};
 use requests::Request;
+use scripts::collector::Collector;
 use scripts::script::{Script, ScriptProvider};
 
 
@@ -265,7 +265,7 @@ impl Blueprint {
         // Collect scripts from paths
         let mut collector;
         for &(ref p, recursive) in &self.collect_paths {
-            collector = HooksCollector::new(p, self.state.clone(), recursive)?;
+            collector = Collector::new(p, self.state.clone(), recursive)?;
             for script in collector {
                 inner.insert(script?);
             }

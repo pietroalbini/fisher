@@ -14,8 +14,9 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #[cfg(test)] mod test_utils;
-mod script;
+mod collector;
 mod repository;
+mod script;
 
 pub use self::repository::{Repository, Blueprint};
 pub use self::repository::{ScriptNamesIter, ScriptsIter, StatusJobsIter};

@@ -31,7 +31,6 @@ extern crate nix;
 
 #[macro_use] mod utils;
 mod app;
-mod hooks;
 mod jobs;
 mod native;
 mod processor;
