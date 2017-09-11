@@ -6,7 +6,7 @@ webhooks.
 
 In this tutorial we're going to configure Fisher to deploy your project on your
 server automatically, every time you push some changes. You need to have
-[Fisher installed](install.html) on the machine, and a repository you own on
+[Fisher installed](install.md) on the machine, and a repository you own on
 GitHub.
 
 ## Creating the build script

@@ -1,0 +1,15 @@
+---
+
+site_name: Fisher documentation
+
+pages:
+  - "Why you should use Fisher": "why.md"
+  - "Installing Fisher": "install.md"
+  - "Tutorial: auto-deploy from GitHub": "tutorial.md"
+  - "The fisher command": "cli.md"
+  - "Configuration comments": "config-comments.md"
+  - "Scripts execution context": "env.md"
+
+theme: readthedocs
+docs_dir: src
+site_dir: build

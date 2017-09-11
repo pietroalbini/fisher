@@ -1,6 +1,5 @@
 /build
-
-/docs/book
+/docs/build
 
 /target
 /fisher_common/target
