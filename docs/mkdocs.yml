@@ -11,6 +11,7 @@ pages:
   - "Scripts execution context": "env.md"
   - "Providers":
     - "Introduction": "providers/index.md"
+    - "Standalone": "providers/standalone.md"
 
 theme: readthedocs
 docs_dir: src
