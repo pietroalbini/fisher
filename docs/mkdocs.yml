@@ -9,6 +9,8 @@ pages:
   - "The fisher command": "cli.md"
   - "Configuration comments": "config-comments.md"
   - "Scripts execution context": "env.md"
+  - "Providers":
+    - "Introduction": "providers/index.md"
 
 theme: readthedocs
 docs_dir: src
