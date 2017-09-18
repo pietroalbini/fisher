@@ -13,6 +13,7 @@ pages:
   - "Providers":
     - "Introduction": "providers/index.md"
     - "Standalone": "providers/standalone.md"
+    - "GitHub": "providers/github.md"
 
 theme: readthedocs
 docs_dir: src
