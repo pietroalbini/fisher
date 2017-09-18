@@ -7,7 +7,9 @@ pages:
   - "Introduction":
     - "Why you should use Fisher": "why.md"
     - "Installing Fisher": "install.md"
-    - "Tutorial: auto-deploy from GitHub": "tutorial.md"
+  - "Tutorials":
+    - "Automatic deploy from GitHub": "tutorial/auto-deploy.md"
+    - "Send emails when scripts fails": "tutorial/failure-email.md"
   - "Reference":
     - "The fisher command": "cli.md"
     - "Configuration comments": "config-comments.md"

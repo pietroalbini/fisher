@@ -1,4 +1,4 @@
-# Tutorial: auto-deploy from GitHub
+# Tutorial: automatic deploy from GitHub
 
 Automatically deploying your project from its git repository every time you
 push is a great time saver, and one of the most common things done with
@@ -6,7 +6,7 @@ webhooks.
 
 In this tutorial we're going to configure Fisher to deploy your project on your
 server automatically, every time you push some changes. You need to have
-[Fisher installed](install.md) on the machine, and a repository you own on
+[Fisher installed](../install.md) on the machine, and a repository you own on
 GitHub.
 
 ## Creating the build script
