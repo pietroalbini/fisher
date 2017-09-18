@@ -4,17 +4,23 @@ site_name: Fisher documentation
 
 pages:
   - "Home page": "index.md"
-  - "Why you should use Fisher": "why.md"
-  - "Installing Fisher": "install.md"
-  - "Tutorial: auto-deploy from GitHub": "tutorial.md"
-  - "The fisher command": "cli.md"
-  - "Configuration comments": "config-comments.md"
-  - "Scripts execution context": "env.md"
-  - "Providers":
-    - "Introduction": "providers/index.md"
-    - "Standalone": "providers/standalone.md"
-    - "GitHub": "providers/github.md"
+  - "Introduction":
+    - "Why you should use Fisher": "why.md"
+    - "Installing Fisher": "install.md"
+    - "Tutorial: auto-deploy from GitHub": "tutorial.md"
+  - "Reference":
+    - "The fisher command": "cli.md"
+    - "Configuration comments": "config-comments.md"
+    - "Scripts execution context": "env.md"
+    - "Providers": "providers/index.md"
+  - "Supported providers":
+    - "Standalone provider": "providers/standalone.md"
+    - "GitHub provider": "providers/github.md"
 
 theme: readthedocs
+extra_css:
+  - custom.css
+
 docs_dir: src
+theme_dir: theme
 site_dir: build

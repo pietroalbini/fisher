@@ -1,0 +1,30 @@
+/* Fix navbar indentation */
+
+.wy-menu-vertical .subnav a {
+    padding: 0.4045em 1.618em;
+}
+
+.wy-menu-vertical li ul.subnav ul.subnav {
+    padding: 0;
+}
+
+.wy-menu-vertical li.current a,
+.wy-menu-vertical .subnav li.current > ul li a,
+.wy-menu-vertical .subnav li.current > a {
+    padding-left: 1.618em;
+}
+
+
+
+/* Remove the first item of every submenu */
+
+.wy-menu-vertical a.current + ul.subnav > li:first-child {
+    display: none;
+}
+
+
+/* Style navbar sections */
+.wy-menu-vertical span.caption-text {
+    background: rgba(255, 255, 255, 0.05);
+    margin-top: 0.809em;
+}
