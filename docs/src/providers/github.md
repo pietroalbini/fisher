@@ -7,7 +7,7 @@ webhooks, spanning from code pushes to comments.
 The provider performs some consistency checks on the incoming webhooks, to
 ensure they come from GitHub. It also ignores incoming pings from GitHub (such
 as the ones sent when the webhook is created), so the script will be executed
-only when something really happened.
+only when something really happens.
 
 If you need to ensure no one can send fake webhooks, you can configure GitHub
 to sign all outgoing webhooks with a secret key you provide: if you put it in
@@ -24,7 +24,7 @@ The provider is configured with a [configuration
 comment](../config-comments.md), and supports the following keys:
 
 * `secret`: the secret key used to sign webhooks
-* `events`: a whitelist of events you want to accept
+* `events`: a whitelist of GitHub events you want to accept
 
 ## Environment variables
 
