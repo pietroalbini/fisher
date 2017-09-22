@@ -38,7 +38,6 @@ extern crate url;
 mod utils;
 mod app;
 mod jobs;
-mod native;
 mod processor;
 mod providers;
 mod requests;

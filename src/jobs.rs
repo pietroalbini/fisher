@@ -24,6 +24,8 @@ use std::io::Write;
 use std::sync::Arc;
 use std::net::IpAddr;
 
+use nix::unistd::{setpgid, Pid};
+
 use common::prelude::*;
 use common::state::UniqueId;
 
@@ -31,7 +33,6 @@ use scripts::Script;
 use utils;
 use requests::Request;
 use providers::Provider;
-use native;
 
 
 lazy_static! {
@@ -134,7 +135,9 @@ impl Job {
 
         // Make sure the process is isolated
         command.before_exec(|| {
-            native::isolate_process();
+            // If a new process group is not created, the job still works fine
+            let _ = setpgid(Pid::this(), Pid::from_raw(0));
+
             Ok(())
         });
 
