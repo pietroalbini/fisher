@@ -19,6 +19,8 @@ pages:
     - "Standalone provider": "providers/standalone.md"
     - "GitHub provider": "providers/github.md"
     - "GitLab provider": "providers/gitlab.md"
+  - "Other information":
+    - "Changelog": "changelog.md"
 
 theme: readthedocs
 extra_css:
