@@ -39,7 +39,6 @@ use providers::Provider;
 lazy_static! {
     static ref DEFAULT_ENV: Vec<String> = vec![
         "PATH".to_string(),
-        "SHELL".to_string(),
 
         // Internationalization stuff
         "LC_ALL".to_string(),

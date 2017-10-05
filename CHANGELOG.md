@@ -10,6 +10,7 @@ everything a user can notice.
 
 * **Changes and improvements:**
 
+    * **BREAKING:** the `SHELL` environment variable is not present anymore
     * The `USER` environment variable is now guaranteed to be correct
 
 ### Fisher 1.0.0-beta.7
