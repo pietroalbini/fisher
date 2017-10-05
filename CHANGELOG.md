@@ -6,6 +6,12 @@ everything a user can notice.
 
 ## Fisher 1.0.x
 
+### Next release
+
+* **Changes and improvements:**
+
+    * The `USER` environment variable is now guaranteed to be correct
+
 ### Fisher 1.0.0-beta.7
 
 *Released on August 16th, 2017.*

@@ -33,6 +33,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate tiny_http;
 extern crate url;
+extern crate users;
 
 #[macro_use]
 mod utils;

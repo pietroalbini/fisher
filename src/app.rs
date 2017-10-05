@@ -111,6 +111,7 @@ impl<'a> Fisher<'a> {
 
         let context = Arc::new(Context {
             environment: self.environment,
+            .. Context::default()
         });
 
         // Start the processor

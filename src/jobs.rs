@@ -25,6 +25,7 @@ use std::sync::Arc;
 use std::net::IpAddr;
 
 use nix::unistd::{setpgid, Pid};
+use users;
 
 use common::prelude::*;
 use common::state::UniqueId;
@@ -38,7 +39,6 @@ use providers::Provider;
 lazy_static! {
     static ref DEFAULT_ENV: Vec<String> = vec![
         "PATH".to_string(),
-        "USER".to_string(),
         "SHELL".to_string(),
 
         // Internationalization stuff
@@ -51,12 +51,21 @@ lazy_static! {
 #[derive(Debug)]
 pub struct Context {
     pub environment: HashMap<String, String>,
+    pub username: String,
 }
 
 impl Default for Context {
     fn default() -> Self {
+        // Fallback to the user ID if the user is not in /etc/passwd
+        let username = if let Some(name) = users::get_current_username() {
+            name
+        } else {
+            users::get_current_uid().to_string()
+        };
+
         Context {
             environment: HashMap::new(),
+            username,
         }
     }
 }
@@ -101,26 +110,20 @@ impl Job {
         let mut command = process::Command::new(&self.script.exec());
 
         // Prepare the command's environment variables
-        self.prepare_env(&mut command);
+        self.prepare_env(&mut command, ctx);
 
         // Use a random working directory
         let working_directory = utils::create_temp_dir()?;
         command.current_dir(working_directory.to_str().unwrap());
-        command.env("HOME".to_string(), working_directory.to_str().unwrap());
+        command.env("HOME", working_directory.to_str().unwrap());
 
         // Set the request IP
-        command.env(
-            "FISHER_REQUEST_IP".to_string(),
-            format!("{}", self.request_ip()),
-        );
+        command.env("FISHER_REQUEST_IP", self.request_ip().to_string());
 
         // Save the request body
         let request_body = self.save_request_body(&working_directory)?;
         if let Some(path) = request_body {
-            command.env(
-                "FISHER_REQUEST_BODY".to_string(),
-                path.to_str().unwrap().to_string(),
-            );
+            command.env("FISHER_REQUEST_BODY", path.to_str().unwrap());
         }
 
         // Tell the provider to prepare the directory
@@ -151,9 +154,12 @@ impl Job {
         Ok((self, output).into())
     }
 
-    fn prepare_env(&self, command: &mut process::Command) {
+    fn prepare_env(&self, command: &mut process::Command, ctx: &Context) {
         // First of all clear the environment
         command.env_clear();
+
+        // Set the USER environment variable with the correct username
+        command.env("USER", ctx.username.clone());
 
         // Apply the default environment
         // This is done (instead of the automatic inheritage) to whitelist
@@ -254,6 +260,9 @@ impl<'a> From<(&'a Job, process::Output)> for JobOutput {
 mod tests {
     use std::env;
     use std::collections::HashMap;
+    use std::ffi::OsString;
+
+    use users;
 
     use common::prelude::*;
 
@@ -337,6 +346,18 @@ mod tests {
 
     #[test]
     fn test_job_environment() {
+        // Execute a backup of the $USER environment variable
+        let old_user = env::var_os("USER");
+
+        // Change the $USER environment variable to a dummy value
+        let mut new_name: OsString = if let Some(ref old) = old_user {
+            old.into()
+        } else {
+            users::get_current_username().unwrap().into()
+        };
+        new_name.push("-dummy");
+        env::set_var("USER", new_name);
+
         let mut env = TestingEnv::new();
         let ctx = Context::default();
 
@@ -381,6 +402,7 @@ mod tests {
 
             // Those are added by the processor
             res.push("HOME");
+            res.push("USER");
             res.push("FISHER_REQUEST_BODY");
             res.push("FISHER_REQUEST_IP");
 
@@ -412,6 +434,12 @@ mod tests {
         // $HOME must be the current directory
         assert_eq!(*job_env.get("HOME").unwrap(), working_directory);
 
+        // $USER must be the current user
+        assert_eq!(
+            *job_env.get("USER").unwrap(),
+            users::get_current_username().unwrap()
+        );
+
         // The IP address must be correct
         // dummy_web_request() sets it to 127.0.0.1
         assert_eq!(*&job_env.get("FISHER_REQUEST_IP").unwrap(), &"127.0.0.1");
@@ -431,6 +459,13 @@ mod tests {
             }
         }
 
+        // Restore the $USER environment variable to its previous state
+        if let Some(name) = old_user {
+            env::set_var("USER", name);
+        } else {
+            env::remove_var("USER");
+        }
+
         env.cleanup();
     }
 
@@ -446,6 +481,7 @@ mod tests {
                 extra_env.insert("TEST_ENV".into(), "yes".into());
                 extra_env
             },
+            .. Context::default()
         };
 
         // Create a temp directory which will contain the output

@@ -24,6 +24,7 @@ tiny_http="^0.5"
 libc="^0.2"
 signal="^0.3"
 nix="^0.9"
+users="^0.6"
 
 serde="^1.0"
 serde_derive="^1.0"
