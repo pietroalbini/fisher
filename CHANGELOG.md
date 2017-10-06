@@ -8,6 +8,11 @@ everything a user can notice.
 
 ### Next release
 
+* **New features:**
+
+    * The [Standalone provider](providers/standalone.md) now supports
+      whitelisting IP addresses
+
 * **Changes and improvements:**
 
     * **BREAKING:** the `SHELL` environment variable is not present anymore

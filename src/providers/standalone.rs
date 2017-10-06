@@ -13,6 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::net::IpAddr;
+
 use serde_json;
 
 use providers::prelude::*;
@@ -20,7 +22,8 @@ use providers::prelude::*;
 
 #[derive(Debug, Deserialize)]
 pub struct StandaloneProvider {
-    secret: String,
+    secret: Option<String>,
+    from: Option<Vec<IpAddr>>,
 
     param_name: Option<String>,
     header_name: Option<String>,
@@ -57,22 +60,30 @@ impl ProviderTrait for StandaloneProvider {
             return RequestType::Invalid;
         }
 
-        // First of all check the secret code
-        let secret;
-        if let Some(found) = req.params.get(&self.param_name()) {
-            // Secret in the request parameters
-            secret = found;
-        } else if let Some(found) = req.headers.get(&self.header_name()) {
-            // Secret in the HTTP headers
-            secret = found;
-        } else {
-            // No secret present, abort!
-            return RequestType::Invalid;
+        // Check if the secret code is valid
+        if let Some(ref correct_secret) = self.secret {
+            let secret = if let Some(found) = req.params.get(&self.param_name()) {
+                // Secret in the request parameters
+                found
+            } else if let Some(found) = req.headers.get(&self.header_name()) {
+                // Secret in the HTTP headers
+                found
+            } else {
+                // No secret present, abort!
+                return RequestType::Invalid;
+            };
+
+            // Abort if the secret doesn't match
+            if secret != correct_secret {
+                return RequestType::Invalid;
+            }
         }
 
-        // Abort if the secret doesn't match
-        if *secret != self.secret {
-            return RequestType::Invalid;
+        // Check if the IP address is allowed
+        if let Some(ref allowed) = self.from {
+            if !allowed.contains(&req.source) {
+                return RequestType::Invalid;
+            }
         }
 
         RequestType::ExecuteHook
@@ -99,44 +110,44 @@ mod tests {
     fn test_new() {
         // Check if valid config is accepted
         let right = vec![
+            r#"{}"#,
             r#"{"secret": "abcde"}"#,
             r#"{"secret": "abcde", "param_name": "a"}"#,
             r#"{"secret": "abcde", "header_name": "X-b"}"#,
             r#"{"secret": "abcde", "param_name": "a", "header_name": "b"}"#,
+            r#"{"from": ["127.0.0.1", "192.168.1.1", "10.0.0.2"]}"#,
+            r#"{"from": ["127.0.0.1"], "secret": "abcde"}"#,
         ];
         for one in &right {
-            assert!(StandaloneProvider::new(one).is_ok());
+            assert!(StandaloneProvider::new(one).is_ok(), "Should be valid: {}", one);
         }
 
         let wrong = vec![
-            // Empty configuration
-            r#"{}"#,
-            // Mispelled keys
-            r#"{"secrt": "abcde"}"#,
-            // Wrong types
             r#"{"secret": 123}"#,
             r#"{"secret": true}"#,
             r#"{"secret": ["a", "b"]}"#,
             r#"{"secret": {"a": "b"}}"#,
+            r#"{"from": "127.0.0.1"}"#,
+            r#"{"from": ["256.0.0.1"]}"#,
         ];
         for one in &wrong {
-            assert!(StandaloneProvider::new(one).is_err());
+            assert!(StandaloneProvider::new(one).is_err(), "Should be invalid: {}", one);
         }
     }
 
     #[test]
-    fn test_validate() {
+    fn test_validate_secret() {
         let config = r#"{"secret": "abcde"}"#;
         let config_custom = concat!(
             r#"{"secret": "abcde", "param_name": "a","#,
             r#" "header_name": "X-A"}"#
         );
 
-        test_validate_inner(config, "secret", "X-Fisher-Secret");
-        test_validate_inner(config_custom, "a", "X-A");
+        test_validate_inner_secret(config, "secret", "X-Fisher-Secret");
+        test_validate_inner_secret(config_custom, "a", "X-A");
     }
 
-    fn test_validate_inner(config: &str, param_name: &str, header_name: &str) {
+    fn test_validate_inner_secret(config: &str, param_name: &str, header_name: &str) {
         let p = StandaloneProvider::new(config).unwrap();
 
         // Test a request with no headers or params
@@ -173,6 +184,22 @@ mod tests {
         req.headers
             .insert(header_name.to_string(), "abcde".to_string());
         assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
+    }
+
+    #[test]
+    fn test_validate_from() {
+        let config = r#"{"from": ["192.168.1.1", "10.0.0.1"]}"#;
+        let p = StandaloneProvider::new(config).unwrap();
+
+        let mut req = dummy_web_request();
+        req.source = "127.0.0.1".parse().unwrap();
+        assert_eq!(p.validate(&req.into()), RequestType::Invalid);
+
+        for ip in &["192.168.1.1", "10.0.0.1"] {
+            let mut req = dummy_web_request();
+            req.source = ip.parse().unwrap();
+            assert_eq!(p.validate(&req.into()), RequestType::ExecuteHook);
+        }
     }
 
     #[test]
