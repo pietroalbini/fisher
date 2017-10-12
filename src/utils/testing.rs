@@ -27,9 +27,8 @@ use common::state::State;
 use common::structs::HealthDetails;
 
 use scripts::{Blueprint as HooksBlueprint, Repository as Hooks};
-use jobs::{Job, JobOutput};
+use scripts::{Job, JobOutput};
 use web::{WebApp, WebRequest};
-use requests::Request;
 use utils;
 
 
@@ -77,7 +76,7 @@ pub fn dummy_job_output() -> JobOutput {
         exit_code: Some(0),
         signal: None,
 
-        hook_name: "test".into(),
+        script_name: "test".into(),
         request_ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
 
         trigger_status_hooks: true,
@@ -330,24 +329,11 @@ impl TestingEnv {
 
     // CLEANUP
 
-    pub fn delete_also(&mut self, path: &str) {
-        self.remove_dirs.push(path.to_string());
-    }
-
     pub fn cleanup(&self) {
         // Remove all the directories
         for dir in &self.remove_dirs {
             let _ = fs::remove_dir_all(dir);
         }
-    }
-
-    // JOBS UTILITIES
-
-    pub fn create_job(&self, hook_name: &str, req: Request) -> Job {
-        let hook = self.hooks.get_by_name(&hook_name.to_string()).unwrap();
-        let (_, provider) = hook.validate(&req);
-
-        Job::new(hook.clone(), provider, req)
     }
 
     // WEB TESTING

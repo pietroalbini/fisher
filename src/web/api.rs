@@ -19,8 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use common::prelude::*;
 
 use requests::{Request, RequestType};
-use scripts::Repository;
-use jobs::Job;
+use scripts::{Repository, Job};
 use web::responses::Response;
 
 

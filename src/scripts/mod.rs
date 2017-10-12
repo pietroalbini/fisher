@@ -16,9 +16,11 @@
 #[cfg(test)]
 mod test_utils;
 mod collector;
+mod jobs;
 mod repository;
 mod script;
 
 pub use self::repository::{Blueprint, Repository};
 pub use self::repository::{ScriptNamesIter, ScriptsIter, StatusJobsIter};
 pub use self::script::{Script, ScriptProvider};
+pub use self::jobs::{Job, JobOutput, Context as JobContext};

@@ -19,10 +19,10 @@ use std::sync::{Arc, RwLock};
 
 use common::prelude::*;
 use common::state::{State, UniqueId};
-use jobs::{Job, JobOutput};
 use providers::{Provider, StatusEvent, StatusEventKind};
 use requests::Request;
 use scripts::collector::Collector;
+use scripts::jobs::{Job, JobOutput};
 use scripts::script::{Script, ScriptProvider};
 
 

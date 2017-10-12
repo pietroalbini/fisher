@@ -21,7 +21,7 @@ use std::net::IpAddr;
 use serde_json;
 
 use providers::prelude::*;
-use jobs::JobOutput;
+use scripts::JobOutput;
 
 
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ impl StatusEvent {
     pub fn hook_name(&self) -> &String {
         match *self {
             StatusEvent::JobCompleted(ref output) |
-            StatusEvent::JobFailed(ref output) => &output.hook_name,
+            StatusEvent::JobFailed(ref output) => &output.script_name,
         }
     }
 

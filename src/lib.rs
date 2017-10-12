@@ -38,7 +38,6 @@ extern crate users;
 #[macro_use]
 mod utils;
 mod app;
-mod jobs;
 mod processor;
 mod providers;
 mod requests;

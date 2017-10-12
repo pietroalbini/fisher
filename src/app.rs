@@ -21,8 +21,7 @@ use std::sync::Arc;
 use common::prelude::*;
 use common::state::State;
 
-use scripts::{Blueprint, Repository, Script, ScriptNamesIter};
-use jobs::Context;
+use scripts::{Blueprint, Repository, Script, ScriptNamesIter, JobContext};
 use processor::{Processor, ProcessorApi};
 use utils;
 use web::WebApp;
@@ -109,9 +108,9 @@ impl<'a> Fisher<'a> {
         // Finalize the hooks
         let repository = Arc::new(self.scripts_repository);
 
-        let context = Arc::new(Context {
+        let context = Arc::new(JobContext {
             environment: self.environment,
-            .. Context::default()
+            .. JobContext::default()
         });
 
         // Start the processor
