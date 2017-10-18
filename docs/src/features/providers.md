@@ -7,11 +7,11 @@ provider.
 
 Fisher has currently native support for these providers:
 
-* [Standalone](standalone.md) - for scripts not tied to a specific third-party
-  website
-* [GitHub](github.md) - for webhooks coming from
+* [Standalone](../providers/standalone.md) - for scripts not tied to a specific
+  third-party website
+* [GitHub](../providers/github.md) - for webhooks coming from
   [GitHub.com](https://github.com)
-* [GitLab](gitlab.md) - for webhooks coming from a
+* [GitLab](../providers/gitlab.md) - for webhooks coming from a
   [GitLab](https://about.gitlab.com) instance
 
 ## Applying a provider to a script

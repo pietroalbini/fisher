@@ -10,11 +10,12 @@ pages:
   - "Tutorials":
     - "Automatic deploy from GitHub": "tutorial/auto-deploy.md"
     - "Send emails when scripts fails": "tutorial/failure-email.md"
+  - "Features":
+    - "Third-party providers": "features/providers.md"
   - "Reference":
     - "The fisher command": "cli.md"
     - "Configuration comments": "config-comments.md"
     - "Scripts execution context": "env.md"
-    - "Providers": "providers/index.md"
   - "Supported providers":
     - "Standalone provider": "providers/standalone.md"
     - "GitHub provider": "providers/github.md"
