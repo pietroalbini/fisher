@@ -11,6 +11,7 @@ pages:
     - "Automatic deploy from GitHub": "tutorial/auto-deploy.md"
     - "Send emails when scripts fails": "tutorial/failure-email.md"
   - "Features":
+    - "Monitoring with status hooks": "features/status-hooks.md"
     - "Third-party providers": "features/providers.md"
   - "Reference":
     - "The fisher command": "cli.md"

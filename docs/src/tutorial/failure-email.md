@@ -7,7 +7,7 @@ Fisher doesn't have a ready to be used solution for this though: there are
 countless way you can be notified about a problem, and supporting all of them
 would be an impossible task. Instead, Fisher provides you a simple but powerful
 interface to script how notifications are sent: [status
-hooks](../status-hooks.md).
+hooks](../features/status-hooks.md).
 
 A status hook is a normal script Fisher starts every time a job completed its
 execution, that receives all the availabe information about the job execution.
@@ -41,8 +41,8 @@ with this content:
 ```
 
 All the status hooks needs to use the special [Status
-provider](../providers/status.md), which allows to filter the events the status
-hooks will handle. In this case, our status hook will handle just the
+provider](../features/status-hooks.md), which allows to filter the events the
+status hooks will handle. In this case, our status hook will handle just the
 `job_failed` event.
 
 Then we can edit the script to send the scary email to our address:
@@ -62,8 +62,9 @@ The script we just wrote works fine, but doesn't tell you anything other than
 "a script failed". In order to be really useful, the email needs to contain
 more details about the execution. Fisher provides all the available information
 through the environment, so you can retrieve them in every scripting language
-you use. Check out the [provider documentation](../providers/status.md) for a
-list of all the environment variables.
+you use. Check out the [status hooks
+documentation](../features/status-hooks.md) for a list of all the environment
+variables.
 
 Let's change the script to be more useful then:
 
