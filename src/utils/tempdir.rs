@@ -142,7 +142,7 @@ mod tests {
         // Check if its metadata is correct
         let metadata = fs::metadata(&expected1).unwrap();
         assert!(metadata.is_dir());
-        assert!(metadata.permissions().mode() == 0o700);
+        assert!(metadata.permissions().mode() & 0o7777 == 0o700);
 
         // Then, the RNG is reseeded to simulate choosing a directory name
         // which already exists
