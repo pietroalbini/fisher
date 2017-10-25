@@ -23,7 +23,7 @@ use common::prelude::*;
 
 use scripts::Repository;
 use web::http::HttpServer;
-use web::api::WebApi;
+use web::api::{WebApi, RateLimitsConfig};
 
 
 pub struct WebApp<A: ProcessorApiTrait<Repository> + 'static> {
@@ -38,12 +38,16 @@ impl<A: ProcessorApiTrait<Repository>> WebApp<A> {
         enable_health: bool,
         behind_proxies: u8,
         bind: &str,
+        rate_limits_config: RateLimitsConfig,
         processor: A,
     ) -> Result<Self> {
         let locked = Arc::new(AtomicBool::new(false));
 
         // Create the web api
-        let api = WebApi::new(processor, hooks, locked.clone(), enable_health);
+        let api = WebApi::new(
+            processor, hooks, locked.clone(), rate_limits_config,
+            enable_health,
+        );
 
         // Create the HTTP server
         let mut server = HttpServer::new(api, behind_proxies);

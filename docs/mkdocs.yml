@@ -12,6 +12,7 @@ pages:
     - "Send emails when scripts fails": "tutorial/failure-email.md"
   - "Features":
     - "Monitoring with status hooks": "features/status-hooks.md"
+    - "Rate limits": "features/rate-limits.md"
     - "Third-party providers": "features/providers.md"
   - "Reference":
     - "The fisher command": "cli.md"

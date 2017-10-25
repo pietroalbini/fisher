@@ -15,6 +15,7 @@
 
 mod http;
 mod app;
+mod rate_limits;
 mod requests;
 mod responses;
 mod proxies;
@@ -24,4 +25,5 @@ mod api;
 
 pub use self::http::HttpServer;
 pub use self::app::WebApp;
+pub use self::api::RateLimitsConfig;
 pub use self::requests::WebRequest;

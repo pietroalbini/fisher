@@ -24,7 +24,7 @@ use common::state::State;
 use scripts::{Blueprint, Repository, Script, ScriptNamesIter, JobContext};
 use processor::{Processor, ProcessorApi};
 use utils;
-use web::WebApp;
+use web::{WebApp, RateLimitsConfig};
 
 
 pub trait IntoScript {
@@ -54,6 +54,7 @@ pub struct Fisher<'a> {
     state: Arc<State>,
     scripts_repository: Repository,
     scripts_blueprint: Blueprint,
+    rate_limits_config: RateLimitsConfig,
     environment: HashMap<String, String>,
 }
 
@@ -72,6 +73,10 @@ impl<'a> Fisher<'a> {
             state: Arc::new(State::new()),
             scripts_blueprint,
             scripts_repository,
+            rate_limits_config: RateLimitsConfig {
+                requests: 10,
+                interval: 60,
+            },
             environment: HashMap::new(),
         }
     }
@@ -104,6 +109,27 @@ impl<'a> Fisher<'a> {
         self.scripts_repository.names()
     }
 
+    pub fn rate_limits_config(&mut self, config_string: &str) -> Result<()> {
+        let slash_pos = config_string.char_indices()
+            .filter(|ci| ci.1 == '/')
+            .map(|ci| ci.0)
+            .collect::<Vec<_>>();
+
+        if slash_pos.len() != 1 {
+            return Err(ErrorKind::InvalidRateLimitsConfig(
+                config_string.into()
+            ).into());
+        }
+
+        let (requests, interval) = config_string.split_at(slash_pos[0]);
+        self.rate_limits_config = RateLimitsConfig {
+            requests: requests.parse()?,
+            interval: utils::parse_time(&interval[1..])? as u64,
+        };
+
+        Ok(())
+    }
+
     pub fn start(self) -> Result<RunningFisher> {
         // Finalize the hooks
         let repository = Arc::new(self.scripts_repository);
@@ -128,6 +154,7 @@ impl<'a> Fisher<'a> {
             self.enable_health,
             self.behind_proxies,
             self.bind,
+            self.rate_limits_config,
             processor_api,
         ) {
             Ok(socket) => socket,

@@ -13,6 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::time::Duration;
+
 use serde_json;
 
 use common::prelude::*;
@@ -24,6 +26,7 @@ pub enum Response {
     NotFound,
     Forbidden,
     BadRequest(Error),
+    TooManyRequests(Duration),
     Unavailable,
     Ok,
     HealthStatus(HealthDetails),
@@ -35,6 +38,7 @@ impl Response {
             Response::NotFound => 404,
             Response::Forbidden => 403,
             Response::BadRequest(..) => 400,
+            Response::TooManyRequests(..) => 429,
             Response::Unavailable => 503,
             _ => 200,
         }
@@ -50,22 +54,40 @@ impl Response {
                 "status": "bad_request",
                 "error_msg": format!("{}", error),
             }),
+            Response::TooManyRequests(ref until) => json!({
+                "status": "too_many_requests",
+                "retry_after": until.as_secs(),
+            }),
             _ => json!({
                 "status": match *self {
                     Response::NotFound => "not_found",
                     Response::Forbidden => "forbidden",
                     Response::BadRequest(..) => "bad_request",
+                    Response::TooManyRequests(..) => "too_many_requests",
                     Response::Unavailable => "unavailable",
                     Response::Ok | Response::HealthStatus(..) => "ok",
                 },
             }),
         }).unwrap()
     }
+
+    pub fn headers(&self) -> Option<Vec<String>> {
+        match *self {
+            Response::TooManyRequests(ref duration) => {
+                Some(vec![
+                    format!("Retry-After: {}", duration.as_secs()),
+                ])
+            },
+            _ => None,
+        }
+    }
 }
 
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use serde_json;
 
     use common::prelude::*;
@@ -84,6 +106,7 @@ mod tests {
     fn test_not_found() {
         let response = Response::NotFound;
         assert_eq!(response.status(), 404);
+        assert!(response.headers().is_none());
 
         // The result must be an object
         let json = j(response.json());
@@ -101,6 +124,7 @@ mod tests {
     fn test_forbidden() {
         let response = Response::Forbidden;
         assert_eq!(response.status(), 403);
+        assert!(response.headers().is_none());
 
         // The result must be an object
         let json = j(response.json());
@@ -122,6 +146,7 @@ mod tests {
 
         let response = Response::BadRequest(error);
         assert_eq!(response.status(), 400);
+        assert!(response.headers().is_none());
 
         // The result must be an object
         let json = j(response.json());
@@ -140,11 +165,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_too_many_requests() {
+        let response = Response::TooManyRequests(Duration::from_secs(10));
+        assert_eq!(response.status(), 429);
+
+        // Ensure headers are correct
+        assert_eq!(response.headers(), Some(vec![
+            "Retry-After: 10".into(),
+        ]));
+
+        // Ensure the response is correct
+        assert_eq!(j(response.json()), json!({
+            "status": "too_many_requests",
+            "retry_after": 10,
+        }));
+    }
+
 
     #[test]
     fn test_unavailable() {
         let response = Response::Unavailable;
         assert_eq!(response.status(), 503);
+        assert!(response.headers().is_none());
 
         // The result must be an object
         let json = j(response.json());
@@ -162,6 +205,7 @@ mod tests {
     fn test_ok() {
         let response = Response::Ok;
         assert_eq!(response.status(), 200);
+        assert!(response.headers().is_none());
 
         // The result must be an object
         let json = j(response.json());
@@ -187,6 +231,7 @@ mod tests {
         let json = j(response.json());
         let obj = json.as_object().unwrap();
         assert_eq!(response.status(), 200);
+        assert!(response.headers().is_none());
 
 
         // The status must be "ok"

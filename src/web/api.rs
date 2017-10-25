@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -20,7 +21,15 @@ use common::prelude::*;
 
 use requests::{Request, RequestType};
 use scripts::{Repository, Job};
+use web::rate_limits::RateLimiter;
 use web::responses::Response;
+
+
+#[derive(Debug)]
+pub struct RateLimitsConfig {
+    pub interval: u64,
+    pub requests: u64,
+}
 
 
 #[derive(Clone)]
@@ -28,6 +37,7 @@ pub struct WebApi<A: ProcessorApiTrait<Repository>> {
     processor: Arc<Mutex<A>>,
     hooks: Arc<Repository>,
     locked: Arc<AtomicBool>,
+    limiter: Arc<Mutex<RateLimiter<IpAddr>>>,
 
     health_enabled: bool,
 }
@@ -37,13 +47,17 @@ impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
         processor: A,
         hooks: Arc<Repository>,
         locked: Arc<AtomicBool>,
+        rate_limits_config: RateLimitsConfig,
         health_enabled: bool,
     ) -> Self {
+        let limiter = Arc::new(Mutex::new(RateLimiter::new(
+            rate_limits_config.requests,
+            rate_limits_config.interval,
+        )));
+
         WebApi {
             processor: Arc::new(Mutex::new(processor)),
-            hooks: hooks,
-            locked: locked,
-            health_enabled: health_enabled,
+            hooks, locked, limiter, health_enabled,
         }
     }
 
@@ -53,6 +67,14 @@ impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
         // Don't process hooks if the web api is locked
         if self.locked.load(Ordering::Relaxed) {
             return Response::Unavailable;
+        }
+
+        // Check if the user is not rate limited
+        if let Ok(r) = req.web() {
+            let limited = self.limiter.lock().unwrap().is_limited(&r.source);
+            if let Some(until) = limited {
+                return Response::TooManyRequests(until);
+            }
         }
 
         // Check if the hook exists
@@ -81,9 +103,16 @@ impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
                     .unwrap();
 
                 Response::Ok
-            }
+            },
 
-            RequestType::Invalid => Response::Forbidden,
+            RequestType::Invalid => {
+                // Increment the limits for the user
+                if let Ok(r) = req.web() {
+                    self.limiter.lock().unwrap().increment(r.source);
+                }
+
+                Response::Forbidden
+            },
         }
     }
 

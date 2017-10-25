@@ -48,3 +48,11 @@ world either.
 Look for scripts not only in the directory provided as the first argument, but
 also in its subdirectories. This allows you to organize your scripts in a
 better way.
+
+### --rate-limit REQUESTS/INTERVAL
+
+Tweak the [rate limit](features/rate-limits.md) of invalid requests. You need
+to provide both the requests allowed each interval and the length of the
+interval, separated by a slash. The interval is a number of seconds, but you
+can use multipliers to write it easily (for example, `1h10m` specifies an
+interval of 4200 seconds).

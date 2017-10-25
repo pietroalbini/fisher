@@ -28,7 +28,7 @@ use common::structs::HealthDetails;
 
 use scripts::{Blueprint as HooksBlueprint, Repository as Hooks};
 use scripts::{Job, JobOutput};
-use web::{WebApp, WebRequest};
+use web::{WebApp, WebRequest, RateLimitsConfig};
 use utils;
 
 
@@ -260,6 +260,10 @@ impl WebAppInstance {
             health,
             behind_proxies,
             "127.0.0.1:0",
+            RateLimitsConfig {
+                requests: ::std::u64::MAX,
+                interval: ::std::u64::MAX,
+            },
             fake_processor,
         ).unwrap();
 

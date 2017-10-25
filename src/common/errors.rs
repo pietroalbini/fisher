@@ -52,6 +52,14 @@ pub enum ErrorKind {
     /// available in the first parameter.
     InvalidInput(String),
 
+    /// The time string you provided was invalid. The provided time string is
+    /// available in the first parameter.
+    InvalidTimeString(String),
+
+    /// The rate limits configuration you provided was invalid. The provided
+    /// configuration string is available in the first parameter.
+    InvalidRateLimitsConfig(String),
+
     /// The current request didn't travel across the configured number of
     /// proxies. This means the request was forged or the server is
     /// misconfigured.
@@ -110,6 +118,14 @@ impl fmt::Display for ErrorKind {
 
                 ErrorKind::InvalidInput(ref error) => {
                     format!("invalid input: {}", error)
+                }
+
+                ErrorKind::InvalidTimeString(ref time_string) => {
+                    format!("invalid time string: {}", time_string)
+                }
+
+                ErrorKind::InvalidRateLimitsConfig(ref config) => {
+                    format!("invalid rate limits config: {}", config)
                 }
 
                 ErrorKind::NotBehindProxy => "not behind the proxies".into(),
@@ -287,6 +303,10 @@ impl StdError for Error {
         match self.kind {
             ErrorKind::ProviderNotFound(..) => "provider not found",
             ErrorKind::InvalidInput(..) => "invalid input",
+            ErrorKind::InvalidTimeString(..) => "invalid time string",
+            ErrorKind::InvalidRateLimitsConfig(..) => {
+                "invalid rate limits config"
+            }
             ErrorKind::NotBehindProxy => "not behind the proxies",
             ErrorKind::WrongRequestKind => "wrong request kind",
             ErrorKind::InvalidHexChar(..) => "invalid character in hex",

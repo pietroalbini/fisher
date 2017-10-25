@@ -222,6 +222,13 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
                         response.json().into_bytes(),
                     ).with_status_code(response.status());
 
+                // Add custom headers from the response
+                if let Some(headers) = response.headers() {
+                    for header in &headers {
+                        tiny_response.add_header(header!(header));
+                    }
+                }
+
                 tiny_response.add_header(server_header.clone());
                 tiny_response.add_header(content_type.clone());
 

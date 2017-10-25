@@ -34,6 +34,7 @@ struct CliArgs {
     max_threads: u16,
     behind_proxies: u8,
     enable_health: bool,
+    rate_limits: Option<String>,
 }
 
 
@@ -85,6 +86,12 @@ fn parse_cli() -> fisher::Result<CliArgs> {
                 .help("Disable the /health endpoint"),
         )
         .arg(
+            Arg::with_name("rate_limit")
+                .long("rate-limit")
+                .value_name("REQUESTS/INTERVAL")
+                .help("Failed requests rate limit"),
+        )
+        .arg(
             Arg::with_name("behind_proxies")
                 .takes_value(true)
                 .long("behind-proxies")
@@ -117,6 +124,7 @@ fn parse_cli() -> fisher::Result<CliArgs> {
                 0
             }
         },
+        rate_limits: matches.value_of("rate_limit").map(|s| s.to_string()),
         enable_health: !matches.is_present("disable_health"),
     })
 }
@@ -176,6 +184,10 @@ fn app() -> fisher::Result<()> {
     factory.behind_proxies = args.behind_proxies;
     factory.bind = &args.bind;
     factory.enable_health = args.enable_health;
+
+    if let Some(limit) = args.rate_limits {
+        factory.rate_limits_config(&limit)?;
+    }
 
     factory.collect_scripts(args.hooks_dir, args.recursive)?;
     {

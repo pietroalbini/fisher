@@ -12,6 +12,8 @@ everything a user can notice.
 
     * The [Standalone provider](providers/standalone.md) now supports
       whitelisting IP addresses
+    * [Rate limits](features/rate-limits.md) are now supported for invalid
+      requests
 
 * **Changes and improvements:**
 
