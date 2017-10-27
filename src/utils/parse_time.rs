@@ -30,7 +30,7 @@ pub fn parse_time(input: &str) -> Result<usize> {
             '0' ... '9' => number_len += 1,
             _ => {
                 if number_len > 0 {
-                    number_temp = input[i-number_len..i].parse()?;
+                    number_temp = input[i-number_len..i].parse::<usize>()?;
 
                     match c {
                         's' => {},
@@ -54,7 +54,7 @@ pub fn parse_time(input: &str) -> Result<usize> {
     }
 
     if number_len > 0 {
-        result += input[input.len() - number_len..].parse()?;
+        result += input[input.len() - number_len..].parse::<usize>()?;
     }
 
     Ok(result)
