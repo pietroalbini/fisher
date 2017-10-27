@@ -59,7 +59,7 @@ impl<Id: Hash + Eq + PartialEq> RateLimiter<Id> {
     }
 
     pub fn is_limited(&mut self, id: &Id) -> Option<Duration> {
-        if let Some(mut status) = self.data.get_mut(id) {
+        if let Some(status) = self.data.get_mut(id) {
             let mut reset = false;
             let result = match *status {
                 LimitStatus::ClearsAt(ref start, ref duration) => {
@@ -93,7 +93,7 @@ impl<Id: Hash + Eq + PartialEq> RateLimiter<Id> {
     }
 
     pub fn increment(&mut self, id: Id) {
-        let mut item = self.data.entry(id).or_insert(LimitStatus::Unlimited);
+        let item = self.data.entry(id).or_insert(LimitStatus::Unlimited);
 
         if let LimitStatus::ClearsAt(start, duration) = *item {
             *item = LimitStatus::ClearsAt(start, duration + self.incr_step);
