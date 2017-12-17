@@ -25,10 +25,11 @@ use hyper::method::Method;
 use common::prelude::*;
 use common::state::State;
 use common::structs::HealthDetails;
+use common::config::{HttpConfig, RateLimitConfig};
 
 use scripts::{Blueprint as HooksBlueprint, Repository as Hooks};
 use scripts::{Job, JobOutput};
-use web::{WebApp, WebRequest, RateLimitsConfig};
+use web::{WebApp, WebRequest};
 use utils;
 
 
@@ -257,12 +258,14 @@ impl WebAppInstance {
         // Create a new instance of WebApp
         let inst = WebApp::new(
             hooks,
-            health,
-            behind_proxies,
-            "127.0.0.1:0",
-            RateLimitsConfig {
-                requests: ::std::u64::MAX,
-                interval: ::std::u64::MAX,
+            HttpConfig {
+                behind_proxies,
+                bind: "127.0.0.1:0".parse().unwrap(),
+                rate_limit: RateLimitConfig {
+                    allowed: ::std::u64::MAX,
+                    interval: ::std::u64::MAX.into(),
+                },
+                health_endpoint: health,
             },
             fake_processor,
         ).unwrap();

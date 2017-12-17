@@ -13,121 +13,47 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
-use std::path::Path;
 use std::net;
 use std::sync::Arc;
 
 use common::prelude::*;
 use common::state::State;
+use common::config::Config;
 
-use scripts::{Blueprint, Repository, Script, ScriptNamesIter, JobContext};
+use scripts::{Blueprint, Repository, ScriptNamesIter, JobContext};
 use processor::{Processor, ProcessorApi};
-use utils;
-use web::{WebApp, RateLimitsConfig};
-
-
-pub trait IntoScript {
-    fn into_script(self) -> Arc<Script>;
-}
-
-impl IntoScript for Script {
-    fn into_script(self) -> Arc<Script> {
-        Arc::new(self)
-    }
-}
-
-impl IntoScript for Arc<Script> {
-    fn into_script(self) -> Arc<Script> {
-        self
-    }
-}
+use web::WebApp;
 
 
 #[derive(Debug)]
-pub struct Fisher<'a> {
-    pub max_threads: u16,
-    pub behind_proxies: u8,
-    pub bind: &'a str,
-    pub enable_health: bool,
-
+pub struct Fisher {
+    config: Config,
     state: Arc<State>,
     scripts_repository: Repository,
     scripts_blueprint: Blueprint,
-    rate_limits_config: RateLimitsConfig,
-    environment: HashMap<String, String>,
 }
 
-impl<'a> Fisher<'a> {
-    pub fn new() -> Self {
+impl Fisher {
+    pub fn new(config: Config) -> Result<Self> {
         let state = Arc::new(State::new());
-        let scripts_blueprint = Blueprint::new(state.clone());
+        let mut scripts_blueprint = Blueprint::new(state.clone());
         let scripts_repository = scripts_blueprint.repository();
 
-        Fisher {
-            max_threads: 1,
-            behind_proxies: 0,
-            bind: "127.0.0.1:8000",
-            enable_health: true,
+        // Collect scripts from the directory
+        scripts_blueprint.collect_path(
+            &config.scripts.path, config.scripts.subdirs,
+        )?;
 
+        Ok(Fisher {
+            config,
             state: Arc::new(State::new()),
             scripts_blueprint,
             scripts_repository,
-            rate_limits_config: RateLimitsConfig {
-                requests: 10,
-                interval: 60,
-            },
-            environment: HashMap::new(),
-        }
-    }
-
-    pub fn env(&mut self, key: String, value: String) {
-        let _ = self.environment.insert(key, value);
-    }
-
-    pub fn raw_env(&mut self, env: &str) -> Result<()> {
-        let (key, value) = utils::parse_env(env)?;
-        self.env(key.into(), value.into());
-        Ok(())
-    }
-
-    pub fn add_script<S: IntoScript>(&mut self, script: S) -> Result<()> {
-        self.scripts_blueprint.insert(script.into_script())?;
-        Ok(())
-    }
-
-    pub fn collect_scripts<P: AsRef<Path>>(
-        &mut self,
-        path: P,
-        recursive: bool,
-    ) -> Result<()> {
-        self.scripts_blueprint.collect_path(path, recursive)?;
-        Ok(())
+        })
     }
 
     pub fn script_names(&self) -> ScriptNamesIter {
         self.scripts_repository.names()
-    }
-
-    pub fn rate_limits_config(&mut self, config_string: &str) -> Result<()> {
-        let slash_pos = config_string.char_indices()
-            .filter(|ci| ci.1 == '/')
-            .map(|ci| ci.0)
-            .collect::<Vec<_>>();
-
-        if slash_pos.len() != 1 {
-            return Err(ErrorKind::InvalidRateLimitsConfig(
-                config_string.into()
-            ).into());
-        }
-
-        let (requests, interval) = config_string.split_at(slash_pos[0]);
-        self.rate_limits_config = RateLimitsConfig {
-            requests: requests.parse()?,
-            interval: utils::parse_time(&interval[1..])? as u64,
-        };
-
-        Ok(())
     }
 
     pub fn start(self) -> Result<RunningFisher> {
@@ -135,13 +61,13 @@ impl<'a> Fisher<'a> {
         let repository = Arc::new(self.scripts_repository);
 
         let context = Arc::new(JobContext {
-            environment: self.environment,
+            environment: self.config.env,
             .. JobContext::default()
         });
 
         // Start the processor
         let processor = Processor::new(
-            self.max_threads,
+            self.config.jobs.threads,
             repository.clone(),
             context,
             self.state.clone(),
@@ -151,10 +77,7 @@ impl<'a> Fisher<'a> {
         // Start the Web API
         let web_api = match WebApp::new(
             repository.clone(),
-            self.enable_health,
-            self.behind_proxies,
-            self.bind,
-            self.rate_limits_config,
+            self.config.http,
             processor_api,
         ) {
             Ok(socket) => socket,
@@ -198,7 +121,7 @@ impl RunningFisher {
         self.web_api.addr()
     }
 
-    pub fn reload(&mut self) -> Result<()> {
+    pub fn reload_scripts(&mut self) -> Result<()> {
         let processor = self.processor.api();
 
         self.web_api.lock();

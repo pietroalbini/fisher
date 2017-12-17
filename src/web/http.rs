@@ -152,7 +152,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
             .push(Handler::new(handler, route));
     }
 
-    pub fn listen(&mut self, bind: &str) -> Result<SocketAddr> {
+    pub fn listen(&mut self, bind: SocketAddr) -> Result<SocketAddr> {
         macro_rules! header {
             ($value:expr) => {
                 $value.parse::<tiny_http::Header>().unwrap()
@@ -161,7 +161,7 @@ impl<App: Send + Sync + 'static> HttpServer<App> {
 
         // This will move to the thread, and the server will be stopped when
         // the thread exits
-        let server = tiny_http::Server::http(bind.parse::<SocketAddr>()?)?;
+        let server = tiny_http::Server::http(bind)?;
 
         // Store the server address into the struct
         self.listening_to = Some(server.server_addr());
@@ -391,7 +391,7 @@ mod tests {
         server.add_route(Method::Get, "/?", Box::new(dummy_handler_fn));
 
         // Start the server
-        let addr = server.listen("127.0.0.1:0").unwrap();
+        let addr = server.listen("127.0.0.1:0".parse().unwrap()).unwrap();
 
         let url = format!("http://{}", addr);
         let mut client = hyper::Client::new();

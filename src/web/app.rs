@@ -20,10 +20,11 @@ use std::net::SocketAddr;
 use tiny_http::Method;
 
 use common::prelude::*;
+use common::config::HttpConfig;
 
 use scripts::Repository;
 use web::http::HttpServer;
-use web::api::{WebApi, RateLimitsConfig};
+use web::api::WebApi;
 
 
 pub struct WebApp<A: ProcessorApiTrait<Repository> + 'static> {
@@ -35,22 +36,19 @@ pub struct WebApp<A: ProcessorApiTrait<Repository> + 'static> {
 impl<A: ProcessorApiTrait<Repository>> WebApp<A> {
     pub fn new(
         hooks: Arc<Repository>,
-        enable_health: bool,
-        behind_proxies: u8,
-        bind: &str,
-        rate_limits_config: RateLimitsConfig,
+        config: HttpConfig,
         processor: A,
     ) -> Result<Self> {
         let locked = Arc::new(AtomicBool::new(false));
 
         // Create the web api
         let api = WebApi::new(
-            processor, hooks, locked.clone(), rate_limits_config,
-            enable_health,
+            processor, hooks, locked.clone(), config.rate_limit,
+            config.health_endpoint,
         );
 
         // Create the HTTP server
-        let mut server = HttpServer::new(api, behind_proxies);
+        let mut server = HttpServer::new(api, config.behind_proxies);
         server.add_route(Method::Get, "/health", Box::new(WebApi::get_health));
         server.add_route(
             Method::Get,
@@ -63,7 +61,7 @@ impl<A: ProcessorApiTrait<Repository>> WebApp<A> {
             Box::new(WebApi::process_hook),
         );
 
-        let socket = server.listen(bind)?;
+        let socket = server.listen(config.bind)?;
 
         Ok(WebApp {
             server: server,

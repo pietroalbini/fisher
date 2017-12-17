@@ -13,6 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::fmt;
+use std::result::Result as StdResult;
+use std::str::FromStr;
+
+use serde::de::{Error as DeError, Visitor, Deserialize, Deserializer};
+
 use common::prelude::*;
 
 
@@ -58,6 +64,59 @@ pub fn parse_time(input: &str) -> Result<usize> {
     }
 
     Ok(result)
+}
+
+
+#[derive(Debug)]
+pub struct TimeString(u64);
+
+impl TimeString {
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for TimeString {
+    fn from(num: u64) -> Self {
+        TimeString(num)
+    }
+}
+
+impl FromStr for TimeString {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<TimeString> {
+        Ok(TimeString(parse_time(s)? as u64))
+    }
+}
+
+struct TimeStringVisitor;
+
+impl<'de> Visitor<'de> for TimeStringVisitor {
+    type Value = TimeString;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a positive number or a time string")
+    }
+
+    fn visit_str<E: DeError>(self, s: &str) -> StdResult<TimeString, E> {
+        match parse_time(s) {
+            Ok(time) => Ok(TimeString(time as u64)),
+            Err(e) => Err(E::custom(e.to_string())),
+        }
+    }
+
+    fn visit_i64<E>(self, num: i64) -> StdResult<TimeString, E> {
+        Ok(TimeString(num as u64))
+    }
+}
+
+impl<'de> Deserialize<'de> for TimeString {
+    fn deserialize<D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> StdResult<TimeString, D::Error> {
+        deserializer.deserialize_any(TimeStringVisitor)
+    }
 }
 
 

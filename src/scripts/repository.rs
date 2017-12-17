@@ -233,6 +233,7 @@ impl Blueprint {
         }
     }
 
+    #[cfg(test)]
     pub fn insert(&mut self, script: Arc<Script>) -> Result<()> {
         self.added.push(script);
 
