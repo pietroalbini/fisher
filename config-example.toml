@@ -27,7 +27,7 @@ path = "/srv/fisher-scripts"
 # If this is set to true, scripts in subdirectories of `scripts.path` will also
 # be loaded, including from symlinks (be sure to check permissions before
 # changing this option).
-subdirs = false
+recursive = false
 
 
 [jobs]

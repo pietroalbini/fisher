@@ -78,10 +78,10 @@ impl InnerApp {
     }
 
     fn set_scripts_path<P: AsRef<Path>>(
-        &mut self, path: P, subdirs: bool,
+        &mut self, path: P, recursive: bool,
     ) -> Result<()> {
         self.scripts_blueprint.clear();
-        self.scripts_blueprint.collect_path(path, subdirs)?;
+        self.scripts_blueprint.collect_path(path, recursive)?;
         self.processor.api().cleanup()?;
 
         Ok(())
@@ -149,7 +149,9 @@ pub struct Fisher {
 impl Fisher {
     pub fn new(config: Config) -> Result<Self> {
         let mut inner = InnerApp::new(&config)?;
-        inner.set_scripts_path(&config.scripts.path, config.scripts.subdirs)?;
+        inner.set_scripts_path(
+            &config.scripts.path, config.scripts.recursive,
+        )?;
         inner.set_job_environment(config.env.clone())?;
         inner.restart_http_server(&config.http)?;
 
@@ -186,7 +188,7 @@ impl Fisher {
         // Reload hooks, changing the script path
         self.inner.set_scripts_path(
             &new_config.scripts.path,
-            new_config.scripts.subdirs,
+            new_config.scripts.recursive,
         )?;
 
         self.config = new_config;

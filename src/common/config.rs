@@ -192,14 +192,14 @@ pub struct ScriptsConfig {
     #[serde(default = "default_path")]
     pub path: String,
     /// Search subdirectories or not.
-    #[serde(default = "default_subdirs")]
-    pub subdirs: bool,
+    #[serde(default = "default_recursive")]
+    pub recursive: bool,
 }
 
 default_fn!(default_path: String = ".".into());
-default_fn!(default_subdirs: bool = false);
+default_fn!(default_recursive: bool = false);
 
 default!(ScriptsConfig {
     path: default_path(),
-    subdirs: default_subdirs(),
+    recursive: default_recursive(),
 });
