@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use common::prelude::*;
 use common::state::State;
-use common::config::Config;
+use common::config::{Config, HttpConfig};
 
 use scripts::{Blueprint, Repository, JobContext};
 use processor::{Processor, ProcessorApi};
@@ -27,9 +27,10 @@ use web::WebApp;
 
 
 struct InnerApp {
+    locked: bool,
     scripts_blueprint: Blueprint,
     processor: Processor<Repository>,
-    http: WebApp<ProcessorApi<Repository>>,
+    http: Option<WebApp<ProcessorApi<Repository>>>,
 }
 
 impl InnerApp {
@@ -49,14 +50,33 @@ impl InnerApp {
         )?;
 
         Ok(InnerApp {
+            locked: false,
             scripts_blueprint: blueprint,
-            http: WebApp::new(
-                repository.clone(),
-                &config.http,
-                processor.api(),
-            )?,
+            http: None,
             processor,
         })
+    }
+
+    fn restart_http_server(&mut self, config: &HttpConfig) -> Result<()> {
+        // Stop the server if it's already running
+        if let Some(http) = self.http.take() {
+            http.stop();
+        }
+
+        let http = WebApp::new(
+            Arc::new(self.scripts_blueprint.repository()),
+            config,
+            self.processor.api(),
+        )?;
+
+        // Lock the server if it was locked before
+        if self.locked {
+            http.lock();
+        }
+
+        self.http = Some(http);
+
+        Ok(())
     }
 
     fn set_scripts_path<P: AsRef<Path>>(
@@ -69,28 +89,46 @@ impl InnerApp {
         Ok(())
     }
 
-    fn http_addr(&self) -> &SocketAddr {
-        self.http.addr()
+    fn http_addr(&self) -> Option<&SocketAddr> {
+        if let Some(ref http) = self.http {
+            Some(http.addr())
+        } else {
+            None
+        }
     }
 
-    fn lock(&self) -> Result<()> {
-        self.http.lock();
+    fn lock(&mut self) -> Result<()> {
+        if let Some(ref http) = self.http {
+            http.lock();
+        }
         self.processor.api().lock()?;
 
+        self.locked = true;
+
         Ok(())
     }
 
-    fn unlock(&self) -> Result<()> {
+    fn unlock(&mut self) -> Result<()> {
         self.processor.api().unlock()?;
-        self.http.unlock();
+        if let Some(ref http) = self.http {
+            http.unlock();
+        }
+
+        self.locked = false;
 
         Ok(())
     }
 
-    fn stop(self) -> Result<()> {
-        self.http.lock();
+    fn stop(mut self) -> Result<()> {
+        if let Some(ref http) = self.http {
+            http.lock();
+        }
+
         self.processor.stop()?;
-        self.http.stop();
+
+        if let Some(http) = self.http.take() {
+            http.stop();
+        }
 
         Ok(())
     }
@@ -106,6 +144,7 @@ impl Fisher {
     pub fn new(config: Config) -> Result<Self> {
         let mut inner = InnerApp::new(&config)?;
         inner.set_scripts_path(&config.scripts.path, config.scripts.subdirs)?;
+        inner.restart_http_server(&config.http)?;
 
         Ok(Fisher {
             config,
@@ -113,7 +152,7 @@ impl Fisher {
         })
     }
 
-    pub fn web_address(&self) -> &SocketAddr {
+    pub fn web_address(&self) -> Option<&SocketAddr> {
         self.inner.http_addr()
     }
 
@@ -127,11 +166,18 @@ impl Fisher {
     }
 
     fn reload_inner(&mut self, new_config: Config) -> Result<()> {
+        // Restart the HTTP server if its configuration changed
+        if self.config.http != new_config.http {
+            self.inner.restart_http_server(&new_config.http)?;
+        }
+
         // Reload hooks, changing the script path
         self.inner.set_scripts_path(
             &new_config.scripts.path,
             new_config.scripts.subdirs,
         )?;
+
+        self.config = new_config;
 
         Ok(())
     }

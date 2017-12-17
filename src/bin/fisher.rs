@@ -114,7 +114,7 @@ fn app() -> Result<()> {
     let config_path = parse_cli();
 
     let mut app = Fisher::new(read_config(&config_path)?)?;
-    println!("HTTP server listening on {}", app.web_address());
+    println!("HTTP server listening on {}", app.web_address().unwrap());
 
     // Wait for signals
     loop {
