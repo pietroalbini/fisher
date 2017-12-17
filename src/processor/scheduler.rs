@@ -15,7 +15,7 @@
 
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::time::Instant;
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, RwLock};
 
 use common::prelude::*;
 use common::state::{State, UniqueId};
@@ -50,7 +50,6 @@ impl<S: ScriptsRepositoryTrait> DebugDetails<S> {
 }
 
 
-#[derive(Clone)]
 pub enum SchedulerInput<S: ScriptsRepositoryTrait> {
     Job(Job<S>, isize),
     HealthStatus(mpsc::Sender<HealthDetails>),
@@ -63,6 +62,8 @@ pub enum SchedulerInput<S: ScriptsRepositoryTrait> {
     Lock,
     Unlock,
 
+    UpdateContext(JobContext<S>),
+
     StopSignal,
     JobEnded(ScriptId<S>, ThreadCompleter),
 }
@@ -72,7 +73,7 @@ pub enum SchedulerInput<S: ScriptsRepositoryTrait> {
 pub struct Scheduler<S: ScriptsRepositoryTrait + 'static> {
     max_threads: u16,
     hooks: Arc<S>,
-    jobs_context: Arc<JobContext<S>>,
+    jobs_context: Arc<RwLock<Arc<JobContext<S>>>>,
     state: Arc<State>,
 
     locked: bool,
@@ -91,7 +92,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
     pub fn new(
         max_threads: u16,
         hooks: Arc<S>,
-        ctx: Arc<JobContext<S>>,
+        ctx: JobContext<S>,
         state: Arc<State>,
     ) -> Self {
         let (input_send, input_recv) = mpsc::channel();
@@ -107,7 +108,7 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
         Scheduler {
             max_threads: max_threads,
             hooks: hooks,
-            jobs_context: ctx,
+            jobs_context: Arc::new(RwLock::new(Arc::new(ctx))),
             state: state,
 
             locked: false,
@@ -209,6 +210,11 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                     self.run_jobs();
                 }
 
+                SchedulerInput::UpdateContext(ctx) => {
+                    let mut ptr = self.jobs_context.write().unwrap();
+                    *ptr = Arc::new(ctx);
+                }
+
                 SchedulerInput::JobEnded(hook_id, completer) => {
                     completer.manual_complete();
 
@@ -249,13 +255,14 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
 
     #[inline]
     fn spawn_thread(&mut self) {
-        let ctx = self.jobs_context.clone();
+        let ctx_lock = self.jobs_context.clone();
         let input = self.input_send.clone();
 
         let thread = Thread::new(
             move |job: ScheduledJob<S>, mut completer| {
                 completer.manual_mode();
 
+                let ctx = ctx_lock.read().unwrap().clone();
                 let result = job.execute(&ctx);
 
                 match result {
@@ -433,7 +440,7 @@ mod tests {
             let repo = Arc::new(Repository::<()>::new());
 
             let processor =
-                Processor::new(1, repo, Arc::new(()), Arc::new(State::new()))
+                Processor::new(1, repo, (), Arc::new(State::new()))
                     .unwrap();
             processor.stop()?;
 
@@ -457,7 +464,7 @@ mod tests {
             let processor = Processor::new(
                 1,
                 repo.clone(),
-                Arc::new(()),
+                (),
                 Arc::new(State::new()),
             )?;
 
@@ -491,7 +498,7 @@ mod tests {
         let processor = Processor::new(
             threads,
             repo.clone(),
-            Arc::new(()),
+            (),
             Arc::new(State::new()),
         )?;
 
@@ -561,7 +568,7 @@ mod tests {
             let processor = Processor::new(
                 2,
                 repo.clone(),
-                Arc::new(()),
+                (),
                 Arc::new(State::new()),
             )?;
             let api = processor.api();
@@ -625,7 +632,7 @@ mod tests {
             let processor = Processor::new(
                 1,
                 repo.clone(),
-                Arc::new(()),
+                (),
                 Arc::new(State::new()),
             )?;
             let api = processor.api();
@@ -675,7 +682,7 @@ mod tests {
             let processor = Processor::new(
                 1,
                 repo.clone(),
-                Arc::new(()),
+                (),
                 Arc::new(State::new()),
             )?;
             let api = processor.api();

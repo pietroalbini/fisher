@@ -16,6 +16,7 @@
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use common::prelude::*;
 use common::state::State;
@@ -42,10 +43,7 @@ impl InnerApp {
         let processor = Processor::new(
             config.jobs.threads,
             repository.clone(),
-            Arc::new(JobContext {
-                environment: config.env.clone(),
-                .. JobContext::default()
-            }),
+            JobContext::default(),
             state.clone(),
         )?;
 
@@ -86,6 +84,14 @@ impl InnerApp {
         self.scripts_blueprint.collect_path(path, subdirs)?;
         self.processor.api().cleanup()?;
 
+        Ok(())
+    }
+
+    fn set_job_environment(&self, env: HashMap<String, String>) -> Result<()> {
+        self.processor.api().update_context(JobContext {
+            environment: env,
+            .. JobContext::default()
+        })?;
         Ok(())
     }
 
@@ -144,6 +150,7 @@ impl Fisher {
     pub fn new(config: Config) -> Result<Self> {
         let mut inner = InnerApp::new(&config)?;
         inner.set_scripts_path(&config.scripts.path, config.scripts.subdirs)?;
+        inner.set_job_environment(config.env.clone())?;
         inner.restart_http_server(&config.http)?;
 
         Ok(Fisher {
@@ -169,6 +176,11 @@ impl Fisher {
         // Restart the HTTP server if its configuration changed
         if self.config.http != new_config.http {
             self.inner.restart_http_server(&new_config.http)?;
+        }
+
+        // Update the job context if the environment is different
+        if self.config.env != new_config.env {
+            self.inner.set_job_environment(new_config.env.clone())?;
         }
 
         // Reload hooks, changing the script path
