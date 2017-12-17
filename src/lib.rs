@@ -47,6 +47,6 @@ mod web;
 pub mod common;
 
 // Public API
-pub use app::{Fisher, RunningFisher};
+pub use app::Fisher;
 pub use common::config::Config;
 pub use common::errors::*;

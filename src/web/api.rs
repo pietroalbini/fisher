@@ -41,7 +41,7 @@ impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
         processor: A,
         hooks: Arc<Repository>,
         locked: Arc<AtomicBool>,
-        rate_limit_config: RateLimitConfig,
+        rate_limit_config: &RateLimitConfig,
         health_enabled: bool,
     ) -> Self {
         let limiter = Arc::new(Mutex::new(RateLimiter::new(

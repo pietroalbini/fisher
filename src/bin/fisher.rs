@@ -20,6 +20,7 @@ extern crate toml;
 
 use std::fs;
 use std::io::Read;
+use std::path::Path;
 use std::time::{Instant, Duration};
 
 use fisher::*;
@@ -49,7 +50,7 @@ fn usage(exit_code: i32, error_msg: &str) -> ! {
 }
 
 
-fn parse_cli() -> Result<Config> {
+fn parse_cli() -> String {
     // Parse the CLI args
     let mut only_args = false;
     let mut flag_help = false;
@@ -88,47 +89,31 @@ fn parse_cli() -> Result<Config> {
         show_version();
         ::std::process::exit(0);
     } else if let Some(path) = config_path {
-        // Read the configuration from a file
-        let mut file = fs::File::open(&path)?;
-        let mut buffer = String::new();
-        file.read_to_string(&mut buffer)?;
-
-        Ok(toml::from_str(&buffer).map_err(|e| {
-            Error::new(ErrorKind::GenericError(Box::new(e)).into())
-        })?)
+        path
     } else {
         usage(1, "too few arguments");
     }
 }
 
 
+fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
+    // Read the configuration from a file
+    let mut file = fs::File::open(path)?;
+    let mut buffer = String::new();
+    file.read_to_string(&mut buffer)?;
+
+    Ok(toml::from_str(&buffer).map_err(|e| {
+        Error::new(ErrorKind::GenericError(Box::new(e)).into())
+    })?)
+}
+
+
 fn app() -> Result<()> {
     let signal_trap = Trap::trap(&[SIGINT, SIGTERM, SIGUSR1]);
 
-    let config = parse_cli()?;
-    let bind_to = config.http.bind.clone();
+    let config_path = parse_cli();
 
-    let factory = Fisher::new(config)?;
-
-    let mut count = 0;
-    for name in factory.script_names() {
-        count += 1;
-        println!("Collected script {}", name);
-    }
-    println!("Collected {} scripts total", count);
-
-    // Start Fisher
-    let app_result = factory.start();
-    if let Err(error) = app_result {
-        println!(
-            "Failed to start the HTTP server on {}: {}",
-            bind_to,
-            error,
-        );
-        ::std::process::exit(1);
-    }
-    let mut app = app_result.unwrap();
-
+    let mut app = Fisher::new(read_config(&config_path)?)?;
     println!("HTTP server listening on {}", app.web_address());
 
     // Wait for signals
@@ -136,14 +121,17 @@ fn app() -> Result<()> {
         match signal_trap.wait(Instant::now()) {
             Some(SIGINT) | Some(SIGTERM) => break,
             Some(SIGUSR1) => {
-                println!(
-                    "Reloading hooks list",
-                );
+                println!("Reloading configuration and scripts...");
 
                 // Don't crash if the reload fails, just show errors
                 // No changes are applied if the reload fails
-                if let Err(err) = app.reload_scripts() {
-                    err.pretty_print();
+                match read_config(&config_path) {
+                    Ok(new_config) => {
+                        if let Err(err) = app.reload(new_config) {
+                            err.pretty_print()
+                        }
+                    }
+                    Err(err) => err.pretty_print(),
                 }
             }
             _ => {}

@@ -36,14 +36,14 @@ pub struct WebApp<A: ProcessorApiTrait<Repository> + 'static> {
 impl<A: ProcessorApiTrait<Repository>> WebApp<A> {
     pub fn new(
         hooks: Arc<Repository>,
-        config: HttpConfig,
+        config: &HttpConfig,
         processor: A,
     ) -> Result<Self> {
         let locked = Arc::new(AtomicBool::new(false));
 
         // Create the web api
         let api = WebApi::new(
-            processor, hooks, locked.clone(), config.rate_limit,
+            processor, hooks, locked.clone(), &config.rate_limit,
             config.health_endpoint,
         );
 

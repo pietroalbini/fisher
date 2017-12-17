@@ -13,136 +13,130 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::net;
+use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 
 use common::prelude::*;
 use common::state::State;
 use common::config::Config;
 
-use scripts::{Blueprint, Repository, ScriptNamesIter, JobContext};
+use scripts::{Blueprint, Repository, JobContext};
 use processor::{Processor, ProcessorApi};
 use web::WebApp;
 
 
-#[derive(Debug)]
+struct InnerApp {
+    scripts_blueprint: Blueprint,
+    processor: Processor<Repository>,
+    http: WebApp<ProcessorApi<Repository>>,
+}
+
+impl InnerApp {
+    fn new(config: &Config) -> Result<Self> {
+        let state = Arc::new(State::new());
+        let blueprint = Blueprint::new(state.clone());
+        let repository = Arc::new(blueprint.repository());
+
+        let processor = Processor::new(
+            config.jobs.threads,
+            repository.clone(),
+            Arc::new(JobContext {
+                environment: config.env.clone(),
+                .. JobContext::default()
+            }),
+            state.clone(),
+        )?;
+
+        Ok(InnerApp {
+            scripts_blueprint: blueprint,
+            http: WebApp::new(
+                repository.clone(),
+                &config.http,
+                processor.api(),
+            )?,
+            processor,
+        })
+    }
+
+    fn set_scripts_path<P: AsRef<Path>>(
+        &mut self, path: P, subdirs: bool,
+    ) -> Result<()> {
+        self.scripts_blueprint.clear();
+        self.scripts_blueprint.collect_path(path, subdirs)?;
+        self.processor.api().cleanup()?;
+
+        Ok(())
+    }
+
+    fn http_addr(&self) -> &SocketAddr {
+        self.http.addr()
+    }
+
+    fn lock(&self) -> Result<()> {
+        self.http.lock();
+        self.processor.api().lock()?;
+
+        Ok(())
+    }
+
+    fn unlock(&self) -> Result<()> {
+        self.processor.api().unlock()?;
+        self.http.unlock();
+
+        Ok(())
+    }
+
+    fn stop(self) -> Result<()> {
+        self.http.lock();
+        self.processor.stop()?;
+        self.http.stop();
+
+        Ok(())
+    }
+}
+
+
 pub struct Fisher {
     config: Config,
-    state: Arc<State>,
-    scripts_repository: Repository,
-    scripts_blueprint: Blueprint,
+    inner: InnerApp,
 }
 
 impl Fisher {
     pub fn new(config: Config) -> Result<Self> {
-        let state = Arc::new(State::new());
-        let mut scripts_blueprint = Blueprint::new(state.clone());
-        let scripts_repository = scripts_blueprint.repository();
-
-        // Collect scripts from the directory
-        scripts_blueprint.collect_path(
-            &config.scripts.path, config.scripts.subdirs,
-        )?;
+        let mut inner = InnerApp::new(&config)?;
+        inner.set_scripts_path(&config.scripts.path, config.scripts.subdirs)?;
 
         Ok(Fisher {
             config,
-            state: Arc::new(State::new()),
-            scripts_blueprint,
-            scripts_repository,
+            inner,
         })
     }
 
-    pub fn script_names(&self) -> ScriptNamesIter {
-        self.scripts_repository.names()
+    pub fn web_address(&self) -> &SocketAddr {
+        self.inner.http_addr()
     }
 
-    pub fn start(self) -> Result<RunningFisher> {
-        // Finalize the hooks
-        let repository = Arc::new(self.scripts_repository);
-
-        let context = Arc::new(JobContext {
-            environment: self.config.env,
-            .. JobContext::default()
-        });
-
-        // Start the processor
-        let processor = Processor::new(
-            self.config.jobs.threads,
-            repository.clone(),
-            context,
-            self.state.clone(),
-        )?;
-        let processor_api = processor.api();
-
-        // Start the Web API
-        let web_api = match WebApp::new(
-            repository.clone(),
-            self.config.http,
-            processor_api,
-        ) {
-            Ok(socket) => socket,
-            Err(error) => {
-                // Be sure to stop the processor
-                processor.stop()?;
-
-                return Err(error);
-            }
-        };
-
-        Ok(RunningFisher::new(
-            processor,
-            web_api,
-            self.scripts_blueprint,
-        ))
-    }
-}
-
-
-pub struct RunningFisher {
-    processor: Processor<Repository>,
-    web_api: WebApp<ProcessorApi<Repository>>,
-    scripts_blueprint: Blueprint,
-}
-
-impl RunningFisher {
-    fn new(
-        processor: Processor<Repository>,
-        web_api: WebApp<ProcessorApi<Repository>>,
-        scripts_blueprint: Blueprint,
-    ) -> Self {
-        RunningFisher {
-            processor,
-            web_api,
-            scripts_blueprint,
-        }
-    }
-
-    pub fn web_address(&self) -> &net::SocketAddr {
-        self.web_api.addr()
-    }
-
-    pub fn reload_scripts(&mut self) -> Result<()> {
-        let processor = self.processor.api();
-
-        self.web_api.lock();
-        processor.lock()?;
-
-        let result = self.scripts_blueprint.reload();
-        if result.is_ok() {
-            processor.cleanup()?;
-        }
-
-        processor.unlock()?;
-        self.web_api.unlock();
+    pub fn reload(&mut self, new_config: Config) -> Result<()> {
+        // Ensure Fisher is unlocked even if the reload fails
+        self.inner.lock()?;
+        let result = self.reload_inner(new_config);
+        self.inner.unlock()?;
 
         result
     }
 
-    pub fn stop(self) -> Result<()> {
-        self.web_api.lock();
-        self.processor.stop()?;
-        self.web_api.stop();
+    fn reload_inner(&mut self, new_config: Config) -> Result<()> {
+        // Reload hooks, changing the script path
+        self.inner.set_scripts_path(
+            &new_config.scripts.path,
+            new_config.scripts.subdirs,
+        )?;
 
         Ok(())
+    }
+
+    pub fn stop(self) -> Result<()> {
+        self.inner.stop()
     }
 }

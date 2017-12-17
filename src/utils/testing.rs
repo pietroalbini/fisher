@@ -258,7 +258,7 @@ impl WebAppInstance {
         // Create a new instance of WebApp
         let inst = WebApp::new(
             hooks,
-            HttpConfig {
+            &HttpConfig {
                 behind_proxies,
                 bind: "127.0.0.1:0".parse().unwrap(),
                 rate_limit: RateLimitConfig {

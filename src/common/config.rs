@@ -50,7 +50,7 @@ macro_rules! default_fn {
 
 
 /// The Fisher configuration.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, PartialEq, Eq, Deserialize)]
 pub struct Config {
     /// Configuration for the built-in HTTP webhooks receiver.
     #[serde(default)]
@@ -68,7 +68,7 @@ pub struct Config {
 
 
 /// Configuration for the built-in HTTP webhooks receiver.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 pub struct HttpConfig {
     /// The number of proxies Fisher is behind.
     #[serde(rename="behind-proxies", default="default_behind_proxies")]
@@ -97,7 +97,7 @@ default!(HttpConfig {
 
 
 /// Configuration for rate limiting.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct RateLimitConfig {
     /// The number of allowed requests in the interval.
     pub allowed: u64,
@@ -171,7 +171,7 @@ impl<'de> Deserialize<'de> for RateLimitConfig {
 
 
 /// Configuration for running jobs.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 pub struct JobsConfig {
     /// The number of execution threads to use.
     #[serde(default = "default_threads")]
@@ -186,7 +186,7 @@ default!(JobsConfig {
 
 
 /// Configuration for looking scripts up.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize)]
 pub struct ScriptsConfig {
     /// The path to search for hooks
     #[serde(default = "default_path")]

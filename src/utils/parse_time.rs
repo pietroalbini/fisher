@@ -67,7 +67,7 @@ pub fn parse_time(input: &str) -> Result<usize> {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct TimeString(u64);
 
 impl TimeString {
