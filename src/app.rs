@@ -35,14 +35,13 @@ struct InnerApp {
 }
 
 impl InnerApp {
-    fn new(config: &Config) -> Result<Self> {
+    fn new() -> Result<Self> {
         let state = Arc::new(State::new());
         let blueprint = Blueprint::new(state.clone());
-        let repository = Arc::new(blueprint.repository());
 
         let processor = Processor::new(
-            config.jobs.threads,
-            repository.clone(),
+            0,
+            Arc::new(blueprint.repository()),
             JobContext::default(),
             state.clone(),
         )?;
@@ -92,6 +91,11 @@ impl InnerApp {
             environment: env,
             .. JobContext::default()
         })?;
+        Ok(())
+    }
+
+    fn set_threads_count(&self, count: u16) -> Result<()> {
+        self.processor.api().set_threads_count(count)?;
         Ok(())
     }
 
@@ -148,11 +152,12 @@ pub struct Fisher {
 
 impl Fisher {
     pub fn new(config: Config) -> Result<Self> {
-        let mut inner = InnerApp::new(&config)?;
+        let mut inner = InnerApp::new()?;
         inner.set_scripts_path(
             &config.scripts.path, config.scripts.recursive,
         )?;
         inner.set_job_environment(config.env.clone())?;
+        inner.set_threads_count(config.jobs.threads)?;
         inner.restart_http_server(&config.http)?;
 
         Ok(Fisher {
@@ -183,6 +188,11 @@ impl Fisher {
         // Update the job context if the environment is different
         if self.config.env != new_config.env {
             self.inner.set_job_environment(new_config.env.clone())?;
+        }
+
+        // Update the threads count if it's different
+        if self.config.jobs.threads != new_config.jobs.threads {
+            self.inner.set_threads_count(new_config.jobs.threads)?;
         }
 
         // Reload hooks, changing the script path

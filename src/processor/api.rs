@@ -100,6 +100,11 @@ impl<S: ScriptsRepositoryTrait> ProcessorApi<S> {
         self.input.send(SchedulerInput::UpdateContext(ctx))?;
         Ok(())
     }
+
+    pub fn set_threads_count(&self, count: u16) -> Result<()> {
+        self.input.send(SchedulerInput::SetThreadsCount(count))?;
+        Ok(())
+    }
 }
 
 impl<S: ScriptsRepositoryTrait> ProcessorApiTrait<S> for ProcessorApi<S> {

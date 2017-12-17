@@ -63,6 +63,7 @@ pub enum SchedulerInput<S: ScriptsRepositoryTrait> {
     Unlock,
 
     UpdateContext(JobContext<S>),
+    SetThreadsCount(u16),
 
     StopSignal,
     JobEnded(ScriptId<S>, ThreadCompleter),
@@ -215,8 +216,27 @@ impl<S: ScriptsRepositoryTrait> Scheduler<S> {
                     *ptr = Arc::new(ctx);
                 }
 
+                SchedulerInput::SetThreadsCount(max) => {
+                    self.max_threads = max;
+
+                    // Spawn new threads if the new maximum is higher, else
+                    // start cleaning up old ones
+                    if self.max_threads as usize > self.threads.len() {
+                        for _ in self.threads.len()..self.max_threads as usize {
+                            self.spawn_thread();
+                        }
+                    } else {
+                        self.cleanup_threads();
+                    }
+                }
+
                 SchedulerInput::JobEnded(hook_id, completer) => {
                     completer.manual_complete();
+
+                    // Cleanup threads if there are more than enough
+                    if self.threads.len() > self.max_threads as usize {
+                        self.cleanup_threads();
+                    }
 
                     // Put the highest-priority waiting job for this hook
                     // back in the queue
