@@ -50,7 +50,7 @@ If you want to start Fisher at boot, you should create a new systemd service
 Description=The Fisher webhooks catcher
 
 [Service]
-ExecStart=/usr/local/bin/fisher /srv/webhooks
+ExecStart=/usr/local/bin/fisher /srv/webhooks/config.toml
 ExecReload=/bin/kill -USR1 $MAINPID
 
 User=fisher
@@ -65,7 +65,7 @@ WantedBy=multi-user.target
 This service assumes your system is configured this way:
 
 - The Fisher binary is located in `/usr/local/bin/fisher`
-- The scripts directory is located in `/srv/webhooks`
+- The configuration file is located in `/srv/webhooks/config.toml`
 - Fisher is executed by the `fisher` user
 
 If those things don't match your server configuration, you must change them in
