@@ -37,11 +37,12 @@ temporary directory, deleting it after.
 ## Starting Fisher
 
 Now you can start Fisher and play with it! Make sure the build script created
-in the previous paragraph is located in its own directory, and the user has the
-permissions to execute it. You can then start Fisher with:
+in the previous paragraph is located in the scripts directory specified in your
+configuration file, and check if the current user has the permissions to
+execute it. You can then start Fisher pointing to the configuration file:
 
 ```
-$ fisher /path/to/the/script/directory
+$ fisher /path/to/config.toml
 ```
 
 If you see the script name in the loaded hooks list, you're good to go! You can

@@ -14,8 +14,8 @@ pages:
     - "Monitoring with status hooks": "features/status-hooks.md"
     - "Rate limits": "features/rate-limits.md"
     - "Third-party providers": "features/providers.md"
-  - "Reference":
-    - "The fisher command": "cli.md"
+  - "Documentation":
+    - "The configuration file": "docs/config.md"
     - "Configuration comments": "config-comments.md"
     - "Scripts execution context": "env.md"
   - "Supported providers":

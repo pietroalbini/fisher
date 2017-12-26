@@ -10,6 +10,7 @@ everything a user can notice.
 
 * **New features:**
 
+    * [Configuration files](docs/config.md) are now supported
     * The [Standalone provider](providers/standalone.md) now supports
       whitelisting IP addresses
     * [Rate limits](features/rate-limits.md) are now supported for invalid
@@ -18,6 +19,7 @@ everything a user can notice.
 * **Changes and improvements:**
 
     * **BREAKING:** the `SHELL` environment variable is not present anymore
+    * **BREAKING:** most of the CLI arguments are now removed
     * The `USER` environment variable is now guaranteed to be correct
 
 ### Fisher 1.0.0-beta.7

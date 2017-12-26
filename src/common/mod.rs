@@ -19,6 +19,7 @@
 //! All the other modules then depends on this crate to get access to
 //! the features.
 
+pub mod config;
 pub mod errors;
 pub mod prelude;
 pub mod serial;

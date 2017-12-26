@@ -1,0 +1,48 @@
+[http]
+
+# The number of proxies Fisher sits behind. This is used to correctly parse the
+# X-Forwarded-For HTTP header in order to retrieve the correct origin IP. If
+# this value is zero, the header is ignored, otherwise it must be present with
+# the correct number of entries to avoid requests being rejected.
+behind-proxies = 0
+
+# The network address Fisher will listen on. By default, only requests coming
+# from the local machine are accepted (thus requiring a reverse proxy in front
+# of the instance). If you want to expose Fisher directly on the Internet you
+# should change the IP address to `0.0.0.0`.
+bind = "127.0.0.1:8000"
+
+# If this is set to false, the `/health` HTTP endpoint (used to monitor the
+# instance) is disabled. Disable this if you don't need monitoring and you
+# don't want the data to be publicly accessible.
+health-endpoint = true
+
+# Rate limit for failed requests (allowed requests / time period). The rate
+# limit only applies to webhooks that failed validation, so it doesn't impact
+# legit requests (while keeping brute force attempts away).
+rate-limit = "10/1m"
+
+
+[scripts]
+
+# The directory containing all the scripts Fisher will use. Scripts needs to be
+# executable in order to be called.
+path = "/srv/fisher-scripts"
+
+# If this is set to true, scripts in subdirectories of `scripts.path` will also
+# be loaded, including from symlinks (be sure to check permissions before
+# changing this option).
+recursive = false
+
+
+[jobs]
+
+# Maximum number of parallel jobs to run.
+threads = 1
+
+
+# Extra environment variables provided to the scripts Fisher starts. Since the
+# outside environment is filtered, this is the place to add every variable you
+# want to have available.
+[env]
+#TEST_VAR = "content"

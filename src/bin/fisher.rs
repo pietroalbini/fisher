@@ -13,234 +13,126 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-extern crate ansi_term;
-extern crate clap;
 extern crate fisher;
 extern crate libc;
 extern crate signal;
+extern crate toml;
 
-use std::time::{Duration, Instant};
+use std::fs;
+use std::io::Read;
+use std::path::Path;
+use std::time::{Instant, Duration};
 
-use clap::{App, Arg};
+use fisher::*;
 use libc::{SIGUSR1, SIGINT, SIGTERM};
-use ansi_term::{Colour, Style};
+use signal::trap::Trap;
 
 
-struct CliArgs {
-    hooks_dir: String,
-    recursive: bool,
-    bind: String,
-    env: Vec<String>,
-    max_threads: u16,
-    behind_proxies: u8,
-    enable_health: bool,
-    rate_limits: Option<String>,
+static VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
+
+
+fn show_version() {
+    if let Some(version) = VERSION {
+        println!("Fisher {}", version);
+    } else {
+        println!("Fisher (version unknown)");
+    }
 }
 
 
-fn parse_cli() -> fisher::Result<CliArgs> {
-    let matches = App::new("Fisher")
-        .about("Simple webhooks catcher")
-        .version(env!("CARGO_PKG_VERSION"))
-        .arg(
-            Arg::with_name("hooks")
-                .required(true)
-                .index(1)
-                .value_name("DIR")
-                .help("The directory which contains the hooks"),
-        )
-        .arg(
-            Arg::with_name("recursive")
-                .long("recursive")
-                .short("r")
-                .help("Search for hooks recursively"),
-        )
-        .arg(
-            Arg::with_name("bind")
-                .takes_value(true)
-                .long("bind")
-                .short("b")
-                .value_name("PORT")
-                .help("The port to bind fish to"),
-        )
-        .arg(
-            Arg::with_name("env")
-                .takes_value(true)
-                .multiple(true)
-                .long("env")
-                .short("e")
-                .value_name("KEY=VALUE")
-                .help("Add additional environment variables"),
-        )
-        .arg(
-            Arg::with_name("max_threads")
-                .takes_value(true)
-                .long("jobs")
-                .short("j")
-                .value_name("JOBS_COUNT")
-                .help("How much concurrent jobs to run"),
-        )
-        .arg(
-            Arg::with_name("disable_health")
-                .long("no-health")
-                .help("Disable the /health endpoint"),
-        )
-        .arg(
-            Arg::with_name("rate_limit")
-                .long("rate-limit")
-                .value_name("REQUESTS/INTERVAL")
-                .help("Failed requests rate limit"),
-        )
-        .arg(
-            Arg::with_name("behind_proxies")
-                .takes_value(true)
-                .long("behind-proxies")
-                .value_name("PROXIES_COUNT")
-                .help("How much proxies are behind the app"),
-        )
-        .get_matches();
+fn usage(exit_code: i32, error_msg: &str) -> ! {
+    if error_msg.len() > 0 {
+        println!("Error: {}\n", error_msg);
+    }
+    println!("Usage: fisher <config_file>");
+    println!("Execute `fisher --help` for more details");
+    ::std::process::exit(exit_code);
+}
 
-    Ok(CliArgs {
-        hooks_dir: matches.value_of("hooks").unwrap().into(),
-        recursive: matches.is_present("recursive"),
-        bind: matches.value_of("bind").unwrap_or("127.0.0.1:8000").into(),
-        env: {
-            if let Some(values) = matches.values_of("env") {
-                values.map(|v| v.to_string()).collect()
-            } else {
-                Vec::new()
+
+fn parse_cli() -> String {
+    // Parse the CLI args
+    let mut only_args = false;
+    let mut flag_help = false;
+    let mut flag_version = false;
+    let mut config_path = None;
+
+    for arg in ::std::env::args().skip(1) {
+        if !only_args && arg.chars().next() == Some('-') {
+            match arg.as_str() {
+                "--" => only_args = true,
+                "-h" | "--help" => flag_help = true,
+                "--version" => flag_version = true,
+                _ => usage(1, &format!("invalid flag: {}", arg)),
             }
-        },
-        max_threads: {
-            matches
-                .value_of("max_threads")
-                .unwrap_or("1")
-                .parse::<u16>()?
-        },
-        behind_proxies: {
-            if let Some(count) = matches.value_of("behind_proxies") {
-                count.parse::<u8>()?
-            } else {
-                0
-            }
-        },
-        rate_limits: matches.value_of("rate_limit").map(|s| s.to_string()),
-        enable_health: !matches.is_present("disable_health"),
-    })
+        } else if config_path.is_none() {
+            config_path = Some(arg);
+        } else {
+            usage(1, &format!("unexpected argument: {}", arg));
+        }
+    }
+
+    if flag_help {
+        show_version();
+        println!("Simple webhooks catcher\n");
+
+        println!("ARGUMENTS");
+        println!("  config_path   The path to the configuration file");
+        println!();
+
+        println!("OPTIONS");
+        println!("  -h | --help   Show this message");
+        println!("  --version     Show the Fisher version");
+
+        ::std::process::exit(0);
+    } else if flag_version {
+        show_version();
+        ::std::process::exit(0);
+    } else if let Some(path) = config_path {
+        path
+    } else {
+        usage(1, "too few arguments");
+    }
 }
 
 
-fn print_err<T>(result: fisher::Result<T>) -> fisher::Result<T> {
-    // Show a nice error message
-    if let Err(ref error) = result {
-        error.pretty_print();
-    }
+fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
+    // Read the configuration from a file
+    let mut file = fs::File::open(path)?;
+    let mut buffer = String::new();
+    file.read_to_string(&mut buffer)?;
 
-    result
+    Ok(toml::from_str(&buffer).map_err(|e| {
+        Error::new(ErrorKind::GenericError(Box::new(e)).into())
+    })?)
 }
 
 
-fn app() -> fisher::Result<()> {
-    let signal_trap = signal::trap::Trap::trap(&[
-        SIGINT,  // Interrupt the program
-        SIGTERM, // Interrupt the program
-        SIGUSR1, // Reload Fisher
-    ]);
+fn app() -> Result<()> {
+    let signal_trap = Trap::trap(&[SIGINT, SIGTERM, SIGUSR1]);
 
-    // Load the options from the CLI arguments
-    let args = parse_cli()?;
+    let config_path = parse_cli();
 
-    // Show the relevant options
-    println!(
-        "{} {}",
-        Style::new().bold().paint("Concurrent jobs:"),
-        args.max_threads
-    );
-    println!(
-        "{} {}",
-        Style::new().bold().paint("Health checks:  "),
-        if args.enable_health {
-            "enabled"
-        } else {
-            "disabled"
-        }
-    );
-    println!(
-        "{} {}",
-        Style::new().bold().paint("Proxy support:  "),
-        if args.behind_proxies != 0 {
-            format!("enabled (behind {} proxies)", args.behind_proxies)
-        } else {
-            "disabled".to_string()
-        }
-    );
-
-    println!("");
-
-    // Create a new Fisher instance
-    let mut factory = fisher::Fisher::new();
-
-    factory.max_threads = args.max_threads;
-    factory.behind_proxies = args.behind_proxies;
-    factory.bind = &args.bind;
-    factory.enable_health = args.enable_health;
-
-    if let Some(limit) = args.rate_limits {
-        factory.rate_limits_config(&limit)?;
-    }
-
-    factory.collect_scripts(args.hooks_dir, args.recursive)?;
-    {
-        let mut hook_names = factory.script_names().collect::<Vec<String>>();
-        hook_names.sort();
-
-        println!(
-            "{} ({} total)",
-            Style::new().bold().paint("Collected hooks:"),
-            hook_names.len(),
-        );
-        for name in &hook_names {
-            println!("- {}", name);
-        }
-    }
-
-    // Set the extra environment variables
-    for env in &args.env {
-        factory.raw_env(env)?;
-    }
-
-    // Start Fisher
-    let app_result = factory.start();
-    if let Err(error) = app_result {
-        println!(
-            "{} on {}: {}",
-            Colour::Red.bold().paint("Failed to start the Web API"),
-            args.bind,
-            error,
-        );
-        ::std::process::exit(1);
-    }
-    let mut app = app_result.unwrap();
-
-    println!(
-        "{} on {}",
-        Colour::Green.bold().paint("Web API listening"),
-        app.web_address(),
-    );
+    let mut app = Fisher::new(read_config(&config_path)?)?;
+    println!("HTTP server listening on {}", app.web_address().unwrap());
 
     // Wait for signals
     loop {
         match signal_trap.wait(Instant::now()) {
             Some(SIGINT) | Some(SIGTERM) => break,
             Some(SIGUSR1) => {
-                println!(
-                    "{} hooks list",
-                    Colour::Green.bold().paint("Reloading")
-                );
+                println!("Reloading configuration and scripts...");
 
                 // Don't crash if the reload fails, just show errors
                 // No changes are applied if the reload fails
-                let _ = print_err(app.reload());
+                match read_config(&config_path) {
+                    Ok(new_config) => {
+                        if let Err(err) = app.reload(new_config) {
+                            err.pretty_print()
+                        }
+                    }
+                    Err(err) => err.pretty_print(),
+                }
             }
             _ => {}
         }
@@ -255,8 +147,8 @@ fn app() -> fisher::Result<()> {
 
 
 fn main() {
-    ::std::process::exit(match print_err(app()) {
-        Ok(..) => 0,
-        Err(..) => 1,
-    });
+    if let Err(err) = app() {
+        err.pretty_print();
+        std::process::exit(1);
+    }
 }

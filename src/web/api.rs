@@ -18,18 +18,12 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use common::prelude::*;
+use common::config::RateLimitConfig;
 
 use requests::{Request, RequestType};
 use scripts::{Repository, Job};
 use web::rate_limits::RateLimiter;
 use web::responses::Response;
-
-
-#[derive(Debug)]
-pub struct RateLimitsConfig {
-    pub interval: u64,
-    pub requests: u64,
-}
 
 
 #[derive(Clone)]
@@ -47,12 +41,12 @@ impl<A: ProcessorApiTrait<Repository>> WebApi<A> {
         processor: A,
         hooks: Arc<Repository>,
         locked: Arc<AtomicBool>,
-        rate_limits_config: RateLimitsConfig,
+        rate_limit_config: &RateLimitConfig,
         health_enabled: bool,
     ) -> Self {
         let limiter = Arc::new(Mutex::new(RateLimiter::new(
-            rate_limits_config.requests,
-            rate_limits_config.interval,
+            rate_limit_config.allowed,
+            rate_limit_config.interval.as_u64(),
         )));
 
         WebApi {

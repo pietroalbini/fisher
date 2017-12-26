@@ -13,213 +13,200 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::Path;
-use std::net;
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use common::prelude::*;
 use common::state::State;
+use common::config::{Config, HttpConfig};
 
-use scripts::{Blueprint, Repository, Script, ScriptNamesIter, JobContext};
+use scripts::{Blueprint, Repository, JobContext};
 use processor::{Processor, ProcessorApi};
-use utils;
-use web::{WebApp, RateLimitsConfig};
+use web::WebApp;
 
 
-pub trait IntoScript {
-    fn into_script(self) -> Arc<Script>;
-}
-
-impl IntoScript for Script {
-    fn into_script(self) -> Arc<Script> {
-        Arc::new(self)
-    }
-}
-
-impl IntoScript for Arc<Script> {
-    fn into_script(self) -> Arc<Script> {
-        self
-    }
-}
-
-
-#[derive(Debug)]
-pub struct Fisher<'a> {
-    pub max_threads: u16,
-    pub behind_proxies: u8,
-    pub bind: &'a str,
-    pub enable_health: bool,
-
-    state: Arc<State>,
-    scripts_repository: Repository,
+struct InnerApp {
+    locked: bool,
     scripts_blueprint: Blueprint,
-    rate_limits_config: RateLimitsConfig,
-    environment: HashMap<String, String>,
-}
-
-impl<'a> Fisher<'a> {
-    pub fn new() -> Self {
-        let state = Arc::new(State::new());
-        let scripts_blueprint = Blueprint::new(state.clone());
-        let scripts_repository = scripts_blueprint.repository();
-
-        Fisher {
-            max_threads: 1,
-            behind_proxies: 0,
-            bind: "127.0.0.1:8000",
-            enable_health: true,
-
-            state: Arc::new(State::new()),
-            scripts_blueprint,
-            scripts_repository,
-            rate_limits_config: RateLimitsConfig {
-                requests: 10,
-                interval: 60,
-            },
-            environment: HashMap::new(),
-        }
-    }
-
-    pub fn env(&mut self, key: String, value: String) {
-        let _ = self.environment.insert(key, value);
-    }
-
-    pub fn raw_env(&mut self, env: &str) -> Result<()> {
-        let (key, value) = utils::parse_env(env)?;
-        self.env(key.into(), value.into());
-        Ok(())
-    }
-
-    pub fn add_script<S: IntoScript>(&mut self, script: S) -> Result<()> {
-        self.scripts_blueprint.insert(script.into_script())?;
-        Ok(())
-    }
-
-    pub fn collect_scripts<P: AsRef<Path>>(
-        &mut self,
-        path: P,
-        recursive: bool,
-    ) -> Result<()> {
-        self.scripts_blueprint.collect_path(path, recursive)?;
-        Ok(())
-    }
-
-    pub fn script_names(&self) -> ScriptNamesIter {
-        self.scripts_repository.names()
-    }
-
-    pub fn rate_limits_config(&mut self, config_string: &str) -> Result<()> {
-        let slash_pos = config_string.char_indices()
-            .filter(|ci| ci.1 == '/')
-            .map(|ci| ci.0)
-            .collect::<Vec<_>>();
-
-        if slash_pos.len() != 1 {
-            return Err(ErrorKind::InvalidRateLimitsConfig(
-                config_string.into()
-            ).into());
-        }
-
-        let (requests, interval) = config_string.split_at(slash_pos[0]);
-        self.rate_limits_config = RateLimitsConfig {
-            requests: requests.parse()?,
-            interval: utils::parse_time(&interval[1..])? as u64,
-        };
-
-        Ok(())
-    }
-
-    pub fn start(self) -> Result<RunningFisher> {
-        // Finalize the hooks
-        let repository = Arc::new(self.scripts_repository);
-
-        let context = Arc::new(JobContext {
-            environment: self.environment,
-            .. JobContext::default()
-        });
-
-        // Start the processor
-        let processor = Processor::new(
-            self.max_threads,
-            repository.clone(),
-            context,
-            self.state.clone(),
-        )?;
-        let processor_api = processor.api();
-
-        // Start the Web API
-        let web_api = match WebApp::new(
-            repository.clone(),
-            self.enable_health,
-            self.behind_proxies,
-            self.bind,
-            self.rate_limits_config,
-            processor_api,
-        ) {
-            Ok(socket) => socket,
-            Err(error) => {
-                // Be sure to stop the processor
-                processor.stop()?;
-
-                return Err(error);
-            }
-        };
-
-        Ok(RunningFisher::new(
-            processor,
-            web_api,
-            self.scripts_blueprint,
-        ))
-    }
-}
-
-
-pub struct RunningFisher {
     processor: Processor<Repository>,
-    web_api: WebApp<ProcessorApi<Repository>>,
-    scripts_blueprint: Blueprint,
+    http: Option<WebApp<ProcessorApi<Repository>>>,
 }
 
-impl RunningFisher {
-    fn new(
-        processor: Processor<Repository>,
-        web_api: WebApp<ProcessorApi<Repository>>,
-        scripts_blueprint: Blueprint,
-    ) -> Self {
-        RunningFisher {
+impl InnerApp {
+    fn new() -> Result<Self> {
+        let state = Arc::new(State::new());
+        let blueprint = Blueprint::new(state.clone());
+
+        let processor = Processor::new(
+            0,
+            Arc::new(blueprint.repository()),
+            JobContext::default(),
+            state.clone(),
+        )?;
+
+        Ok(InnerApp {
+            locked: false,
+            scripts_blueprint: blueprint,
+            http: None,
             processor,
-            web_api,
-            scripts_blueprint,
+        })
+    }
+
+    fn restart_http_server(&mut self, config: &HttpConfig) -> Result<()> {
+        // Stop the server if it's already running
+        if let Some(http) = self.http.take() {
+            http.stop();
+        }
+
+        let http = WebApp::new(
+            Arc::new(self.scripts_blueprint.repository()),
+            config,
+            self.processor.api(),
+        )?;
+
+        // Lock the server if it was locked before
+        if self.locked {
+            http.lock();
+        }
+
+        self.http = Some(http);
+
+        Ok(())
+    }
+
+    fn set_scripts_path<P: AsRef<Path>>(
+        &mut self, path: P, recursive: bool,
+    ) -> Result<()> {
+        self.scripts_blueprint.clear();
+        self.scripts_blueprint.collect_path(path, recursive)?;
+        self.processor.api().cleanup()?;
+
+        Ok(())
+    }
+
+    fn set_job_environment(&self, env: HashMap<String, String>) -> Result<()> {
+        self.processor.api().update_context(JobContext {
+            environment: env,
+            .. JobContext::default()
+        })?;
+        Ok(())
+    }
+
+    fn set_threads_count(&self, count: u16) -> Result<()> {
+        self.processor.api().set_threads_count(count)?;
+        Ok(())
+    }
+
+    fn http_addr(&self) -> Option<&SocketAddr> {
+        if let Some(ref http) = self.http {
+            Some(http.addr())
+        } else {
+            None
         }
     }
 
-    pub fn web_address(&self) -> &net::SocketAddr {
-        self.web_api.addr()
+    fn lock(&mut self) -> Result<()> {
+        if let Some(ref http) = self.http {
+            http.lock();
+        }
+        self.processor.api().lock()?;
+
+        self.locked = true;
+
+        Ok(())
     }
 
-    pub fn reload(&mut self) -> Result<()> {
-        let processor = self.processor.api();
-
-        self.web_api.lock();
-        processor.lock()?;
-
-        let result = self.scripts_blueprint.reload();
-        if result.is_ok() {
-            processor.cleanup()?;
+    fn unlock(&mut self) -> Result<()> {
+        self.processor.api().unlock()?;
+        if let Some(ref http) = self.http {
+            http.unlock();
         }
 
-        processor.unlock()?;
-        self.web_api.unlock();
+        self.locked = false;
+
+        Ok(())
+    }
+
+    fn stop(mut self) -> Result<()> {
+        if let Some(ref http) = self.http {
+            http.lock();
+        }
+
+        self.processor.stop()?;
+
+        if let Some(http) = self.http.take() {
+            http.stop();
+        }
+
+        Ok(())
+    }
+}
+
+
+pub struct Fisher {
+    config: Config,
+    inner: InnerApp,
+}
+
+impl Fisher {
+    pub fn new(config: Config) -> Result<Self> {
+        let mut inner = InnerApp::new()?;
+        inner.set_scripts_path(
+            &config.scripts.path, config.scripts.recursive,
+        )?;
+        inner.set_job_environment(config.env.clone())?;
+        inner.set_threads_count(config.jobs.threads)?;
+        inner.restart_http_server(&config.http)?;
+
+        Ok(Fisher {
+            config,
+            inner,
+        })
+    }
+
+    pub fn web_address(&self) -> Option<&SocketAddr> {
+        self.inner.http_addr()
+    }
+
+    pub fn reload(&mut self, new_config: Config) -> Result<()> {
+        // Ensure Fisher is unlocked even if the reload fails
+        self.inner.lock()?;
+        let result = self.reload_inner(new_config);
+        self.inner.unlock()?;
 
         result
     }
 
-    pub fn stop(self) -> Result<()> {
-        self.web_api.lock();
-        self.processor.stop()?;
-        self.web_api.stop();
+    fn reload_inner(&mut self, new_config: Config) -> Result<()> {
+        // Restart the HTTP server if its configuration changed
+        if self.config.http != new_config.http {
+            self.inner.restart_http_server(&new_config.http)?;
+        }
+
+        // Update the job context if the environment is different
+        if self.config.env != new_config.env {
+            self.inner.set_job_environment(new_config.env.clone())?;
+        }
+
+        // Update the threads count if it's different
+        if self.config.jobs.threads != new_config.jobs.threads {
+            self.inner.set_threads_count(new_config.jobs.threads)?;
+        }
+
+        // Reload hooks, changing the script path
+        self.inner.set_scripts_path(
+            &new_config.scripts.path,
+            new_config.scripts.recursive,
+        )?;
+
+        self.config = new_config;
 
         Ok(())
+    }
+
+    pub fn stop(self) -> Result<()> {
+        self.inner.stop()
     }
 }

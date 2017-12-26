@@ -18,9 +18,10 @@ By default, Fisher accepts a maximum of 10 invalid requests each minute. While
 the default limit should be enough even when you're testing things, you might
 need to tweak that.
 
-You can change the default limit with the `--rate-limit` [command-line
-argument](../cli.md), for example:
+You can change the default limit with the `http.rate-limit` key in the
+configuration file:
 
-```plain
-$ fisher hooks/ --rate-limit 2/1h
+```toml
+[http]
+rate-limit = "10/1m"
 ```

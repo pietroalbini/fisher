@@ -16,16 +16,19 @@
 #[cfg(test)]
 #[macro_use]
 pub mod testing;
+#[cfg(test)]
+mod parse_env;
 
 mod tempdir;
 mod net;
 mod hex;
-mod parse_env;
 mod parse_time;
 
+
+#[cfg(test)]
+pub use utils::parse_env::parse_env;
 
 pub use utils::tempdir::create_temp_dir;
 pub use utils::net::parse_forwarded_for;
 pub use utils::hex::from_hex;
-pub use utils::parse_env::parse_env;
-pub use utils::parse_time::parse_time;
+pub use utils::parse_time::{parse_time, TimeString};

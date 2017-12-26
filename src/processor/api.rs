@@ -40,7 +40,7 @@ impl<S: ScriptsRepositoryTrait> Processor<S> {
     pub fn new(
         max_threads: u16,
         hooks: Arc<S>,
-        ctx: Arc<JobContext<S>>,
+        ctx: JobContext<S>,
         state: Arc<State>,
     ) -> Result<Self> {
         // Retrieve wanted information from the spawned thread
@@ -94,6 +94,16 @@ impl<S: ScriptsRepositoryTrait> ProcessorApi<S> {
         let (res_send, res_recv) = mpsc::channel();
         self.input.send(SchedulerInput::DebugDetails(res_send))?;
         Ok(res_recv.recv()?)
+    }
+
+    pub fn update_context(&self, ctx: JobContext<S>) -> Result<()> {
+        self.input.send(SchedulerInput::UpdateContext(ctx))?;
+        Ok(())
+    }
+
+    pub fn set_threads_count(&self, count: u16) -> Result<()> {
+        self.input.send(SchedulerInput::SetThreadsCount(count))?;
+        Ok(())
     }
 }
 

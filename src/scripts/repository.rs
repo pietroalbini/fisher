@@ -53,25 +53,6 @@ impl Iterator for ScriptsIter {
 }
 
 
-pub struct ScriptNamesIter {
-    iter: ScriptsIter,
-}
-
-impl ScriptNamesIter {
-    fn new(iter: ScriptsIter) -> Self {
-        ScriptNamesIter { iter: iter }
-    }
-}
-
-impl Iterator for ScriptNamesIter {
-    type Item = String;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|script| script.name().to_string())
-    }
-}
-
-
 pub struct StatusJobsIter {
     inner: Arc<RwLock<RepositoryInner>>,
     event: StatusEvent,
@@ -174,10 +155,6 @@ impl Repository {
             Err(poisoned) => poisoned.get_ref().get_by_name(name),
         }
     }
-
-    pub fn names(&self) -> ScriptNamesIter {
-        ScriptNamesIter::new(self.iter())
-    }
 }
 
 impl ScriptsRepositoryTrait for Repository {
@@ -233,6 +210,12 @@ impl Blueprint {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.added.clear();
+        self.collect_paths.clear();
+    }
+
+    #[cfg(test)]
     pub fn insert(&mut self, script: Arc<Script>) -> Result<()> {
         self.added.push(script);
 

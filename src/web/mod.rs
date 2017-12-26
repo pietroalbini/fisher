@@ -25,5 +25,4 @@ mod api;
 
 pub use self::http::HttpServer;
 pub use self::app::WebApp;
-pub use self::api::RateLimitsConfig;
 pub use self::requests::WebRequest;

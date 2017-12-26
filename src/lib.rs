@@ -27,6 +27,7 @@ extern crate rand;
 extern crate regex;
 #[cfg(feature = "provider-github")]
 extern crate ring;
+extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
@@ -46,5 +47,6 @@ mod web;
 pub mod common;
 
 // Public API
-pub use app::{Fisher, RunningFisher};
+pub use app::Fisher;
+pub use common::config::Config;
 pub use common::errors::*;
