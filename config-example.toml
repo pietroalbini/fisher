@@ -12,6 +12,11 @@ behind-proxies = 0
 # should change the IP address to `0.0.0.0`.
 bind = "127.0.0.1:8000"
 
+# If this is set to false, the `/health` HTTP endpoint (used to monitor the
+# instance) is disabled. Disable this if you don't need monitoring and you
+# don't want the data to be publicly accessible.
+health-endpoint = true
+
 # Rate limit for failed requests (allowed requests / time period). The rate
 # limit only applies to webhooks that failed validation, so it doesn't impact
 # legit requests (while keeping brute force attempts away).
@@ -33,7 +38,7 @@ recursive = false
 [jobs]
 
 # Maximum number of parallel jobs to run.
-threads = 4
+threads = 1
 
 
 # Extra environment variables provided to the scripts Fisher starts. Since the
