@@ -118,7 +118,8 @@ fn app() -> Result<()> {
 
     // Wait for signals
     loop {
-        match signal_trap.wait(Instant::now()) {
+        let deadline = Instant::now() + Duration::from_secs(60);
+        match signal_trap.wait(deadline) {
             Some(SIGINT) | Some(SIGTERM) => break,
             Some(SIGUSR1) => {
                 println!("Reloading configuration and scripts...");
@@ -136,7 +137,6 @@ fn app() -> Result<()> {
             }
             _ => {}
         }
-        ::std::thread::sleep(Duration::new(0, 100));
     }
 
     // Stop Fisher
