@@ -29,8 +29,9 @@ use std::sync::mpsc;
 use std::sync;
 use std::result::Result as StdResult;
 
-use serde_json;
 use ansi_term::Colour;
+use nix;
+use serde_json;
 
 
 /// Convenience type alias to easily use Result with
@@ -100,6 +101,9 @@ pub enum ErrorKind {
     /// available as the first parameter.
     ParseIntError(num::ParseIntError),
 
+    /// An error occured while interacting with the OS
+    NixError(nix::Error),
+
     /// A generic error, without a defined type
     GenericError(Box<StdError + Send + Sync>),
 
@@ -159,6 +163,8 @@ impl fmt::Display for ErrorKind {
                 ErrorKind::ParseIntError(..) => {
                     "you didn't provide a valid number".into()
                 }
+
+                ErrorKind::NixError(ref error) => format!("{}", error),
 
                 ErrorKind::GenericError(ref error) => format!("{}", error),
 
@@ -320,6 +326,7 @@ impl StdError for Error {
             ErrorKind::JsonError(ref error) => error.description(),
             ErrorKind::AddrParseError(ref error) => error.description(),
             ErrorKind::ParseIntError(..) => "invalid number",
+            ErrorKind::NixError(ref error) => error.description(),
             ErrorKind::GenericError(ref error) => error.description(),
             ErrorKind::Dummy => "dummy error",
         }
@@ -331,6 +338,7 @@ impl StdError for Error {
             ErrorKind::JsonError(ref error) => Some(error as &StdError),
             ErrorKind::AddrParseError(ref error) => Some(error as &StdError),
             ErrorKind::ParseIntError(ref error) => Some(error as &StdError),
+            ErrorKind::NixError(ref error) => Some(error as &StdError),
             _ => None,
         }
     }
@@ -375,4 +383,5 @@ derive_error!(io::Error, ErrorKind::IoError);
 derive_error!(serde_json::Error, ErrorKind::JsonError);
 derive_error!(net::AddrParseError, ErrorKind::AddrParseError);
 derive_error!(num::ParseIntError, ErrorKind::ParseIntError);
+derive_error!(nix::Error, ErrorKind::NixError);
 derive_error!(Box<StdError + Send + Sync>, ErrorKind::GenericError);

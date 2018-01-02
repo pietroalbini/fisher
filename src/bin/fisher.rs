@@ -14,18 +14,15 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 extern crate fisher;
-extern crate libc;
-extern crate signal;
+extern crate nix;
 extern crate toml;
 
 use std::fs;
 use std::io::Read;
 use std::path::Path;
-use std::time::{Instant, Duration};
 
 use fisher::*;
-use libc::{SIGUSR1, SIGINT, SIGTERM};
-use signal::trap::Trap;
+use nix::sys::signal::{Signal, SigSet};
 
 
 static VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
@@ -109,19 +106,23 @@ fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
 
 
 fn app() -> Result<()> {
-    let signal_trap = Trap::trap(&[SIGINT, SIGTERM, SIGUSR1]);
+    // Capture only the signals Fisher uses
+    let mut signals = SigSet::empty();
+    signals.add(Signal::SIGINT);
+    signals.add(Signal::SIGTERM);
+    signals.add(Signal::SIGUSR1);
+    signals.thread_block()?;
 
     let config_path = parse_cli();
 
     let mut app = Fisher::new(read_config(&config_path)?)?;
     println!("HTTP server listening on {}", app.web_address().unwrap());
 
-    // Wait for signals
+    // Wait for signals while the other threads execute the application
     loop {
-        let deadline = Instant::now() + Duration::from_secs(60);
-        match signal_trap.wait(deadline) {
-            Some(SIGINT) | Some(SIGTERM) => break,
-            Some(SIGUSR1) => {
+        match signals.wait()? {
+            Signal::SIGINT | Signal::SIGTERM => break,
+            Signal::SIGUSR1 => {
                 println!("Reloading configuration and scripts...");
 
                 // Don't crash if the reload fails, just show errors

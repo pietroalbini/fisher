@@ -22,8 +22,6 @@ lazy_static="^0.2"
 rand="^0.3"
 tiny_http="^0.5"
 toml="^0.4"
-libc="^0.2"
-signal="^0.3"
 nix="^0.9"
 users="^0.6"
 
