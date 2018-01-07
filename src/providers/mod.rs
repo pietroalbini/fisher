@@ -15,9 +15,7 @@
 
 mod status;
 mod standalone;
-#[cfg(feature = "provider-github")]
 mod github;
-#[cfg(feature = "provider-gitlab")]
 mod gitlab;
 #[cfg(test)]
 pub mod testing;
@@ -170,7 +168,7 @@ macro_rules! ProviderEnum {
 ProviderEnum! {
     any(test, not(test)) | Standalone => self::standalone::StandaloneProvider,
     any(test, not(test)) | Status => self::status::StatusProvider,
-    feature="provider-github" | GitHub => self::github::GitHubProvider,
-    feature="provider-gitlab" | GitLab => self::gitlab::GitLabProvider,
+    any(test, not(test)) | GitHub => self::github::GitHubProvider,
+    any(test, not(test)) | GitLab => self::gitlab::GitLabProvider,
     test | Testing => self::testing::TestingProvider
 }

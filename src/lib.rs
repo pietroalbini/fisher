@@ -13,10 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// Optional support for compiling with clippy
-#![cfg_attr(feature = "clippy", feature(plugin))]
-#![cfg_attr(feature = "clippy", plugin(clippy))]
-
 extern crate ansi_term;
 #[cfg(test)]
 extern crate hyper;
@@ -25,7 +21,6 @@ extern crate lazy_static;
 extern crate nix;
 extern crate rand;
 extern crate regex;
-#[cfg(feature = "provider-github")]
 extern crate ring;
 extern crate serde;
 #[macro_use]
