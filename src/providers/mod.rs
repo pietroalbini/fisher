@@ -22,24 +22,19 @@ pub mod testing;
 
 
 pub mod prelude {
-
-    pub use std::collections::HashMap;
-    pub use std::path::PathBuf;
-
     pub use providers::ProviderTrait;
     pub use requests::{Request, RequestType};
     pub use common::prelude::*;
+    pub use scripts::EnvBuilder;
 }
 
 
 pub use self::status::{StatusEvent, StatusEventKind, StatusProvider};
 
 
-use std::collections::HashMap;
-use std::path::PathBuf;
-
 use requests::{Request, RequestType};
 use common::prelude::*;
+use scripts::EnvBuilder;
 
 
 /// This trait should be implemented by every Fisher provider
@@ -55,16 +50,9 @@ pub trait ProviderTrait: ::std::fmt::Debug {
     /// type if the request is valid
     fn validate(&self, &Request) -> RequestType;
 
-    /// This method should provide the environment variables of the provided
-    /// request. Those variables will be passed to the process
-    fn env(&self, &Request) -> HashMap<String, String>;
-
-    /// This method should prepare the directory in which the hook will be run.
-    /// This means, if you want to add extra files in there you should use
-    /// this. You're not required to implement this method
-    fn prepare_directory(&self, _req: &Request, _path: &PathBuf) -> Result<()> {
-        Ok(())
-    }
+    /// This method should build the environment to process an incoming
+    /// request
+    fn build_env(&self, req: &Request, builder: &mut EnvBuilder) -> Result<()>;
 
     /// This method tells the scheduler if the hook should trigger status hooks
     /// after the request is processed. By default this returns true, change it
@@ -117,25 +105,14 @@ macro_rules! ProviderEnum {
                 }
             }
 
-            pub fn env(&self, req: &Request) -> HashMap<String, String> {
+            pub fn build_env(
+                &self, req: &Request, builder: &mut EnvBuilder,
+            ) -> Result<()> {
                 match *self {
                     $(
                         #[cfg($cfg)]
                         Provider::$name(ref prov) => {
-                            (prov as &ProviderTrait).env(req)
-                        },
-                    )*
-                }
-            }
-
-            pub fn prepare_directory(&self, req: &Request, path: &PathBuf)
-                                    -> Result<()> {
-                match *self {
-                    $(
-                        #[cfg($cfg)]
-                        Provider::$name(ref prov) => {
-                            (prov as &ProviderTrait)
-                                .prepare_directory(req, path)
+                            (prov as &ProviderTrait).build_env(req, builder)
                         },
                     )*
                 }
@@ -152,6 +129,7 @@ macro_rules! ProviderEnum {
                 }
             }
 
+            #[allow(dead_code)]
             pub fn name(&self) -> &str {
                 match *self {
                     $(

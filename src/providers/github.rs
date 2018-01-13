@@ -117,24 +117,18 @@ impl ProviderTrait for GitHubProvider {
         RequestType::ExecuteHook
     }
 
-    fn env(&self, request: &Request) -> HashMap<String, String> {
-        let mut res = HashMap::new();
-
+    fn build_env(&self, r: &Request, b: &mut EnvBuilder) -> Result<()> {
         let req;
-        if let Request::Web(ref inner) = *request {
+        if let Request::Web(ref inner) = *r {
             req = inner;
         } else {
-            return res;
+            return Ok(());
         }
 
-        res.insert("EVENT".to_string(), req.headers["X-GitHub-Event"].clone());
+        b.add_env("EVENT", &req.headers["X-GitHub-Event"]);
+        b.add_env("DELIVERY_ID", &req.headers["X-GitHub-Delivery"]);
 
-        res.insert(
-            "DELIVERY_ID".to_string(),
-            req.headers["X-GitHub-Delivery"].clone(),
-        );
-
-        res
+        Ok(())
     }
 }
 
@@ -183,6 +177,7 @@ mod tests {
     use utils::testing::*;
     use requests::RequestType;
     use providers::ProviderTrait;
+    use scripts::EnvBuilder;
 
     use super::{verify_signature, GitHubProvider, GITHUB_EVENTS};
 
@@ -250,24 +245,20 @@ mod tests {
 
 
     #[test]
-    fn test_env() {
+    fn test_build_env() {
+        let mut req = dummy_web_request();
+        req.headers.insert("X-GitHub-Event".into(), "ping".into());
+        req.headers.insert("X-GitHub-Delivery".into(), "12345".into());
+
         let provider = GitHubProvider::new("{}").unwrap();
+        let mut b = EnvBuilder::dummy();
+        provider.build_env(&req.into(), &mut b).unwrap();
 
-        // Create a dummy request
-        let mut request = dummy_web_request();
-        request
-            .headers
-            .insert("X-GitHub-Event".to_string(), "ping".to_string());
-        request
-            .headers
-            .insert("X-GitHub-Delivery".to_string(), "12345".to_string());
-
-        // Get the env
-        let env = provider.env(&request.into());
-
-        assert_eq!(env.len(), 2);
-        assert_eq!(*env.get("EVENT").unwrap(), "ping".to_string());
-        assert_eq!(*env.get("DELIVERY_ID").unwrap(), "12345".to_string());
+        assert_eq!(b.dummy_data().env, hashmap! {
+            "EVENT".into() => "ping".into(),
+            "DELIVERY_ID".into() => "12345".into(),
+        });
+        assert_eq!(b.dummy_data().files, hashmap!());
     }
 
 

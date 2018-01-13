@@ -58,6 +58,22 @@ macro_rules! assert_err {
 }
 
 
+#[macro_export]
+macro_rules! hashmap {
+    () => {{
+        use std::collections::HashMap;
+        HashMap::with_capacity(0)
+    }};
+    ($($key:expr => $val:expr,)*) => {{
+        use std::collections::HashMap;
+
+        let mut hm = HashMap::new();
+        $( hm.insert($key, $val); )*
+        hm
+    }};
+}
+
+
 pub fn dummy_web_request() -> WebRequest {
     WebRequest {
         headers: HashMap::new(),

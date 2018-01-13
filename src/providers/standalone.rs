@@ -89,8 +89,8 @@ impl ProviderTrait for StandaloneProvider {
         RequestType::ExecuteHook
     }
 
-    fn env(&self, _req: &Request) -> HashMap<String, String> {
-        HashMap::new()
+    fn build_env(&self, _: &Request, _: &mut EnvBuilder) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -102,6 +102,7 @@ mod tests {
     use utils::testing::*;
     use requests::RequestType;
     use providers::ProviderTrait;
+    use scripts::EnvBuilder;
 
     use super::StandaloneProvider;
 
@@ -202,12 +203,14 @@ mod tests {
         }
     }
 
+
     #[test]
-    fn test_env() {
+    fn test_build_env() {
         let p = StandaloneProvider::new(r#"{"secret": "abcde"}"#).unwrap();
+        let mut b = EnvBuilder::dummy();
+        p.build_env(&dummy_web_request().into(), &mut b).unwrap();
 
-        // The environment must always be empty
-        assert!(p.env(&dummy_web_request().into()) == HashMap::new());
+        assert_eq!(b.dummy_data().env, HashMap::new());
+        assert_eq!(b.dummy_data().files, HashMap::new());
     }
-
 }

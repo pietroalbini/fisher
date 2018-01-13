@@ -40,14 +40,6 @@ impl Request {
             Err(ErrorKind::WrongRequestKind.into())
         }
     }
-
-    pub fn status(&self) -> Result<&StatusEvent> {
-        if let Request::Status(ref req) = *self {
-            Ok(req)
-        } else {
-            Err(ErrorKind::WrongRequestKind.into())
-        }
-    }
 }
 
 

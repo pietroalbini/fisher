@@ -15,8 +15,6 @@
 
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::fs::File;
-use std::io::Write;
 
 use providers::prelude::*;
 use common::prelude::*;
@@ -76,29 +74,19 @@ impl ProviderTrait for TestingProvider {
         RequestType::ExecuteHook
     }
 
-    fn env(&self, request: &Request) -> HashMap<String, String> {
-        let mut res = HashMap::new();
-
+    fn build_env(&self, r: &Request, b: &mut EnvBuilder) -> Result<()> {
         let req;
-        if let &Request::Web(ref inner) = request {
+        if let &Request::Web(ref inner) = r {
             req = inner;
         } else {
-            return res;
+            return Ok(());
         }
 
-        // Return the provided env
         if let Some(env) = req.params.get("env") {
-            res.insert("ENV".to_string(), env.clone());
+            b.add_env("ENV", env);
         }
 
-        res
-    }
-
-    fn prepare_directory(&self, _req: &Request, path: &PathBuf) -> Result<()> {
-        // Create a test file
-        let mut dest = path.clone();
-        dest.push("prepared");
-        writeln!(File::create(&dest)?, "prepared")?;
+        writeln!(b.data_file("prepared")?, "prepared")?;
 
         Ok(())
     }
@@ -115,13 +103,13 @@ impl ProviderTrait for TestingProvider {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::net::IpAddr;
     use std::str::FromStr;
 
     use utils::testing::*;
     use requests::RequestType;
     use providers::ProviderTrait;
+    use scripts::EnvBuilder;
 
     use super::TestingProvider;
 
@@ -183,20 +171,34 @@ mod tests {
 
 
     #[test]
-    fn test_env() {
+    fn test_build_env() {
         let p = TestingProvider::new("").unwrap();
 
         // Without the env param
-        assert_eq!(p.env(&dummy_web_request().into()), HashMap::new());
+        let mut b = EnvBuilder::dummy();
+        p.build_env(&dummy_web_request().into(), &mut b).unwrap();
+
+        assert_eq!(b.dummy_data().env, hashmap! {
+            "PREPARED".into() => "prepared".into(),
+        });
+        assert_eq!(b.dummy_data().files, hashmap! {
+            "prepared".into() => "prepared\n".bytes().collect::<Vec<_>>(),
+        });
 
         // With the env param
         let mut req = dummy_web_request();
         req.params.insert("env".to_string(), "test".to_string());
 
-        let mut should_be = HashMap::new();
-        should_be.insert("ENV".to_string(), "test".to_string());
+        let mut b = EnvBuilder::dummy();
+        p.build_env(&req.into(), &mut b).unwrap();
 
-        assert_eq!(p.env(&req.into()), should_be);
+        assert_eq!(b.dummy_data().env, hashmap! {
+            "PREPARED".into() => "prepared".into(),
+            "ENV".into() => "test".into(),
+        });
+        assert_eq!(b.dummy_data().files, hashmap! {
+            "prepared".into() => "prepared\n".bytes().collect::<Vec<_>>(),
+        });
     }
 
     #[test]

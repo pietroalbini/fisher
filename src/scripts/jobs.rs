@@ -14,15 +14,15 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::HashMap;
-use std::process;
-use std::os::unix::process::ExitStatusExt;
-use std::os::unix::process::CommandExt;
-use std::fs;
 use std::env;
-use std::path::PathBuf;
+use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::Write;
-use std::sync::Arc;
 use std::net::IpAddr;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+use std::sync::Arc;
 
 use nix::unistd::{setpgid, Pid};
 use users;
@@ -39,6 +39,8 @@ use providers::Provider;
 static DEFAULT_ENV: &[&'static str] = &[
     "PATH", "LC_ALL", "LANG",
 ];
+
+static ENV_PREFIX: &'static str = "FISHER";
 
 
 #[derive(Debug)]
@@ -59,6 +61,149 @@ impl Default for Context {
         Context {
             environment: HashMap::new(),
             username,
+        }
+    }
+}
+
+
+struct EnvBuilderReal<'job> {
+    command: &'job mut Command,
+    data_dir: &'job Path,
+    last_file: Option<fs::File>,
+}
+
+#[cfg(test)]
+pub struct EnvBuilderDummy {
+    pub env: HashMap<String, String>,
+    pub files: HashMap<String, Vec<u8>>,
+}
+
+enum EnvBuilderInner<'job> {
+    Real(EnvBuilderReal<'job>),
+    #[cfg(test)]
+    Dummy(EnvBuilderDummy),
+}
+
+pub struct EnvBuilder<'job> {
+    inner: EnvBuilderInner<'job>,
+    prefix: Option<OsString>,
+}
+
+impl<'job> EnvBuilder<'job> {
+    fn new(command: &'job mut Command, data_dir: &'job Path) -> Self {
+        EnvBuilder {
+            inner: EnvBuilderInner::Real(EnvBuilderReal {
+                command,
+                data_dir,
+                last_file: None,
+            }),
+            prefix: Some(ENV_PREFIX.into()),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn dummy() -> Self {
+        EnvBuilder {
+            inner: EnvBuilderInner::Dummy(EnvBuilderDummy {
+                env: HashMap::new(),
+                files: HashMap::new(),
+            }),
+            prefix: None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn dummy_data(&self) -> &EnvBuilderDummy {
+        if let &EnvBuilderInner::Dummy(ref dummy) = &self.inner {
+            dummy
+        } else {
+            panic!("called dummy_data on a non-dummy builder");
+        }
+    }
+
+    fn set_prefix(&mut self, prefix: Option<&str>) {
+        if let Some(prefix) = prefix {
+            let prefix = prefix.chars()
+                .map(|c| c.to_uppercase().to_string())
+                .collect::<String>();
+
+            self.prefix = Some(format!("{}_{}", ENV_PREFIX, prefix).into());
+        } else {
+            self.prefix = Some(ENV_PREFIX.into());
+        }
+    }
+
+    fn env_name<N: AsRef<OsStr>>(&self, name: N) -> OsString {
+        if let Some(ref prefix) = self.prefix {
+            let mut result = prefix.clone();
+            result.push("_");
+            result.push(name);
+            result
+        } else {
+            name.as_ref().into()
+        }
+    }
+
+    fn clear_env(&mut self) {
+        match self.inner {
+            EnvBuilderInner::Real(ref mut inner) => {
+                inner.command.env_clear();
+            }
+            #[cfg(test)]
+            EnvBuilderInner::Dummy(ref mut inner) => {
+                inner.env.clear();
+            }
+        }
+    }
+
+    fn add_env_unprefixed<K: AsRef<OsStr>, V: AsRef<OsStr>>(
+        &mut self, k: K, v: V,
+    ) {
+        match self.inner {
+            EnvBuilderInner::Real(ref mut inner) => {
+                inner.command.env(k, v);
+            }
+            #[cfg(test)]
+            EnvBuilderInner::Dummy(ref mut inner) => {
+                inner.env.insert(
+                    k.as_ref().to_str().unwrap().into(),
+                    v.as_ref().to_str().unwrap().into(),
+                );
+            }
+        }
+
+    }
+
+    pub fn add_env<K: AsRef<OsStr>, V: AsRef<OsStr>>(&mut self, k: K, v: V) {
+        let name = self.env_name(k);
+        self.add_env_unprefixed(name, v);
+    }
+
+    pub fn data_file<'a, P: AsRef<Path>>(
+        &'a mut self, path: P,
+    ) -> Result<&'a mut Write> {
+        let env = path.as_ref().to_str().unwrap()
+            .chars()
+            .map(|c| c.to_uppercase().to_string())
+            .collect::<String>();
+        let name = self.env_name(env);
+
+        match self.inner {
+            EnvBuilderInner::Real(ref mut inner) => {
+                let dest = inner.data_dir.join(&path);
+                inner.command.env(name, &dest);
+
+                inner.last_file = Some(fs::File::create(&dest)?);
+                Ok(inner.last_file.as_mut().unwrap() as &mut Write)
+            }
+            #[cfg(test)]
+            EnvBuilderInner::Dummy(ref mut inner) => {
+                let dest = path.as_ref().to_str().unwrap().to_string();
+                inner.env.insert(name.to_str().unwrap().into(), dest.clone());
+
+                inner.files.insert(dest.clone(), Vec::new());
+                Ok(inner.files.get_mut(&dest).unwrap() as &mut Write)
+            }
         }
     }
 }
@@ -100,13 +245,17 @@ impl Job {
     }
 
     fn process(&self, ctx: &Context) -> Result<JobOutput> {
-        let mut command = process::Command::new(&self.script.exec());
+        let mut command = Command::new(&self.script.exec());
 
-        // Prepare the command's environment variables
-        self.prepare_env(&mut command, ctx);
-
-        // Use a random working directory
+        // Use random directories
         let working_directory = utils::create_temp_dir()?;
+
+        // Prepare the command's environment
+        {
+            let mut builder = EnvBuilder::new(&mut command, &working_directory);
+            self.prepare_env(&mut builder, ctx)?;
+        }
+
         command.current_dir(working_directory.to_str().unwrap());
         command.env("HOME", working_directory.to_str().unwrap());
 
@@ -117,11 +266,6 @@ impl Job {
         let request_body = self.save_request_body(&working_directory)?;
         if let Some(path) = request_body {
             command.env("FISHER_REQUEST_BODY", path.to_str().unwrap());
-        }
-
-        // Tell the provider to prepare the directory
-        if let Some(ref provider) = self.provider {
-            provider.prepare_directory(&self.request, &working_directory)?;
         }
 
         // Apply the custom environment
@@ -147,12 +291,14 @@ impl Job {
         Ok(JobOutput::new(self, output))
     }
 
-    fn prepare_env(&self, command: &mut process::Command, ctx: &Context) {
+    fn prepare_env(
+        &self, builder: &mut EnvBuilder, ctx: &Context,
+    ) -> Result<()> {
         // First of all clear the environment
-        command.env_clear();
+        builder.clear_env();
 
         // Set the USER environment variable with the correct username
-        command.env("USER", ctx.username.clone());
+        builder.add_env_unprefixed("USER", &ctx.username);
 
         // Apply the default environment
         // This is done (instead of the automatic inheritage) to whitelist
@@ -163,20 +309,17 @@ impl Job {
                 continue;
             }
 
-            command.env(key, value);
+            builder.add_env_unprefixed(key, value);
         }
 
-        // Apply the hook-specific environment
         if let Some(ref provider) = self.provider {
-            for (key, value) in provider.env(&self.request) {
-                let real_key = format!(
-                    "FISHER_{}_{}",
-                    provider.name().to_uppercase(),
-                    key
-                );
-                command.env(real_key, value);
-            }
+            builder.set_prefix(Some(provider.name()));
+            provider.build_env(&self.request, builder)?;
         }
+
+        builder.set_prefix(None);
+
+        Ok(())
     }
 
     fn save_request_body(&self, base: &PathBuf) -> Result<Option<PathBuf>> {
@@ -231,7 +374,7 @@ pub struct JobOutput {
 }
 
 impl JobOutput {
-    fn new<'a>(job: &'a Job, output: process::Output) -> Self {
+    fn new<'a>(job: &'a Job, output: Output) -> Self {
         JobOutput {
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -360,6 +503,7 @@ mod tests {
         env.create_script("dump.sh", &[
             r#"#!/bin/bash"#,
             r#"## Fisher-Testing: {}"#,
+            r#"env"#,
             r#"b="${FISHER_TESTING_ENV}""#,
             r#"echo "executed" > "${b}/executed""#,
             r#"env > "${b}/env""#,
@@ -377,7 +521,20 @@ mod tests {
 
         // Start the job
         let job = create_job(env, "dump.sh", req.into())?;
-        job.process(ctx)?;
+        let result = job.process(ctx)?;
+
+        if !result.success {
+            println!("\nExit code: {:?}", result.exit_code);
+            println!("Killed with signal: {:?}", result.signal);
+            if result.stdout.trim().len() > 0 {
+                println!("\nJob stdout:\n{}", result.stdout);
+            }
+            if result.stderr.trim().len() > 0 {
+                println!("\nJob stderr:\n{}", result.stderr);
+            }
+
+            panic!("the job failed");
+        }
 
         Ok(out)
     }
@@ -405,7 +562,8 @@ mod tests {
             let extra_env = vec![
                 // Variables set by Fisher
                 "FISHER_TESTING_ENV", "FISHER_REQUEST_IP",
-                "FISHER_REQUEST_BODY", "HOME", "USER",
+                "FISHER_REQUEST_BODY", "FISHER_TESTING_PREPARED", "HOME",
+                "USER",
                 // Variables set by bash
                 "PWD", "SHLVL", "_",
             ];

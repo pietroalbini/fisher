@@ -13,8 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::fs;
-use std::io::Write;
 use std::slice::Iter as SliceIter;
 use std::net::IpAddr;
 
@@ -40,7 +38,7 @@ impl StatusEvent {
     }
 
     #[inline]
-    pub fn hook_name(&self) -> &String {
+    pub fn script_name(&self) -> &str {
         match *self {
             StatusEvent::JobCompleted(ref output) |
             StatusEvent::JobFailed(ref output) => &output.script_name,
@@ -76,20 +74,19 @@ impl StatusEventKind {
 #[derive(Debug, Deserialize)]
 pub struct StatusProvider {
     events: Vec<StatusEventKind>,
-    hooks: Option<Vec<String>>,
+    #[serde(rename = "hooks")]
+    scripts: Option<Vec<String>>,
 }
 
 impl StatusProvider {
     #[inline]
-    pub fn hook_allowed(&self, name: &str) -> bool {
+    pub fn script_allowed(&self, name: &str) -> bool {
         // Check if it's allowed only if a whitelist was provided
-        if let Some(ref hooks) = self.hooks {
-            if !hooks.contains(&name.into()) {
-                return false;
-            }
+        if let Some(ref scripts) = self.scripts {
+            scripts.contains(&name.into())
+        } else {
+            true
         }
-
-        true
     }
 
     #[inline]
@@ -112,7 +109,7 @@ impl ProviderTrait for StatusProvider {
         }
 
         // The hook name must be allowed
-        if !self.hook_allowed(req.hook_name()) {
+        if !self.script_allowed(req.script_name()) {
             return RequestType::Invalid;
         }
 
@@ -124,71 +121,40 @@ impl ProviderTrait for StatusProvider {
         RequestType::ExecuteHook
     }
 
-    fn env(&self, request: &Request) -> HashMap<String, String> {
-        let mut env = HashMap::new();
-
-        let req;
-        if let Request::Status(ref inner) = *request {
-            req = inner;
+    fn build_env(&self, req: &Request, b: &mut EnvBuilder) -> Result<()> {
+        let req = if let Request::Status(ref inner) = *req {
+            inner
         } else {
-            return env;
-        }
+            return Ok(());
+        };
 
-        env.insert("EVENT".into(), req.kind().name().into());
-        env.insert("HOOK_NAME".into(), req.hook_name().clone());
-
-        // Event-specific env
-        match *req {
-            StatusEvent::JobCompleted(..) => {
-                env.insert("SUCCESS".into(), "1".into());
-                env.insert("EXIT_CODE".into(), "0".into());
-                env.insert("SIGNAL".into(), String::new());
-            }
-            StatusEvent::JobFailed(ref output) => {
-                env.insert("SUCCESS".into(), "0".into());
-                env.insert(
-                    "EXIT_CODE".into(),
-                    if let Some(code) = output.exit_code {
-                        format!("{}", code)
-                    } else {
-                        String::new()
-                    },
-                );
-                env.insert(
-                    "SIGNAL".into(),
-                    if let Some(signal) = output.signal {
-                        format!("{}", signal)
-                    } else {
-                        String::new()
-                    },
-                );
-            }
-        }
-
-        env
-    }
-
-    fn prepare_directory(&self, req: &Request, path: &PathBuf) -> Result<()> {
-        let req = req.status()?;
-
-        macro_rules! new_file {
-            ($base:expr, $name:expr, $content:expr) => {{
-                let mut path = $base.clone();
-                path.push($name);
-
-                let mut file = fs::File::create(&path)?;
-                write!(file, "{}", $content)?;
-            }};
-        }
+        b.add_env("EVENT", req.kind().name());
+        b.add_env("HOOK_NAME", req.script_name());
 
         match *req {
-            StatusEvent::JobCompleted(ref output) => {
-                new_file!(path, "stdout", output.stdout);
-                new_file!(path, "stderr", output.stderr);
+            StatusEvent::JobCompleted(ref out) => {
+                b.add_env("SUCCESS", "1");
+                b.add_env("EXIT_CODE", "0");
+                b.add_env("SIGNAL", "");
+
+                write!(b.data_file("stdout")?, "{}", out.stdout)?;
+                write!(b.data_file("stderr")?, "{}", out.stderr)?;
             }
-            StatusEvent::JobFailed(ref output) => {
-                new_file!(path, "stdout", output.stdout);
-                new_file!(path, "stderr", output.stderr);
+            StatusEvent::JobFailed(ref out) => {
+                b.add_env("SUCCESS", "0");
+                b.add_env("EXIT_CODE", if let Some(c) = out.exit_code {
+                    c.to_string()
+                } else {
+                    String::with_capacity(0)
+                });
+                b.add_env("SIGNAL", if let Some(s) = out.signal {
+                    s.to_string()
+                } else {
+                    String::with_capacity(0)
+                });
+
+                write!(b.data_file("stdout")?, "{}", out.stdout)?;
+                write!(b.data_file("stderr")?, "{}", out.stderr)?;
             }
         }
 
@@ -205,26 +171,24 @@ impl ProviderTrait for StatusProvider {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use utils::testing::*;
-    use utils;
     use requests::RequestType;
     use providers::ProviderTrait;
+    use scripts::EnvBuilder;
 
     use super::{StatusEvent, StatusProvider};
 
 
     #[test]
-    fn config_hook_allowed() {
+    fn config_script_allowed() {
         macro_rules! assert_custom {
-            ($hooks:expr, $check:expr, $expected:expr) => {{
+            ($scripts:expr, $check:expr, $expected:expr) => {{
                 let provider = StatusProvider {
-                    hooks: $hooks,
+                    scripts: $scripts,
                     events: vec![],
                 };
                 assert_eq!(
-                    provider.hook_allowed(&$check.to_string()),
+                    provider.script_allowed(&$check.to_string()),
                     $expected
                 );
             }};
@@ -309,64 +273,62 @@ mod tests {
 
 
     #[test]
-    fn test_env() {
+    fn test_env_builder_job_completed() {
         let provider = StatusProvider::new(
-            r#"{"events": ["job_completed", "job_failed"]}"#,
+            r#"{"events": ["job_failed"]}"#,
         ).unwrap();
 
-        // Try with a job_completed event
         let event = StatusEvent::JobCompleted(dummy_job_output());
-        let env = provider.env(&event.into());
-        assert_eq!(env.len(), 5);
-        assert_eq!(env.get("EVENT").unwrap(), &"job_completed".to_string());
-        assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
-        assert_eq!(env.get("SUCCESS").unwrap(), &"1".to_string());
-        assert_eq!(env.get("EXIT_CODE").unwrap(), &"0".to_string());
-        assert_eq!(env.get("SIGNAL").unwrap(), &"".to_string());
+        let mut b = EnvBuilder::dummy();
+        provider.build_env(&event.into(), &mut b).unwrap();
 
-        // Try with a job_failed event
+        assert_eq!(b.dummy_data().env, hashmap! {
+            "EVENT".into() => "job_completed".into(),
+            "HOOK_NAME".into() => "test".into(),
+            "SUCCESS".into() => "1".into(),
+            "EXIT_CODE".into() => "0".into(),
+            "SIGNAL".into() => "".into(),
+
+            // File paths
+            "STDOUT".into() => "stdout".into(),
+            "STDERR".into() => "stderr".into(),
+        });
+        assert_eq!(b.dummy_data().files, hashmap! {
+            "stdout".into() => "hello world".into(),
+            "stderr".into() => "something happened".into(),
+        });
+    }
+
+
+    #[test]
+    fn test_env_builder_job_failed() {
+        let provider = StatusProvider::new(
+            r#"{"events": ["job_failed"]}"#,
+        ).unwrap();
+
         let mut output = dummy_job_output();
         output.success = false;
         output.exit_code = None;
         output.signal = Some(9);
 
-        let env = provider.env(&StatusEvent::JobFailed(output).into());
-        assert_eq!(env.len(), 5);
-        assert_eq!(env.get("EVENT").unwrap(), &"job_failed".to_string());
-        assert_eq!(env.get("HOOK_NAME").unwrap(), &"test".to_string());
-        assert_eq!(env.get("SUCCESS").unwrap(), &"0".to_string());
-        assert_eq!(env.get("EXIT_CODE").unwrap(), &"".to_string());
-        assert_eq!(env.get("SIGNAL").unwrap(), &"9".to_string());
-    }
+        let event = StatusEvent::JobFailed(output);
+        let mut b = EnvBuilder::dummy();
+        provider.build_env(&event.into(), &mut b).unwrap();
 
-    #[test]
-    fn test_prepare_directory() {
-        macro_rules! read {
-            ($base:expr, $name:expr) => {{
-                use std::fs;
-                use std::io::Read;
+        assert_eq!(b.dummy_data().env, hashmap! {
+            "EVENT".into() => "job_failed".into(),
+            "HOOK_NAME".into() => "test".into(),
+            "SUCCESS".into() => "0".into(),
+            "EXIT_CODE".into() => "".into(),
+            "SIGNAL".into() => "9".into(),
 
-                let base = $base.as_path().to_str().unwrap().to_string();
-                let file_name = format!("{}/{}", base, $name);
-                let mut file = fs::File::open(&file_name).unwrap();
-
-                let mut buf = String::new();
-                file.read_to_string(&mut buf).unwrap();
-
-                buf
-            }};
-        }
-
-        let provider =
-            StatusProvider::new(r#"{"events": ["job_completed"]}"#).unwrap();
-
-        let event = StatusEvent::JobCompleted(dummy_job_output());
-        let tempdir = utils::create_temp_dir().unwrap();
-        provider.prepare_directory(&event.into(), &tempdir).unwrap();
-
-        assert_eq!(read!(tempdir, "stdout"), "hello world".to_string());
-        assert_eq!(read!(tempdir, "stderr"), "something happened".to_string());
-
-        fs::remove_dir_all(&tempdir).unwrap();
+            // File paths
+            "STDOUT".into() => "stdout".into(),
+            "STDERR".into() => "stderr".into(),
+        });
+        assert_eq!(b.dummy_data().files, hashmap! {
+            "stdout".into() => "hello world".into(),
+            "stderr".into() => "something happened".into(),
+        });
     }
 }

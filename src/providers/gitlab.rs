@@ -105,22 +105,21 @@ impl ProviderTrait for GitLabProvider {
         RequestType::ExecuteHook
     }
 
-    fn env(&self, request: &Request) -> HashMap<String, String> {
+    fn build_env(&self, r: &Request, b: &mut EnvBuilder) -> Result<()> {
         let req;
-        if let Request::Web(ref inner) = *request {
+        if let Request::Web(ref inner) = *r {
             req = inner;
         } else {
-            return HashMap::new();
+            return Ok(());
         }
 
         // Get the current event name
         let event_header =
             normalize_event_name(&*req.headers["X-Gitlab-Event"]);
 
-        let mut res = HashMap::new();
-        res.insert("EVENT".to_string(), event_header.to_string());
+        b.add_env("EVENT", event_header);
 
-        res
+        Ok(())
     }
 }
 
@@ -139,12 +138,11 @@ fn normalize_event_name(input: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use utils::testing::*;
     use requests::{Request, RequestType};
     use web::WebRequest;
     use providers::ProviderTrait;
+    use scripts::EnvBuilder;
 
     use super::{normalize_event_name, GitLabProvider, GITLAB_EVENTS};
 
@@ -309,16 +307,18 @@ mod tests {
 
 
     #[test]
-    fn test_env() {
-        let mut expected = HashMap::new();
-        expected.insert("EVENT".to_string(), "Push".to_string());
-
+    fn test_build_env() {
         let mut req = base_request();
-        req.headers
-            .insert("X-Gitlab-Event".to_string(), "Push Hook".to_string());
+        req.headers.insert("X-Gitlab-Event".into(), "Push Hook".to_string());
 
         let provider = GitLabProvider::new("{}").unwrap();
-        assert_eq!(provider.env(&req.into()), expected);
+        let mut b = EnvBuilder::dummy();
+        provider.build_env(&req.into(), &mut b).unwrap();
+
+        assert_eq!(b.dummy_data().env, hashmap! {
+            "EVENT".into() => "Push".into(),
+        });
+        assert_eq!(b.dummy_data().files, hashmap!());
     }
 
 
