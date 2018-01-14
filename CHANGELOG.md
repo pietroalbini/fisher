@@ -20,7 +20,13 @@ everything a user can notice.
 
     * **BREAKING:** the `SHELL` environment variable is not present anymore
     * **BREAKING:** most of the CLI arguments are now removed
-    * The `USER` environment variable is now guaranteed to be correct
+    * **BREAKING:** the `FISHER_STATUS_HOOK_NAME` env var is now
+        called `FISHER_STATUS_SCRIPT_NAME`
+    * **BREAKING:** the `job_completed` status hooks event is now called
+        `job-completed`
+    * **BREAKING:** the `job_failed` status hooks event is now called
+        `job-failed`
+    * The `USER` env var is now guaranteed to be correct
 
 ### Fisher 1.0.0-beta.7
 

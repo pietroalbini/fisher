@@ -56,16 +56,17 @@ impl StatusEvent {
 
 
 #[derive(Debug, Hash, PartialEq, Eq, Copy, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum StatusEventKind {
-    #[serde(rename = "job_completed")] JobCompleted,
-    #[serde(rename = "job_failed")] JobFailed,
+    JobCompleted,
+    JobFailed,
 }
 
 impl StatusEventKind {
     fn name(&self) -> &str {
         match *self {
-            StatusEventKind::JobCompleted => "job_completed",
-            StatusEventKind::JobFailed => "job_failed",
+            StatusEventKind::JobCompleted => "job-completed",
+            StatusEventKind::JobFailed => "job-failed",
         }
     }
 }
@@ -74,7 +75,6 @@ impl StatusEventKind {
 #[derive(Debug, Deserialize)]
 pub struct StatusProvider {
     events: Vec<StatusEventKind>,
-    #[serde(rename = "hooks")]
     scripts: Option<Vec<String>>,
 }
 
@@ -129,7 +129,7 @@ impl ProviderTrait for StatusProvider {
         };
 
         b.add_env("EVENT", req.kind().name());
-        b.add_env("HOOK_NAME", req.script_name());
+        b.add_env("SCRIPT_NAME", req.script_name());
 
         match *req {
             StatusEvent::JobCompleted(ref out) => {
@@ -205,28 +205,28 @@ mod tests {
     fn test_new() {
         for right in &[
             r#"{"events": []}"#,
-            r#"{"events": ["job_completed"]}"#,
-            r#"{"events": ["job_completed", "job_failed"]}"#,
-            r#"{"events": [], "hooks": []}"#,
-            r#"{"events": [], "hooks": ["abc"]}"#,
+            r#"{"events": ["job-completed"]}"#,
+            r#"{"events": ["job-completed", "job-failed"]}"#,
+            r#"{"events": [], "scripts": []}"#,
+            r#"{"events": [], "scripts": ["abc"]}"#,
         ] {
             assert!(StatusProvider::new(&right).is_ok());
         }
 
         for wrong in &[
-            r#"{"hooks": 1}"#,
-            r#"{"hooks": "a"}"#,
-            r#"{"hooks": true}"#,
-            r#"{"hooks": {}}"#,
-            r#"{"hooks": [1]}"#,
-            r#"{"hooks": [true]}"#,
-            r#"{"hooks": []}"#,
-            r#"{"hooks": ["abc"]}"#,
+            r#"{"scripts": 1}"#,
+            r#"{"scripts": "a"}"#,
+            r#"{"scripts": true}"#,
+            r#"{"scripts": {}}"#,
+            r#"{"scripts": [1]}"#,
+            r#"{"scripts": [true]}"#,
+            r#"{"scripts": []}"#,
+            r#"{"scripts": ["abc"]}"#,
             r#"{"events": {}}"#,
             r#"{"events": [12345]}"#,
             r#"{"events": [true]}"#,
             r#"{"events": ["invalid_event"]}"#,
-            r#"{"events": ["job_completed", "invalid_event"]}"#,
+            r#"{"events": ["job-completed", "invalid_event"]}"#,
         ] {
             assert!(StatusProvider::new(&wrong).is_err());
         }
@@ -245,28 +245,28 @@ mod tests {
         // Test with a wrong allowed event
         assert_validate!(
             &StatusEvent::JobCompleted(dummy_job_output()).into(),
-            r#"{"events": ["job_failed"]}"#,
+            r#"{"events": ["job-failed"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed event
         assert_validate!(
             &StatusEvent::JobCompleted(dummy_job_output()).into(),
-            r#"{"events": ["job_completed"]}"#,
+            r#"{"events": ["job-completed"]}"#,
             RequestType::ExecuteHook
         );
 
         // Test with a wrong allowed hook
         assert_validate!(
             &StatusEvent::JobCompleted(dummy_job_output()).into(),
-            r#"{"events": ["job_completed"], "hooks": ["invalid"]}"#,
+            r#"{"events": ["job-completed"], "scripts": ["invalid"]}"#,
             RequestType::Invalid
         );
 
         // Test with a right allowed hook
         assert_validate!(
             &StatusEvent::JobCompleted(dummy_job_output()).into(),
-            r#"{"events": ["job_completed"], "hooks": ["test"]}"#,
+            r#"{"events": ["job-completed"], "scripts": ["test"]}"#,
             RequestType::ExecuteHook
         );
     }
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn test_env_builder_job_completed() {
         let provider = StatusProvider::new(
-            r#"{"events": ["job_failed"]}"#,
+            r#"{"events": ["job-failed"]}"#,
         ).unwrap();
 
         let event = StatusEvent::JobCompleted(dummy_job_output());
@@ -283,8 +283,8 @@ mod tests {
         provider.build_env(&event.into(), &mut b).unwrap();
 
         assert_eq!(b.dummy_data().env, hashmap! {
-            "EVENT".into() => "job_completed".into(),
-            "HOOK_NAME".into() => "test".into(),
+            "EVENT".into() => "job-completed".into(),
+            "SCRIPT_NAME".into() => "test".into(),
             "SUCCESS".into() => "1".into(),
             "EXIT_CODE".into() => "0".into(),
             "SIGNAL".into() => "".into(),
@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn test_env_builder_job_failed() {
         let provider = StatusProvider::new(
-            r#"{"events": ["job_failed"]}"#,
+            r#"{"events": ["job-failed"]}"#,
         ).unwrap();
 
         let mut output = dummy_job_output();
@@ -316,8 +316,8 @@ mod tests {
         provider.build_env(&event.into(), &mut b).unwrap();
 
         assert_eq!(b.dummy_data().env, hashmap! {
-            "EVENT".into() => "job_failed".into(),
-            "HOOK_NAME".into() => "test".into(),
+            "EVENT".into() => "job-failed".into(),
+            "SCRIPT_NAME".into() => "test".into(),
             "SUCCESS".into() => "0".into(),
             "EXIT_CODE".into() => "".into(),
             "SIGNAL".into() => "9".into(),

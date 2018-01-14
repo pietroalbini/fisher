@@ -14,8 +14,8 @@ build the integration yourself in a simple way.
 Status hooks are executed when an event happens inside of Fisher, allowing you
 to react to it. The following events are supported:
 
-* `job_completed`: a job completed without any error
-* `job_failed`: a job failed to execute, probably due to an error
+* `job-completed`: a job completed without any error
+* `job-failed`: a job failed to execute, probably due to an error
 
 Status hooks are executed in the scheduler along with the normal jobs, but with
 a priority of `1000`. This means they will be executed before any other job,
@@ -28,26 +28,23 @@ To create a status hook, you just need to create a script that uses the
 `Status` provider:
 
 ```plain
-## Fisher-Status: {"events": ["job_failed"], "hooks": ["hook1.sh"]}
+## Fisher-Status: {"events": ["job-failed"], "scripts": ["hook1.sh"]}
 ```
 
 The status hook is configured with a [configuration
 comment](../config-comments.md), and supports the following keys:
 
 * `events`: the list of events you want to catch
-* `hooks`: execute the status hook only for these hooks *(optional)*
+* `scripts`: execute the status hook only for these hooks *(optional)*
 
 ## Execution environment
 
 Status hooks are executed with the following environment variables:
 
 * `FISHER_STATUS_EVENT`: the name of the current event
-* `FISHER_STATUS_HOOK_NAME`: the name of the script that triggered the event
+* `FISHER_STATUS_SCRIPT_NAME`: the name of the script that triggered the event
 * `FISHER_STATUS_SUCCESS`: `0` if the script failed, or `1` if it completed
 * `FISHER_STATUS_EXIT_CODE`: the script exit code (if it wasn't killed)
 * `FISHER_STATUS_SIGNAL`: the signal that killed the script (if it was killed)
-
-Also, the following files are present in the build directory:
-
-* `stdout`: the standard output of the script
-* `stderr`: the standard error of the script
+* `FISHER_STATUS_STDOUT`: path to the file containing the stdout of the script
+* `FISHER_STATUS_STDERR`: path to the file containing the stderr of the script

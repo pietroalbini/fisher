@@ -37,7 +37,7 @@ with this content:
 
 ```bash
 #!/bin/bash
-## Fisher-Status: {"events": ["job_failed"]}
+## Fisher-Status: {"events": ["job-failed"]}
 ```
 
 All the status hooks needs to use the special [Status
@@ -49,7 +49,7 @@ Then we can edit the script to send the scary email to our address:
 
 ```bash
 #!/bin/bash
-## Fisher-Status: {"events": ["job_failed"]}
+## Fisher-Status: {"events": ["job-failed"]}
 
 NOTIFY_ADDRESS="bob@example.com"
 
@@ -70,11 +70,11 @@ Let's change the script to be more useful then:
 
 ```bash
 #!/bin/bash
-## Fisher-Status: {"events": ["job_failed"]}
+## Fisher-Status: {"events": ["job-failed"]}
 
 NOTIFY_ADDRESS="bob@example.com"
 
-echo "Script ${FISHER_STATUS_HOOK_NAME} failed to execute!" > m
+echo "Script ${FISHER_STATUS_SCRIPT_NAME} failed to execute!" > m
 echo >> m
 echo "Host:               $(hostname)" >> m
 echo "Exit code:          ${FISHER_STATUS_EXIT_CODE:-none}" >> m
@@ -82,13 +82,13 @@ echo "Killed with signal: ${FISHER_STATUS_SIGNAL:-none}" >> m
 echo >> m
 echo "Standard output" >> m
 echo "===============" >> m
-cat stdout >> m
+cat "${FISHER_STATUS_STDOUT}" >> m
 echo >> m
 echo "Standard error" >> m
 echo "==============" >> m
-cat stderr >> m
+cat "${FISHER_STATUS_STDERR}" >> m
 
-cat m | mail -s "Script ${FISHER_STATUS_HOOK_NAME} failed" "${NOTIFY_ADDRESS}"
+cat m | mail -s "Script ${FISHER_STATUS_SCRIPT_NAME} failed" "${NOTIFY_ADDRESS}"
 ```
 
 Now you'll know everything when something goes wrong!

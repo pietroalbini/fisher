@@ -192,8 +192,8 @@ pub fn sample_hooks() -> PathBuf {
         "status-example.sh",
         r#"#!/bin/bash"#,
         concat!(
-            r#"## Fisher-Status: {"events": ["job_completed", "job_failed"], "#,
-            r#""hooks": ["trigger-status"]}"#,
+            r#"## Fisher-Status: {"events": ["job-completed", "job-failed"], "#,
+            r#""scripts": ["trigger-status"]}"#,
         ),
         r#"echo "triggered!""#
     );

@@ -492,7 +492,7 @@ mod tests {
                 "status-both.sh",
                 &[
                     r#"#!/bin/bash"#,
-                    r#"## Fisher-Status: {"events": ["job_completed", "job_failed"]}"#,
+                    r#"## Fisher-Status: {"events": ["job-completed", "job-failed"]}"#,
                     r#"echo "I'm a status script!""#,
                 ],
             )?;
@@ -500,7 +500,7 @@ mod tests {
                 "status-failed.sh",
                 &[
                     r#"#!/bin/bash"#,
-                    r#"## Fisher-Status: {"events": ["job_failed"]}"#,
+                    r#"## Fisher-Status: {"events": ["job-failed"]}"#,
                     r#"echo "I'm a failure!""#,
                 ],
             )?;
