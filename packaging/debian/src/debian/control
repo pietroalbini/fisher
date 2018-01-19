@@ -1,0 +1,14 @@
+Source: fisher
+Section: net
+Priority: optional
+Maintainer: Pietro Albini <pietro@pietroalbini.org>
+Build-Depends: debhelper (>=9), rustc (>=1.20), cargo
+Standards-Version: 3.9.6
+Homepage: https://fisher.pietroalbini.org
+Vcs-Git: https://github.com/pietroalbini/fisher.git
+Vcs-Browser: https://github.com/pietroalbini/fisher
+
+Package: fisher
+Architecture: any
+Description: Simple webhooks catcher
+  TODO

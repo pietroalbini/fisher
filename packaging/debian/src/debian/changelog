@@ -1,0 +1,11 @@
+fisher (1.0.0-beta.7-DISTRO~ppa2) DISTRO; urgency=medium
+
+  * Fix a few things in the package.
+
+ -- Pietro Albini <pietro@pietroalbini.org>  Fri, 19 Jan 2018 16:20:16 +0100
+
+fisher (1.0.0-beta.7-DISTRO~ppa1) DISTRO; urgency=medium
+
+  * Initial release.
+
+ -- Pietro Albini <pietro@pietroalbini.org>  Mon, 15 Jan 2018 16:21:12 +0100

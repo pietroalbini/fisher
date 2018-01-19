@@ -1,6 +1,7 @@
 /build
 /docs/build
-
 /target
-/fisher_common/target
-/fisher_processor/target
+
+# Debian packaging
+/packaging/debian/src/*
+!/packaging/debian/src/debian

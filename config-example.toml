@@ -27,7 +27,7 @@ rate-limit = "10/1m"
 
 # The directory containing all the scripts Fisher will use. Scripts needs to be
 # executable in order to be called.
-path = "/srv/fisher-scripts"
+path = "/var/fisher-scripts"
 
 # If this is set to true, scripts in subdirectories of `scripts.path` will also
 # be loaded, including from symlinks (be sure to check permissions before
