@@ -21,27 +21,28 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use tempdir::TempDir;
+
 use common::prelude::*;
 use common::state::State;
 use scripts::Script;
-use utils::create_temp_dir;
 use web::WebRequest;
 
 
 pub struct TestEnv {
     state: Arc<State>,
     scripts_dir: PathBuf,
-    to_cleanup: Vec<PathBuf>,
+    temp_dirs: Vec<TempDir>,
 }
 
 impl TestEnv {
     fn new() -> Result<Self> {
-        let scripts_dir = create_temp_dir()?;
+        let scripts_dir = TempDir::new("fisher-tests")?;
 
         Ok(TestEnv {
             state: Arc::new(State::new()),
-            scripts_dir: scripts_dir.clone(),
-            to_cleanup: vec![scripts_dir],
+            scripts_dir: scripts_dir.path().to_path_buf(),
+            temp_dirs: vec![scripts_dir],
         })
     }
 
@@ -50,9 +51,11 @@ impl TestEnv {
     }
 
     pub fn tempdir(&mut self) -> Result<PathBuf> {
-        let dir = create_temp_dir()?;
-        self.to_cleanup.push(dir.clone());
-        Ok(dir)
+        let dir = TempDir::new("fisher-tests")?;
+        let owned = dir.path().to_path_buf();
+
+        self.temp_dirs.push(dir);
+        Ok(owned)
     }
 
     pub fn scripts_dir(&self) -> PathBuf {
@@ -92,12 +95,6 @@ impl TestEnv {
         let path = self.scripts_dir().join(name).to_str().unwrap().to_string();
         Ok(Script::load(name.into(), path, &self.state)?)
     }
-
-    pub fn cleanup(&self) {
-        for dir in &self.to_cleanup {
-            let _ = fs::remove_dir_all(&dir);
-        }
-    }
 }
 
 
@@ -115,7 +112,6 @@ pub fn test_wrapper<F: Fn(&mut TestEnv) -> Result<()>>(func: F) {
     let mut env = TestEnv::new().unwrap();
 
     let result = func(&mut env);
-    env.cleanup();
 
     if let Err(error) = result {
         panic!("{}", error);

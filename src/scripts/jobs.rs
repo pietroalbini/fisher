@@ -25,13 +25,13 @@ use std::process::{Command, Output};
 use std::sync::Arc;
 
 use nix::unistd::{setpgid, Pid};
+use tempdir::TempDir;
 use users;
 
 use common::prelude::*;
 use common::state::UniqueId;
 
 use scripts::Script;
-use utils;
 use requests::Request;
 use providers::Provider;
 
@@ -248,22 +248,24 @@ impl Job {
         let mut command = Command::new(&self.script.exec());
 
         // Use random directories
-        let working_directory = utils::create_temp_dir()?;
+        let working_directory = TempDir::new("fisher")?;
 
         // Prepare the command's environment
         {
-            let mut builder = EnvBuilder::new(&mut command, &working_directory);
+            let mut builder = EnvBuilder::new(
+                &mut command, &working_directory.path()
+            );
             self.prepare_env(&mut builder, ctx)?;
         }
 
-        command.current_dir(working_directory.to_str().unwrap());
-        command.env("HOME", working_directory.to_str().unwrap());
+        command.current_dir(working_directory.path().to_str().unwrap());
+        command.env("HOME", working_directory.path().to_str().unwrap());
 
         // Set the request IP
         command.env("FISHER_REQUEST_IP", self.request_ip().to_string());
 
         // Save the request body
-        let request_body = self.save_request_body(&working_directory)?;
+        let request_body = self.save_request_body(working_directory.path())?;
         if let Some(path) = request_body {
             command.env("FISHER_REQUEST_BODY", path.to_str().unwrap());
         }
@@ -284,8 +286,7 @@ impl Job {
         // Execute the hook
         let output = command.output()?;
 
-        // Remove the temp directory
-        fs::remove_dir_all(&working_directory)?;
+        // The temp directory is dropped - and removed - here
 
         // Return the job output
         Ok(JobOutput::new(self, output))
@@ -322,14 +323,14 @@ impl Job {
         Ok(())
     }
 
-    fn save_request_body(&self, base: &PathBuf) -> Result<Option<PathBuf>> {
+    fn save_request_body(&self, base: &Path) -> Result<Option<PathBuf>> {
         // Get the request body, even if some request kinds don't have one
         let body = match self.request {
             Request::Web(ref req) => &req.body,
             Request::Status(..) => return Ok(None),
         };
 
-        let mut path = base.clone();
+        let mut path = base.to_path_buf();
         path.push("request_body");
 
         // Write the request body on disk

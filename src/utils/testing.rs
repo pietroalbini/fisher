@@ -21,6 +21,7 @@ use std::fs;
 
 use hyper::client as hyper;
 use hyper::method::Method;
+use tempdir::TempDir;
 
 use common::prelude::*;
 use common::state::State;
@@ -30,7 +31,6 @@ use common::config::{HttpConfig, RateLimitConfig};
 use scripts::{Blueprint as HooksBlueprint, Repository as Hooks};
 use scripts::{Job, JobOutput};
 use web::{WebApp, WebRequest};
-use utils;
 
 
 #[macro_export]
@@ -130,7 +130,7 @@ macro_rules! create_hook {
 
 pub fn sample_hooks() -> PathBuf {
     // Create a sample directory with some hooks
-    let tempdir = utils::create_temp_dir().unwrap();
+    let tempdir = TempDir::new("fisher-tests").unwrap().into_path();
 
     create_hook!(
         tempdir,
