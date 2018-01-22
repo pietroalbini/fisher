@@ -47,11 +47,9 @@ impl ProviderTrait for GitLabProvider {
             for event in events {
                 if !GITLAB_EVENTS.contains(&event.as_ref()) {
                     // Return an error if the event doesn't exist
-                    return Err(
-                        ErrorKind::InvalidInput(
-                            format!(r#""{}" is not a GitLab event"#, event),
-                        ).into(),
-                    );
+                    return Err(ErrorKind::ProviderGitLabInvalidEventName(
+                        event.clone()
+                    ).into());
                 }
             }
         }

@@ -1,37 +1,34 @@
 [package]
-name = "fisher"
-version = "1.0.0-beta.7"
-license = "GPL-3.0"
-
-description = "Webhooks catcher written in Rust"
 authors = ["Pietro Albini <pietro@pietroalbini.io>"]
+description = "Webhooks catcher written in Rust"
+license = "GPL-3.0"
+name = "fisher"
 readme = "README.md"
-
 repository = "https://github.com/pietroalbini/fisher"
+version = "1.0.0-beta.7"
 
 [[bin]]
-name = "fisher"
 doc = false
+name = "fisher"
 
 [dependencies]
-ansi_term="^0.9"
-lazy_static="^0.2"
-nix="^0.9"
-rand="^0.3"
-regex="^0.2"
-ring="^0.13.0-alpha"
-serde="^1.0"
-serde_derive="^1.0"
-serde_json="^1.0"
-tiny_http="^0.5"
-toml="^0.4"
-url="^1.2"
-users="^0.6"
+ansi_term = "^0.9"
+error-chain = "0.11.0"
+lazy_static = "^0.2"
+nix = "^0.9"
+rand = "^0.3"
+regex = "^0.2"
+ring = "^0.13.0-alpha"
+serde = "^1.0"
+serde_derive = "^1.0"
+serde_json = "^1.0"
+tiny_http = "^0.5"
+toml = "^0.4"
+url = "^1.2"
+users = "^0.6"
 
 [dev-dependencies]
-hyper="^0.10"
+hyper = "^0.10"
 
 [profile.release]
 lto = true
-
-[workspace]

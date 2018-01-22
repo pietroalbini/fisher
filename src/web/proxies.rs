@@ -143,7 +143,7 @@ mod tests {
         assert_ip!(p, req!("127.3.3.3, 127.2.2.2"), "127.2.2.2");
         assert_err!(
             p.source_ip(&req!("invalid")),
-            ErrorKind::AddrParseError(..)
+            ErrorKind::AddrParse(..)
         );
 
         // Test with an enabled proxy support with two proxies
@@ -153,7 +153,7 @@ mod tests {
         assert_ip!(p, req!("127.3.3.3, 127.2.2.2"), "127.3.3.3");
         assert_err!(
             p.source_ip(&req!("invalid")),
-            ErrorKind::AddrParseError(..)
+            ErrorKind::AddrParse(..)
         );
     }
 

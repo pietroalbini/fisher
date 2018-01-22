@@ -13,7 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#![recursion_limit="256"]
+
 extern crate ansi_term;
+#[macro_use]
+extern crate error_chain;
 #[cfg(test)]
 extern crate hyper;
 #[macro_use]

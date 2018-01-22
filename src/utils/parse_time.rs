@@ -27,6 +27,11 @@ use common::prelude::*;
 /// Examples of time strings are "10" (for 10 seconds), "1d" (for 86400) or
 /// 1m10s (for 70).
 pub fn parse_time(input: &str) -> Result<usize> {
+    parse_time_inner(input)
+        .chain_err(|| ErrorKind::TimeStringInvalid(input.into()))
+}
+
+fn parse_time_inner(input: &str) -> Result<usize> {
     let mut result = 0;
     let mut number_temp;
     let mut number_len = 0;
@@ -44,16 +49,14 @@ pub fn parse_time(input: &str) -> Result<usize> {
                         'h' => number_temp *= 60 * 60,
                         'd' => number_temp *= 60 * 60 * 24,
                         _ => return Err(
-                            ErrorKind::InvalidTimeString(input.into()).into()
+                            ErrorKind::TimeStringInvalidChar(c).into()
                         ),
                     }
 
                     number_len = 0;
                     result += number_temp;
                 } else {
-                    return Err(
-                        ErrorKind::InvalidTimeString(input.into()).into()
-                    )
+                    Err(ErrorKind::TimeStringExpectedNumber(i))?;
                 }
             },
         }

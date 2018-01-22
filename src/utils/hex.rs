@@ -30,11 +30,9 @@ pub fn from_hex(input: &str) -> Result<Vec<u8>> {
             b'a'...b'f' => byte - b'a' + 10,
             b'A'...b'F' => byte - b'A' + 10,
             _ => {
-                return Err(
-                    ErrorKind::InvalidHexChar(
-                        input[i..].chars().next().unwrap(),
-                    ).into(),
-                );
+                return Err(ErrorKind::HexInvalidChar(
+                    input[i..].chars().next().unwrap()
+                ).into());
             }
         };
 
@@ -47,7 +45,7 @@ pub fn from_hex(input: &str) -> Result<Vec<u8>> {
     }
 
     if pending != 0 {
-        Err(ErrorKind::InvalidHexLength.into())
+        Err(ErrorKind::HexInvalidLength.into())
     } else {
         Ok(result)
     }
@@ -64,7 +62,7 @@ mod tests {
     fn test_from_hex() {
         assert_eq!(from_hex("68656c6c6f").unwrap(), b"hello");
         assert_eq!(from_hex("68656C6C6F").unwrap(), b"hello");
-        assert_err!(from_hex("0"), ErrorKind::InvalidHexLength);
-        assert_err!(from_hex("fg"), ErrorKind::InvalidHexChar('g'));
+        assert_err!(from_hex("0"), ErrorKind::HexInvalidLength);
+        assert_err!(from_hex("fg"), ErrorKind::HexInvalidChar('g'));
     }
 }

@@ -100,7 +100,7 @@ fn read_config<P: AsRef<Path>>(path: P) -> Result<Config> {
     file.read_to_string(&mut buffer)?;
 
     Ok(toml::from_str(&buffer).map_err(|e| {
-        Error::new(ErrorKind::GenericError(Box::new(e)).into())
+        Error::from_kind(ErrorKind::BoxedError(Box::new(e)).into())
     })?)
 }
 

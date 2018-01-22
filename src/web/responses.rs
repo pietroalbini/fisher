@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn test_bad_request() {
         // This is just a dummy error
-        let error = Error::new(ErrorKind::NotBehindProxy);
+        let error = Error::from_kind(ErrorKind::NotBehindProxy);
         let error_msg = format!("{}", error);
 
         let response = Response::BadRequest(error);

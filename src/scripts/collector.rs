@@ -212,17 +212,9 @@ mod tests {
             )?;
 
             // Ensure the scripts collection fails
-            let err =
-                assert_collected(&env, false, &["valid.sh", "invalid.sh"])
-                    .err()
-                    .expect("The collection should return an error");
-
-            // Ensure the returned error is correct
-            if let ErrorKind::ProviderNotFound(ref name) = *err.kind() {
-                assert_eq!(name, "InvalidProviderDoNotReallyCreateThis");
-            } else {
-                panic!("Wrong kind of error returned");
-            }
+            assert_collected(&env, false, &["valid.sh", "invalid.sh"])
+                .err()
+                .expect("The collection should return an error");
 
             Ok(())
         })

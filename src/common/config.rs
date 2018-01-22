@@ -110,11 +110,8 @@ default!(RateLimitConfig {
     interval: 60.into(),
 });
 
-
-impl FromStr for RateLimitConfig {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<RateLimitConfig> {
+impl RateLimitConfig {
+    fn from_str_internal(s: &str) -> Result<RateLimitConfig> {
         let slash_pos = s.char_indices()
             .filter(|ci| ci.1 == '/')
             .map(|ci| ci.0)
@@ -132,8 +129,17 @@ impl FromStr for RateLimitConfig {
                     interval: (&interval[1..]).parse()?,
                 })
             },
-            _ => Err(ErrorKind::InvalidRateLimitsConfig(s.into()).into()),
+            _ => Err(ErrorKind::RateLimitConfigTooManySlashes.into()),
         }
+    }
+}
+
+impl FromStr for RateLimitConfig {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<RateLimitConfig> {
+        Self::from_str_internal(s)
+            .chain_err(|| ErrorKind::RateLimitConfigError(s.into()))
     }
 }
 

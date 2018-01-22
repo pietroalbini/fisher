@@ -38,16 +38,10 @@ impl<S: ScriptsRepositoryTrait> ScheduledJob<S> {
     }
 
     pub fn execute(&self, ctx: &JobContext<S>) -> Result<JobOutput<S>> {
-        let mut result = self.job.execute(ctx);
-
-        // Ensure the right error location is set
-        if let &mut Err(ref mut error) = &mut result {
-            error.set_location(
-                ErrorLocation::HookProcessing(self.hook_name().into()),
-            );
-        }
-
-        result
+        self.job.execute(ctx)
+            .chain_err(|| {
+                ErrorKind::ScriptExecutionFailed(self.hook_name().into())
+            })
     }
 
     pub fn hook_id(&self) -> ScriptId<S> {

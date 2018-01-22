@@ -54,11 +54,9 @@ impl ProviderTrait for GitHubProvider {
             for event in events {
                 if !GITHUB_EVENTS.contains(&event.as_ref()) {
                     // Return an error if the event doesn't exist
-                    return Err(
-                        ErrorKind::InvalidInput(
-                            format!(r#""{}" is not a GitHub event"#, event),
-                        ).into(),
-                    );
+                    return Err(ErrorKind::ProviderGitHubInvalidEventName(
+                        event.clone()
+                    ).into());
                 }
             }
         }

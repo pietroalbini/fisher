@@ -109,10 +109,9 @@ fn load_headers(file: &str) -> Result<LoadHeadersOutput> {
                     providers.push(Arc::new(provider));
                 }
                 Err(mut error) => {
-                    error.set_location(
-                        ErrorLocation::File(file.into(), Some(line_number)),
-                    );
-                    return Err(error);
+                    Err(error.chain_err(|| ErrorKind::ScriptParsingError(
+                        file.into(), line_number,
+                    )))?;
                 }
             }
         }
