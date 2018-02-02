@@ -1,6 +1,7 @@
 ---
 
 site_name: Fisher documentation
+copyright: Created by <a href="https://www.pietroalbini.org">Pietro Albini</a>
 
 pages:
   - "Home page": "index.md"
@@ -25,10 +26,14 @@ pages:
   - "Other information":
     - "Changelog": "changelog.md"
 
-theme: readthedocs
-extra_css:
-  - custom.css
+theme:
+  name: null
+  custom_dir: theme
+
+extra:
+  navbar:
+    "Source code": https://github.com/pietroalbini/fisher
+    "Report an issue": https://github.com/pietroalbini/fisher/issues/new
 
 docs_dir: src
-theme_dir: theme
 site_dir: build
