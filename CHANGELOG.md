@@ -26,6 +26,8 @@ everything a user can notice.
         `job-completed`
     * **BREAKING:** the `job_failed` status hooks event is now called
         `job-failed`
+    * **BREAKING:** data files are now located in a different directory, use
+        the related environment variable to get them
     * The `USER` env var is now guaranteed to be correct
 
 ### Fisher 1.0.0-beta.7

@@ -249,11 +249,12 @@ impl Job {
 
         // Use random directories
         let working_directory = TempDir::new("fisher")?;
+        let data_directory = TempDir::new("fisher")?;
 
         // Prepare the command's environment
         {
             let mut builder = EnvBuilder::new(
-                &mut command, &working_directory.path()
+                &mut command, &data_directory.path()
             );
             self.prepare_env(&mut builder, ctx)?;
         }
@@ -265,7 +266,7 @@ impl Job {
         command.env("FISHER_REQUEST_IP", self.request_ip().to_string());
 
         // Save the request body
-        let request_body = self.save_request_body(working_directory.path())?;
+        let request_body = self.save_request_body(data_directory.path())?;
         if let Some(path) = request_body {
             command.env("FISHER_REQUEST_BODY", path.to_str().unwrap());
         }
@@ -582,6 +583,12 @@ mod tests {
                 }
             }
             assert_eq!(found, env_expected.len());
+
+            // Ensure the request body file is in a different directory than
+            // the working directory
+            let request_body_path = Path::new(&env_vars["FISHER_REQUEST_BODY"]);
+            let home_path = Path::new(&env_vars["HOME"]);
+            assert_ne!(request_body_path.parent(), home_path.parent());
 
             // Ensure environment variables are correct
             assert_eq!(&env_vars["FISHER_TESTING_ENV"], &out.to_str().unwrap());
