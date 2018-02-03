@@ -32,6 +32,7 @@ theme:
   custom_dir: theme
 
 extra:
+  color: "#00695c"
   navbar:
     "Source code": https://github.com/pietroalbini/fisher
     "Report an issue": https://github.com/pietroalbini/fisher/issues/new

@@ -10,7 +10,11 @@
         <link rel="stylesheet" href="https://assets.pietroalbini.org/fonts/source-sans-pro/include.min.css">
         <link rel="stylesheet" href="https://assets.pietroalbini.org/fonts/bitter/include.min.css">
 
-        <link rel="stylesheet" href="{{ base_url }}/css/snowflake.css">
+        <style>
+            {%- filter replace("REPLACE_COLOR_HERE", config.extra.color) -%}
+                {%- include "css/snowflake.css" -%}
+            {%- endfilter -%}
+        </style>
         <link rel="stylesheet" href="{{ base_url }}/css/theme.css">
     </head>
     <body class="vertical-fill">
