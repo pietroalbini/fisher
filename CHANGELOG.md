@@ -13,6 +13,8 @@ everything a user can notice.
     * [Configuration files](docs/config.md) are now supported
     * The [Standalone provider](providers/standalone.md) now supports
       whitelisting IP addresses
+    * The [GitHub provider](providers/github.md) now provides more environment
+        variables for push events
     * [Rate limits](features/rate-limits.md) are now supported for invalid
       requests
 

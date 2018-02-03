@@ -33,3 +33,10 @@ the script:
 
 * `FISHER_GITHUB_EVENT`: the name of the event of this webhook
 * `FISHER_GITHUB_DELIVERY_ID`: the ID of the webhook delivery
+
+Also, if the `push` event is **whitelisted**, the following environment
+variables might be present:
+
+* `FISHER_GITHUB_PUSH_REF`: the git ref of the pushed commit (for example
+    `refs/heads/master`)
+* `FISHER_GITHUB_PUSH_HEAD`: the sha1 ID of the pushed commit

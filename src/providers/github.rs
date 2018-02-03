@@ -39,6 +39,19 @@ lazy_static! {
 }
 
 
+#[derive(Deserialize)]
+struct PushEvent<'src> {
+    #[serde(rename = "ref")]
+    git_ref: &'src str,
+    head_commit: PushCommit<'src>,
+}
+
+#[derive(Deserialize)]
+struct PushCommit<'src> {
+    id: &'src str,
+}
+
+
 #[derive(Debug, Deserialize)]
 pub struct GitHubProvider {
     secret: Option<String>,
@@ -126,6 +139,16 @@ impl ProviderTrait for GitHubProvider {
         b.add_env("EVENT", &req.headers["X-GitHub-Event"]);
         b.add_env("DELIVERY_ID", &req.headers["X-GitHub-Delivery"]);
 
+        // Add specific environment variables for the `push` event
+        let event = &req.headers["X-GitHub-Event"];
+        if self.events.as_ref().and_then(|e| Some(e.contains(event))).unwrap_or(false) {
+            if *event == "push" {
+                let parsed: PushEvent = serde_json::from_str(&req.body)?;
+                b.add_env("PUSH_REF", parsed.git_ref);
+                b.add_env("PUSH_HEAD", parsed.head_commit.id);
+            }
+        }
+
         Ok(())
     }
 }
@@ -174,6 +197,7 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
 mod tests {
     use utils::testing::*;
     use requests::RequestType;
+    use web::WebRequest;
     use providers::ProviderTrait;
     use scripts::EnvBuilder;
 
@@ -257,6 +281,67 @@ mod tests {
             "DELIVERY_ID".into() => "12345".into(),
         });
         assert_eq!(b.dummy_data().files, hashmap!());
+    }
+
+
+    fn dummy_push_event_request(event: &str) -> WebRequest {
+        let mut req = dummy_web_request();
+
+        req.headers.insert("X-GitHub-Delivery".into(), "12345".into());
+        req.headers.insert("X-GitHub-Event".into(), event.into());
+        req.body = ::serde_json::to_string(&json!({
+            "ref": "refs/heads/master",
+            "head_commit": json!({
+                "id": "deadbeef",
+            }),
+        })).unwrap();
+
+        req
+    }
+
+
+    #[test]
+    fn test_build_env_event_push_wrong_event() {
+        let req = dummy_push_event_request("ping");
+        let provider = GitHubProvider::new(
+            r#"{"events": ["create", "push"]}"#
+        ).unwrap();
+
+        let mut b = EnvBuilder::dummy();
+        provider.build_env(&req.into(), &mut b).unwrap();
+
+        assert_eq!(b.dummy_data().env.get("PUSH_REF"), None);
+        assert_eq!(b.dummy_data().env.get("PUSH_HEAD"), None);
+    }
+
+
+    #[test]
+    fn test_build_env_event_push_no_whitelist() {
+        let req = dummy_push_event_request("push");
+        let provider = GitHubProvider::new("{}").unwrap();
+
+        let mut b = EnvBuilder::dummy();
+        provider.build_env(&req.into(), &mut b).unwrap();
+
+        assert_eq!(b.dummy_data().env.get("PUSH_REF"), None);
+        assert_eq!(b.dummy_data().env.get("PUSH_HEAD"), None);
+    }
+
+
+    #[test]
+    fn test_build_env_event_push_correct() {
+        let req = dummy_push_event_request("push");
+        let provider = GitHubProvider::new(r#"{"events": ["push"]}"#).unwrap();
+
+        let mut b = EnvBuilder::dummy();
+        provider.build_env(&req.into(), &mut b).unwrap();
+
+        assert_eq!(
+            b.dummy_data().env.get("PUSH_REF"), Some(&"refs/heads/master".into())
+        );
+        assert_eq!(
+            b.dummy_data().env.get("PUSH_HEAD"), Some(&"deadbeef".into())
+        );
     }
 
 
