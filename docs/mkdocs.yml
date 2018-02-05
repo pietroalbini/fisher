@@ -13,6 +13,7 @@ pages:
     - "Send emails when scripts fails": "tutorial/failure-email.md"
   - "Features":
     - "Monitoring with status hooks": "features/status-hooks.md"
+    - "Monitoring with the health endpoint": "features/health-endpoint.md"
     - "Rate limits": "features/rate-limits.md"
     - "Third-party providers": "features/providers.md"
   - "Documentation":

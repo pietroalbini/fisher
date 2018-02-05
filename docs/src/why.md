@@ -76,9 +76,10 @@ in parallel.
 Fisher can be easily monitored, to give you all the diagnostics information you
 need.
 
-There is an endpoint, `/health`, which you can use to do black-box monitoring:
-it returns a few numbers (such as the number of webhooks in the queue), that you
-can use to build graphs or trigger alerts after they reach a certain threshold.
+There is [an endpoint](features/health-endpoint.md), `/health`, which you can
+use to do black-box monitoring: it returns a few facts about the instance (such
+as the number of webhooks in the queue) you can use to build graphs or
+trigger monitoring alerts.
 
 If you need insights why a webhook failed, you can also create *status hooks*,
 special scripts executed after a script is run. Status hooks receive all the
