@@ -32,7 +32,7 @@ To create a status hook, you just need to create a script that uses the
 ```
 
 The status hook is configured with a [configuration
-comment](../config-comments.md), and supports the following keys:
+comment](../docs/config-comments.md), and supports the following keys:
 
 * `events`: the list of events you want to catch
 * `scripts`: execute the status hook only for these hooks *(optional)*

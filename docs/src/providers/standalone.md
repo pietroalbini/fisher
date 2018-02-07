@@ -22,7 +22,7 @@ This provider doesn't provide any environment variable to the executing script.
 ```
 
 The provider is configured with a [configuration
-comment](../config-comments.md), and supports the following keys:
+comment](../docs/config-comments.md), and supports the following keys:
 
 * `from` *(optional)*: a list of IP addresses to whitelist
 * `secret` *(optional)*: the secret key the request must contain

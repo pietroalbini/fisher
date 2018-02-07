@@ -21,7 +21,7 @@ an invalid signature.
 ```
 
 The provider is configured with a [configuration
-comment](../config-comments.md), and supports the following keys:
+comment](../docs/config-comments.md), and supports the following keys:
 
 * `secret`: the secret key used to sign webhooks
 * `events`: a whitelist of GitHub events you want to accept

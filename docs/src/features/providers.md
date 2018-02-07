@@ -17,7 +17,7 @@ Fisher has currently native support for these providers:
 ## Applying a provider to a script
 
 In order to apply a provider to a script, you need to add its [configuration
-comment](../config-comments.md) to the top of the script. After Fisher is
+comment](../docs/config-comments.md) to the top of the script. After Fisher is
 started/reloaded, it will start filtering requests according to that provider.
 You can also add multiple providers to a single script, and they will be
 validated according to the ordering they're wrote in the script.

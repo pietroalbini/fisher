@@ -18,14 +18,23 @@ pages:
     - "Third-party providers": "features/providers.md"
   - "Documentation":
     - "The configuration file": "docs/config.md"
-    - "Configuration comments": "config-comments.md"
-    - "Scripts execution context": "env.md"
+    - "Configuration comments": "docs/config-comments.md"
+    - "Scripts execution context": "docs/env.md"
   - "Supported providers":
     - "Standalone provider": "providers/standalone.md"
     - "GitHub provider": "providers/github.md"
     - "GitLab provider": "providers/gitlab.md"
   - "Other information":
     - "Changelog": "changelog.md"
+
+  - "_redirect_tutorial": "tutorial/index.md"
+  - "_redirect_features": "features/index.md"
+  - "_redirect_docs": "docs/index.md"
+  - "_redirect_providers": "providers/index.md"
+
+plugins: []
+markdown_extensions:
+  - meta
 
 theme:
   name: null

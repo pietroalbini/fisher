@@ -17,7 +17,7 @@ sent by GitLab along with the webhook matches the one configured in the script
 ```
 
 The provider is configured with a [configuration
-comment](../config-comments.md), and supports the following keys:
+comment](../docs/config-comments.md), and supports the following keys:
 
 * `secret`: the secret key used to sign webhooks
 * `events`: a whitelist of GitLab events you want to accept
