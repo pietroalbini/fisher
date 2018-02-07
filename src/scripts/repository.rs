@@ -271,6 +271,7 @@ impl Blueprint {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::os::unix::fs as unix_fs;
     use std::sync::Arc;
 
     use common::prelude::*;
@@ -406,6 +407,38 @@ mod tests {
 
             // Ensure the script IDs are different
             assert_ne!(id_original, id_new);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_symlinks_are_resolved() {
+        test_wrapper(|env| {
+            // Create the directory structure
+            let base = env.tempdir()?;
+            let real = base.join("real");
+            let link = base.join("link");
+
+            fs::create_dir(&real)?;
+            unix_fs::symlink(&real, &link)?;
+
+            // Create a script in the real directory
+            env.create_script_into(&real, "script.sh", &[])?;
+
+            // Load the scripts from the symlink
+            let mut blueprint = Blueprint::new(env.state());
+            blueprint.collect_path(&link, false)?;
+
+            // Ensure the script is loaded, and it points to the real path
+            let repository = blueprint.repository();
+            let script = repository.get_by_name("script.sh")
+                .expect("the script wasn't loaded properly");
+
+            assert_eq!(
+                script.exec(),
+                real.join("script.sh").to_str().unwrap()
+            );
 
             Ok(())
         });
