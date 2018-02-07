@@ -1,9 +1,9 @@
-body {
-    font-family: "Source Sans Pro";
+body, .button {
+    font-family: "Source Sans Pro", sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6, .site-name {
-    font-family: "Bitter";
+    font-family: "Bitter", serif;
 }
 
 .navbar ul li.site-name a {
@@ -14,22 +14,4 @@ h1, h2, h3, h4, h5, h6, .site-name {
     .next-page-title {
         display: none;
     }
-}
-
-
-body.vertical-fill {
-    min-height: 100vh;
-}
-
-.vertical-fill {
-    display: flex;
-    flex-direction: column;
-}
-
-.vertical-fill > * {
-    flex: 0;
-}
-
-.vertical-fill > *:last-child {
-    flex: 1;
 }

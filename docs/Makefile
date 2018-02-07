@@ -1,7 +1,6 @@
 .PHONY: build update-snowflake
 
-SNOWFLAKE_COMPONENTS = typography navbar sidebar inline-list footer
-
+SNOWFLAKE_COMPONENTS = typography navbar sidebar inline-list footer button vertical-fill
 
 build:
 	@mkdocs build --clean
