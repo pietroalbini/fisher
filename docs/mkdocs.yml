@@ -12,6 +12,7 @@ pages:
     - "Automatic deploy from GitHub": "tutorial/auto-deploy.md"
     - "Send emails when scripts fails": "tutorial/failure-email.md"
   - "Features":
+    - "Live reloading": "features/live-reload.md"
     - "Monitoring with status hooks": "features/status-hooks.md"
     - "Monitoring with the health endpoint": "features/health-endpoint.md"
     - "Rate limits": "features/rate-limits.md"
