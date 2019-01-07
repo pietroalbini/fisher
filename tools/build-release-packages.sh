@@ -1,6 +1,6 @@
 #!/bin/bash
 # Make a new release build of Fisher
-# Copyright (C) 2016 Pietro Albini
+# Copyright (C) 2016-2019 Pietro Albini <pietro@pietroalbini.org>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,10 +14,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http:#www.gnu.org/licenses/>.
-
-
-# In order to do a build on Ubuntu 64bit you need to execute first
-# sudo apt install gcc-multilib g++-multilib libssl-dev:i386
 
 
 # Detect source directory
@@ -46,6 +42,9 @@ BIN_NAME="fisher"
 declare -A TARGETS=( \
     [x86_64-unknown-linux-gnu]="linux-amd64" \
     [i686-unknown-linux-gnu]="linux-i686" \
+    [arm-unknown-linux-gnueabi]="linux-armv6" \
+    [armv7-unknown-linux-gnueabihf]="linux-armv7" \
+    [aarch64-unknown-linux-gnu]="linux-armv8" \
 )
 PACKAGES_INCLUDE_FILES=(
     "LICENSE"
@@ -84,20 +83,10 @@ build_binaries() {
 
     for target in "${!TARGETS[@]}"; do
         echo -e "${BOLD}Building target${RESET} ${target}..."
-        cargo build --release --target "${target}"
+        cargo clean
+        cross build --release --target "${target}"
         cp "${SOURCE_DIRECTORY}/target/${target}/release/${BIN_NAME}" \
            "${BINARIES_DIRECTORY}/${target}"
-    done
-}
-
-
-# This optimizes the binaries, stripping away debug stuff
-optimize_binaries() {
-    cd "${BINARIES_DIRECTORY}"
-
-    for bin in *; do
-        echo -e "${BOLD}Optimizing target${RESET} ${bin}..."
-        strip --strip-debug "${bin}"
     done
 }
 
@@ -150,21 +139,34 @@ make_packages() {
 sign_packages() {
     cd "${PACKAGES_DIRECTORY}"
 
+    gpg_bin="gpg"
+    if which gpg2 >/dev/null 2>&1; then
+        gpg_bin="gpg2"
+    fi
+
     for package in *; do
         echo -e "${BOLD}Signing file${RESET} ${package}..."
-        gpg --sign --detach --armor "${package}"
-        gpg --verify "${package}.asc" "${package}"
+        "${gpg_bin}" --sign --detach --armor "${package}"
+        "${gpg_bin}" --verify "${package}.asc" "${package}"
     done
 }
 
 
 _main() {
+    if [[ $# -ne 1 ]]; then
+        echo -e "${BOLD}usage:${RESET} $0 <revision>"
+        exit 1
+    fi
     revision="$1"; shift
+
+    if ! which cross >/dev/null 2>&1; then
+        echo -e "installing ${BOLD}cross${RESET}..."
+        cargo install cross
+    fi
 
     cleanup
     prepare_source "${revision}"
     build_binaries
-    optimize_binaries
     make_packages "${revision}"
     sign_packages
 
