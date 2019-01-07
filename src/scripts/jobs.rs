@@ -51,8 +51,10 @@ pub struct Context {
 
 impl Default for Context {
     fn default() -> Self {
-        // Fallback to the user ID if the user is not in /etc/passwd
-        let username = if let Some(name) = users::get_current_username() {
+        // Fallback to the user ID if the user is not in /etc/passwd or is invalid UTF-8
+        let username = if let Some(name) = users::get_current_username()
+            .and_then(|n| n.to_str().map(|s| s.to_string()))
+        {
             name
         } else {
             users::get_current_uid().to_string()
