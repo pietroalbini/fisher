@@ -3,9 +3,16 @@ base = "docs/"
 publish = "docs/build/"
 command = "make"
 
+# Permanent redirect from the netlify domain to the canonical domain
+[[redirects]]
+from = "https://org-pietroalbini-fisher.netlify.com/*"
+to = "https://fisher.pietroalbini.org/:splat"
+status = 301
+force = true
+
+# Security headers
 [[headers]]
 for = "/*"
-
 [headers.values]
 X-Frame-Options = "DENY"
 X-Xss-Protection = "1; mode=block"
