@@ -3,7 +3,7 @@
 site_name: Fisher documentation
 copyright: Created by <a href="https://www.pietroalbini.org">Pietro Albini</a>
 
-pages:
+nav:
   - "Home page": "index.md"
   - "Introduction":
     - "Why you should use Fisher": "why.md"
@@ -27,11 +27,6 @@ pages:
     - "GitLab provider": "providers/gitlab.md"
   - "Other information":
     - "Changelog": "changelog.md"
-
-  - "_redirect_tutorial": "tutorial/index.md"
-  - "_redirect_features": "features/index.md"
-  - "_redirect_docs": "docs/index.md"
-  - "_redirect_providers": "providers/index.md"
 
 plugins: []
 markdown_extensions:

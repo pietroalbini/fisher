@@ -15,24 +15,24 @@
                 {%- include "css/snowflake.css" -%}
             {%- endfilter -%}
         </style>
-        <link rel="stylesheet" href="{{ base_url }}/css/theme.css">
+        <link rel="stylesheet" href="{{ "/css/theme.css" | url }}">
     </head>
     <body class="vertical-fill">
         <div class="navbar sticky">
             <ul class="left">
-                <li class="site-name"><a href="{{ base_url }}">
+                <li class="site-name"><a href="{{ "/" | url }}">
                     {{- config.site_name -}}
                 </a></li>
-                {% if page.next_page and not page.next_page.title.startswith("_") -%}
-                    <li><a href="{{ page.next_page.url }}">Next page<span class="next-page-title">: {{ page.next_page.title }}</span></a></li>
+                {% if page.next_page -%}
+                    <li><a href="{{ page.next_page.url | url }}">Next page<span class="next-page-title">: {{ page.next_page.title }}</span></a></li>
                 {%- endif -%}
-                {% if page.previous_page and not page.previous_page.title.startswith("_") -%}
-                <li><a href="{{ page.previous_page.url }}">Previous page</a></li>
+                {% if page.previous_page -%}
+                <li><a href="{{ page.previous_page.url | url }}">Previous page</a></li>
                 {%- endif %}
             </ul>
             <ul class="right">
                 {%- for label, url in config.extra.navbar.items() %}
-                <li><a href="{{ url }}">{{ label }}</a></li>
+                <li><a href="{{ url | url }}">{{ label }}</a></li>
                 {%- endfor %}
             </ul>
         </div>
@@ -46,18 +46,14 @@
                     {%- if nav_item.children %}
                     <li class="section">{{ nav_item.title }}</li>
                     {%- for child in nav_item.children %}
-                        {% if not child.title.startswith("_") -%}
-                        <li {%- if child.active %} class="active"{% endif %}><a href="{{ child.url }}">
+                        <li {%- if child.active %} class="active"{% endif %}><a href="{{ child.url | url }}">
                             {{- child.title -}}
                         </a></li>
-                        {%- endif %}
                     {%- endfor %}
                     {%- else %}
-                    {% if not nav_item.title.startswith("_") -%}
-                    <li {%- if nav_item.active %} class="active"{% endif %}><a href="{{ nav_item.url }}">
+                    <li {%- if nav_item.active %} class="active"{% endif %}><a href="{{ nav_item.url | url }}">
                         {{- nav_item.title -}}
                     </a></li>
-                    {%- endif %}
                     {%- endif %}
                     {%- endfor %}
                 </ul>
