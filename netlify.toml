@@ -1,0 +1,14 @@
+[build]
+base = "docs/"
+publish = "docs/build/"
+command = "make"
+
+[[headers]]
+for = "/*"
+
+[headers.values]
+X-Frame-Options = "DENY"
+X-Xss-Protection = "1; mode=block"
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "no-referrer"
+Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' assets.pietroalbini.org; font-src assets.pietroalbini.org; img-src 'self' assets.pietroalbini.org"

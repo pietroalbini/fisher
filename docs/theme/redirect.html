@@ -1,20 +1,12 @@
-{%- if page.meta.redirect.startswith("http") -%}
-{%- set url = page.meta.redirect -%}
-{%- else -%}
-{%- set url = base_url + "/" + page.meta.redirect -%}
-{%- endif -%}
-
 <!DOCTYPE html>
 <html>
-    <head>
+    <head data-redirect-to="{{ page.meta.redirect | url }}">
         <meta charset="utf-8">
-        <meta http-equiv="refresh" content="0; url={{ url }}">
+        <meta http-equiv="refresh" content="0; url={{ page.meta.redirect | url }}">
+        <script src="{{ 'js/redirect.js' | url }}"></script>
         <title>Redirecting...</title>
-        <script type="text/javascript">
-            window.location.href = "{{ url }}";
-        </script>
     </head>
     <body>
-        <p>If the redirect doesn't work <a href="{{ url }}">click here</a>.</p>
+        <p>If the redirect doesn't work <a href="{{ page.meta.redirect | url }}">click here</a>.</p>
     </body>
 </html>
