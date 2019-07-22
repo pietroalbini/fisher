@@ -14,7 +14,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use serde_json;
-use ring;
+use hmac::{Hmac, Mac};
+use sha1;
 
 use providers::prelude::*;
 use utils;
@@ -155,6 +156,8 @@ impl ProviderTrait for GitHubProvider {
 
 
 fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
+    type HmacSha1 = Hmac<sha1::Sha1>;
+
     // The signature must have a =
     if !raw_signature.contains('=') {
         return false;
@@ -166,7 +169,7 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
     let hex_signature = splitted
         .iter()
         .skip(1)
-        .map(|i| *i)
+        .cloned()
         .collect::<Vec<&str>>()
         .join("=");
 
@@ -178,18 +181,15 @@ fn verify_signature(secret: &str, payload: &str, raw_signature: &str) -> bool {
         return false;
     };
 
-    // Get the correct digest
-    let digest = match *algorithm {
-        "sha1" => &ring::digest::SHA1,
-        _ => {
-            // Unknown digest, return false
-            return false;
-        }
-    };
+    // Only SHA-1 is supported
+    if *algorithm != "sha1" {
+        return false;
+    }
 
     // Verify the HMAC signature
-    let key = ring::hmac::VerificationKey::new(digest, secret.as_bytes());
-    ring::hmac::verify(&key, payload.as_bytes(), &signature).is_ok()
+    let mut mac = HmacSha1::new_varkey(secret.as_bytes()).unwrap();
+    mac.input(payload.as_bytes());
+    mac.verify(&signature).is_ok()
 }
 
 

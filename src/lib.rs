@@ -25,7 +25,8 @@ extern crate lazy_static;
 extern crate nix;
 extern crate rand;
 extern crate regex;
-extern crate ring;
+extern crate hmac;
+extern crate sha1;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
