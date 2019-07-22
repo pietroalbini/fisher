@@ -16,9 +16,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-FILES_SERVER="files@winter.net.pietroalbini.org"
-FILES_BASE="public/releases/fisher"
-
 RELEASE_BRANCH_PREFIX="release/"
 
 
@@ -41,15 +38,6 @@ BASE="$( get_base )"
 build_packages() {
     tag="$( git describe --abbrev=0 )"
     "${BASE}/tools/build-release-packages.sh" "${tag}"
-}
-
-
-upload_to_files() {
-    packages="${BASE}/build/packages"
-    tag="$( git describe --abbrev=0 | awk '{print substr($0,2)}' )"
-
-    ssh "${FILES_SERVER}" -- mkdir -p "${FILES_BASE}/${tag}"
-    scp "${packages}"/* "${FILES_SERVER}:${FILES_BASE}/${tag}"
 }
 
 
@@ -87,7 +75,6 @@ main() {
     echo
     if [[ $REPLY =~ ^[Yy]$  ]]; then
         build_packages
-        upload_to_files
         upload_to_crates
         upload_releases
 
