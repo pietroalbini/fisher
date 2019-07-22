@@ -5,7 +5,7 @@ license = "GPL-3.0"
 name = "fisher"
 readme = "README.md"
 repository = "https://github.com/pietroalbini/fisher"
-version = "1.0.0-beta.7"
+version = "1.0.0"
 
 [[bin]]
 doc = false

@@ -6,7 +6,9 @@ everything a user can notice.
 
 ## Fisher 1.0.x
 
-### Next release
+### Fisher 1.0.0
+
+*Released on July 22nd, 2019.*
 
 * **New features:**
 
