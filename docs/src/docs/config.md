@@ -18,7 +18,7 @@ in [the source code repository][src].
 The `[http]` section contains the configuration for the built-in HTTP server
 and API.
 
-### `http.behind-proxies`
+### `behind-proxies`
 
 The number of proxies Fisher sits behind. This is used to correctly parse the
 X-Forwarded-For HTTP header in order to retrieve the correct origin IP. If this
@@ -27,7 +27,7 @@ correct number of entries to avoid requests being rejected.
 
 **Type**: integer - **Default**: `0`
 
-### `http.bind`
+### `bind`
 
 The network address Fisher will listen on. By default, only requests coming
 from the local machine are accepted (thus requiring a reverse proxy in front of
@@ -36,7 +36,7 @@ change the IP address to `0.0.0.0`.
 
 **Type**: string - **Default**: `127.0.0.1:8000`
 
-### `http.health-endpoint`
+### `health-endpoint`
 
 If this is set to false, the `/health` HTTP endpoint (used to monitor the
 instance) is disabled. Disable this if you don't need monitoring and you don't
@@ -44,7 +44,7 @@ want the data to be publicly accessible.
 
 **Type**: boolean - **Default**: `true`
 
-### `http.rate-limit`
+### `rate-limit`
 
 Rate limit for failed requests (allowed requests / time period). The rate limit
 only applies to webhooks that failed validation, so it doesn't impact legit
@@ -60,14 +60,14 @@ documentation](../features/rate-limits.md).
 The `[scripts]` section configures how Fisher looks for scripts in the
 filesystem.
 
-### `scripts.path`
+### `path`
 
 The directory containing all the scripts Fisher will use. Scripts needs to be
 executable in order to be called.
 
 **Type**: string - **Default**: `/srv/fisher-scripts`
 
-### `scripts.recursive`
+### `recursive`
 
 If this is set to true, scripts in subdirectories of `scripts.path` will also
 be loaded, including from symlinks (be sure to check permissions before
@@ -82,7 +82,7 @@ changing this option).
 The `[jobs]` section configures how Fisher runs jobs (for example incoming
 hooks).
 
-### `jobs.threads`
+### `threads`
 
 Maximum number of parallel jobs you want to run.
 
